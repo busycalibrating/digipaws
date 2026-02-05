@@ -12,6 +12,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.nfc.NfcAdapter
+import android.nfc.Tag
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -50,6 +52,9 @@ import nethical.digipaws.services.GeneralFeaturesService
 import nethical.digipaws.services.KeywordBlockerService
 import nethical.digipaws.services.UsageTrackingService
 import nethical.digipaws.services.ViewBlockerService
+import nethical.digipaws.ui.dialogs.ConfigureNfcLockDialog
+import nethical.digipaws.ui.dialogs.NfcEmergencyUnlockDialog
+import nethical.digipaws.ui.dialogs.NfcWriteTagDialog
 import nethical.digipaws.ui.dialogs.StartFocusMode
 import nethical.digipaws.ui.dialogs.TweakAppBlockerWarning
 import nethical.digipaws.ui.dialogs.TweakGrayScaleMode
@@ -91,7 +96,13 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var addAutoFocusHoursActivity: ActivityResultLauncher<Intent>
 
+    private lateinit var selectNfcLockAppsLauncher: ActivityResultLauncher<Intent>
+
     private lateinit var directoryPicker: ActivityResultLauncher<Intent>
+
+    private var nfcAdapter: NfcAdapter? = null
+    private var activeNfcWriteDialog: NfcWriteTagDialog? = null
+    private var activeNfcConfigDialog: ConfigureNfcLockDialog? = null
 
 
     private val savedPreferencesLoader = SavedPreferencesLoader(this)
@@ -145,6 +156,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         options = ActivityOptionsCompat.makeCustomAnimation(this, R.anim.fade_in, R.anim.fade_out)
+        nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         setupActivityLaunchers()
         setupClickListeners()
 
@@ -166,6 +178,26 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         checkPermissions()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Handle NFC intents and pass to active dialogs
+        if (NfcAdapter.ACTION_TAG_DISCOVERED == intent.action ||
+            NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action ||
+            NfcAdapter.ACTION_TECH_DISCOVERED == intent.action
+        ) {
+            val tag: Tag? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+            }
+            tag?.let {
+                activeNfcWriteDialog?.handleTagDiscovered(it)
+                activeNfcConfigDialog?.handleTagDiscovered(it)
+            }
+        }
     }
 
     private fun setupActivityLaunchers() {
@@ -245,6 +277,18 @@ class MainActivity : AppCompatActivity() {
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
                 sendRefreshRequest(AppBlockerService.INTENT_ACTION_REFRESH_FOCUS_MODE)
             }
+
+        selectNfcLockAppsLauncher =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+                if (result.resultCode == RESULT_OK) {
+                    val selectedApps = result.data?.getStringArrayListExtra("SELECTED_APPS")
+                    selectedApps?.let {
+                        savedPreferencesLoader.saveNfcLockSelectedApps(selectedApps)
+                        sendRefreshRequest(AppBlockerService.INTENT_ACTION_REFRESH_NFC_LOCK_MODE)
+                    }
+                }
+            }
+
         // Register the directory picker
         directoryPicker = ZipUtils.registerDirectoryPicker(this) { directoryUri ->
             // Create the zip file in the selected directory
@@ -365,6 +409,40 @@ class MainActivity : AppCompatActivity() {
             addAutoFocusHoursActivity.launch(intent, options)
         }
 
+        // NFC Lock Mode click listeners
+        binding.selectNfcLockApps.setOnClickListener {
+            val intent = Intent(this, SelectAppsActivity::class.java)
+            intent.putStringArrayListExtra(
+                "PRE_SELECTED_APPS",
+                ArrayList(savedPreferencesLoader.getNfcLockSelectedApps())
+            )
+            selectNfcLockAppsLauncher.launch(intent, options)
+        }
+
+        binding.configureNfcLock.setOnClickListener {
+            activeNfcConfigDialog = ConfigureNfcLockDialog(savedPreferencesLoader) {
+                checkPermissions()
+                activeNfcConfigDialog = null
+            }
+            activeNfcConfigDialog?.show(supportFragmentManager, "configure_nfc_lock")
+        }
+
+        binding.writeNfcTag.setOnClickListener {
+            activeNfcWriteDialog = NfcWriteTagDialog(savedPreferencesLoader) {
+                activeNfcWriteDialog = null
+            }
+            activeNfcWriteDialog?.show(supportFragmentManager, "write_nfc_tag")
+        }
+
+        binding.nfcEmergencyUnlock.setOnClickListener {
+            NfcEmergencyUnlockDialog(savedPreferencesLoader) {
+                checkPermissions()
+            }.show(supportFragmentManager, "nfc_emergency_unlock")
+        }
+
+        binding.nfcLockStatusChip.setOnClickListener {
+            makeAccessibilityInfoDialog("App Blocker", AppBlockerService::class.java)
+        }
 
         binding.startFocusMode.setOnClickListener {
 
@@ -639,6 +717,62 @@ class MainActivity : AppCompatActivity() {
                     val isFocusedModeOn = savedPreferencesLoader.getFocusModeData().isTurnedOn
                     binding.selectFocusBlockedApps.isEnabled = !isFocusedModeOn
                     binding.startFocusMode.isEnabled = !isFocusedModeOn
+                }
+
+                // NFC Lock Mode
+                val hasNfc = nfcAdapter != null
+                val nfcLockData = savedPreferencesLoader.getNfcLockModeData()
+                val isNfcLockEnabled = nfcLockData.isEnabled
+                val isNfcReady = hasNfc && isAppBlockerOn
+
+                if (!hasNfc) {
+                    // No NFC hardware
+                    updateChip(false, binding.nfcLockStatusChip, binding.nfcLockWarning)
+                    binding.nfcLockWarning.text = getString(R.string.warning_nfc_not_available)
+                    binding.apply {
+                        selectNfcLockApps.isEnabled = false
+                        configureNfcLock.isEnabled = false
+                        writeNfcTag.isEnabled = false
+                        nfcEmergencyUnlock.visibility = View.GONE
+                    }
+                } else if (!isAppBlockerOn) {
+                    // NFC available but App Blocker service not enabled
+                    updateChip(false, binding.nfcLockStatusChip, binding.nfcLockWarning)
+                    binding.nfcLockWarning.text = getString(R.string.warning_nfc_lock_settings)
+                    binding.apply {
+                        selectNfcLockApps.isEnabled = false
+                        configureNfcLock.isEnabled = false
+                        writeNfcTag.isEnabled = false
+                        nfcEmergencyUnlock.visibility = View.GONE
+                    }
+                } else {
+                    // NFC available and App Blocker enabled
+                    binding.nfcLockWarning.visibility = View.GONE
+
+                    // Update chip status based on lock state
+                    if (isNfcLockEnabled) {
+                        binding.nfcLockStatusChip.text = getString(R.string.nfc_lock_enabled)
+                        binding.nfcLockStatusChip.chipIcon = null
+                    } else {
+                        binding.nfcLockStatusChip.text = getString(R.string.nfc_lock_disabled)
+                        binding.nfcLockStatusChip.chipIcon = null
+                    }
+
+                    // Enable/disable buttons based on lock state
+                    binding.apply {
+                        selectNfcLockApps.isEnabled = !isNfcLockEnabled
+                        configureNfcLock.isEnabled = !isNfcLockEnabled
+                        writeNfcTag.isEnabled = true
+                        nfcEmergencyUnlock.visibility = if (isNfcLockEnabled) View.VISIBLE else View.GONE
+                    }
+
+                    // Disable NFC lock settings when anti-uninstall is active
+                    if (doesAntiUninstallBlockView && isAntiUninstallOn) {
+                        binding.apply {
+                            selectNfcLockApps.isEnabled = false
+                            configureNfcLock.isEnabled = false
+                        }
+                    }
                 }
 
                 if(isGeneralSettingsOn){

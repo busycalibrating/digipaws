@@ -19,5 +19,9 @@ class Constants {
         const val GRAYSCALE_MODE_ONLY_SELECTED = 2 // apply to only selected
         const val GRAYSCALE_MODE_ALL_EXCEPT_SELECTED = 3 // apply to all except selected
         const val GRAYSCALE_MODE_OFF = 4 // turned off
+
+        // available types for NFC lock mode
+        const val NFC_LOCK_MODE_BLOCK_SELECTED = 1
+        const val NFC_LOCK_MODE_BLOCK_ALL_EX_SELECTED = 2
     }
 }

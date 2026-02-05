@@ -12,6 +12,9 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <uses-permission android:name="android.permission.NFC"/>
+
+    <uses-feature android:name="android.hardware.nfc" android:required="false"/>
     <application
         android:name=".Digipaws"
         android:allowBackup="true"
@@ -54,7 +57,8 @@
             android:exported="false" />
         <activity
             android:name=".ui.activity.MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -66,6 +70,18 @@
             android:name=".ui.activity.LauncherActivity"
             android:exported="true"
             android:launchMode="singleTask" />
+        <activity
+            android:name=".ui.activity.NfcTagActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Digipaws.TransparentDialog">
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="digipaws" android:host="nfclock"/>
+            </intent-filter>
+        </activity>
 
         <service
             android:name=".services.ViewBlockerService"

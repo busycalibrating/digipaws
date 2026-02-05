@@ -5,6 +5,7 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import nethical.digipaws.blockers.FocusModeBlocker
+import nethical.digipaws.blockers.NfcLockBlocker
 import nethical.digipaws.services.UsageTrackingService.AttentionSpanVideoItem
 import nethical.digipaws.ui.activity.AppUsageConfig
 import nethical.digipaws.ui.activity.MainActivity
@@ -345,5 +346,57 @@ class SavedPreferencesLoader(private val context: Context) {
         val sharedPreferences =
             context.getSharedPreferences("grayscale", Context.MODE_PRIVATE)
         sharedPreferences.edit().putStringSet("apps", apps).apply()
+    }
+
+    fun saveNfcLockModeData(nfcLockModeData: NfcLockBlocker.NfcLockModeData) {
+        val sharedPreferences =
+            context.getSharedPreferences("nfc_lock_mode", Context.MODE_PRIVATE)
+        val editor = sharedPreferences.edit()
+        val gson = Gson()
+
+        val json = gson.toJson(nfcLockModeData)
+
+        editor.putString("nfc_lock_mode_data", json)
+        editor.apply()
+    }
+
+    fun getNfcLockModeData(): NfcLockBlocker.NfcLockModeData {
+        val sharedPreferences =
+            context.getSharedPreferences("nfc_lock_mode", Context.MODE_PRIVATE)
+        val gson = Gson()
+
+        val json = sharedPreferences.getString("nfc_lock_mode_data", null)
+
+        if (json.isNullOrEmpty()) return NfcLockBlocker.NfcLockModeData()
+
+        val type =
+            object : TypeToken<NfcLockBlocker.NfcLockModeData>() {}.type
+        return gson.fromJson(json, type)
+    }
+
+    fun saveNfcLockSelectedApps(appList: List<String>) {
+        val sharedPreferences =
+            context.getSharedPreferences("nfc_lock_mode", Context.MODE_PRIVATE)
+        val editor = sharedPreferences.edit()
+        val gson = Gson()
+
+        val json = gson.toJson(appList)
+
+        editor.putString("selected_apps", json)
+        editor.apply()
+    }
+
+    fun getNfcLockSelectedApps(): List<String> {
+        val sharedPreferences =
+            context.getSharedPreferences("nfc_lock_mode", Context.MODE_PRIVATE)
+        val gson = Gson()
+
+        val json = sharedPreferences.getString("selected_apps", null)
+
+        if (json.isNullOrEmpty()) return listOf()
+
+        val type =
+            object : TypeToken<List<String>>() {}.type
+        return gson.fromJson(json, type)
     }
 }

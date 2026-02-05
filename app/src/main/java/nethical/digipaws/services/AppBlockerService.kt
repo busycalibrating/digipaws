@@ -15,6 +15,7 @@ import android.widget.Toast
 import nethical.digipaws.Constants
 import nethical.digipaws.blockers.AppBlocker
 import nethical.digipaws.blockers.FocusModeBlocker
+import nethical.digipaws.blockers.NfcLockBlocker
 import nethical.digipaws.ui.activity.MainActivity
 import nethical.digipaws.ui.activity.WarningActivity
 import nethical.digipaws.utils.NotificationTimerManager
@@ -42,14 +43,19 @@ class AppBlockerService : BaseBlockingService() {
         /**
          * Refreshes information related to focus mode.
          */
-
         const val INTENT_ACTION_REFRESH_FOCUS_MODE = "nethical.digipaws.refresh.focus_mode"
+
+        /**
+         * Refreshes information related to NFC lock mode.
+         */
+        const val INTENT_ACTION_REFRESH_NFC_LOCK_MODE = "nethical.digipaws.refresh.nfc_lock_mode"
     }
 
     private var appBlockerWarning = MainActivity.WarningData()
     private lateinit var appBlocker : AppBlocker
 
     private val focusModeBlocker = FocusModeBlocker()
+    private val nfcLockBlocker = NfcLockBlocker()
 
     // responsible to trigger a recheck for what app user is currently using even when no event is received. Used in putting the usage recheck logic into
     // cooldown for an app and later when the cooldown duration is over, trigger a recheck
@@ -72,6 +78,16 @@ class AppBlockerService : BaseBlockingService() {
 
         lastPackage = packageName
         Log.d("AppBlockerService", "Switched to app $packageName")
+
+        // Check NFC lock mode first (highest priority)
+        val nfcLockResult = nfcLockBlocker.doesAppNeedToBeBlocked(packageName)
+        if (nfcLockResult.isBlocked) {
+            handleNfcLockBlockerResult(nfcLockResult)
+            return
+        }
+        if (nfcLockResult.isRequestingToUpdateSPData) {
+            savedPreferencesLoader.saveNfcLockModeData(nfcLockBlocker.nfcLockModeData)
+        }
 
         val focusModeResult = focusModeBlocker.doesAppNeedToBeBlocked(packageName)
         if (focusModeResult.isBlocked) {
@@ -132,6 +148,18 @@ class AppBlockerService : BaseBlockingService() {
         Toast.makeText(this, "This app is currently under focus mode", Toast.LENGTH_LONG).show()
     }
 
+    private fun handleNfcLockBlockerResult(result: NfcLockBlocker.NfcLockResult) {
+        if (result.isRequestingToUpdateSPData) {
+            savedPreferencesLoader.saveNfcLockModeData(nfcLockBlocker.nfcLockModeData)
+        }
+
+        if (!result.isBlocked) return
+
+        pressHome()
+        lastPackage = ""
+        Toast.makeText(this, "This app is locked by NFC Lock Mode", Toast.LENGTH_LONG).show()
+    }
+
     override fun onInterrupt() {
     }
 
@@ -140,11 +168,13 @@ class AppBlockerService : BaseBlockingService() {
         super.onServiceConnected()
         setupAppBlocker()
         setupFocusMode()
+        setupNfcLockMode()
         notificationManager = NotificationTimerManager(this)
         val filter = IntentFilter().apply {
             addAction(INTENT_ACTION_REFRESH_FOCUS_MODE)
             addAction(INTENT_ACTION_REFRESH_APP_BLOCKER)
             addAction(INTENT_ACTION_REFRESH_APP_BLOCKER_COOLDOWN)
+            addAction(INTENT_ACTION_REFRESH_NFC_LOCK_MODE)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(refreshReceiver, filter, RECEIVER_EXPORTED)
@@ -160,6 +190,7 @@ class AppBlockerService : BaseBlockingService() {
             when (intent.action) {
                 INTENT_ACTION_REFRESH_FOCUS_MODE -> setupFocusMode()
                 INTENT_ACTION_REFRESH_APP_BLOCKER -> setupAppBlocker()
+                INTENT_ACTION_REFRESH_NFC_LOCK_MODE -> setupNfcLockMode()
                 INTENT_ACTION_REFRESH_APP_BLOCKER_COOLDOWN -> {
                     val interval =
                         intent.getIntExtra("selected_time", appBlockerWarning.timeInterval)
@@ -234,6 +265,22 @@ class AppBlockerService : BaseBlockingService() {
         focusModeData.selectedApps = selectedFocusModeApps
         focusModeBlocker.focusModeData = focusModeData
 
+    }
+
+    private fun setupNfcLockMode() {
+        val selectedNfcLockApps = savedPreferencesLoader.getNfcLockSelectedApps().toHashSet()
+        val nfcLockModeData = savedPreferencesLoader.getNfcLockModeData()
+
+        // As all apps will get blocked except the selected ones, add essential packages that need not be blocked
+        if (nfcLockModeData.modeType == Constants.NFC_LOCK_MODE_BLOCK_ALL_EX_SELECTED) {
+            selectedNfcLockApps.add("com.android.systemui")
+            getDefaultLauncherPackageName(packageManager)?.let { selectedNfcLockApps.add(it) }
+            getCurrentKeyboardPackageName(this)?.let { selectedNfcLockApps.add(it) }
+        }
+
+        nfcLockBlocker.selectedApps = selectedNfcLockApps
+        nfcLockBlocker.nfcLockModeData = nfcLockModeData
+        Log.d("AppBlockerService", "NFC Lock Mode setup: enabled=${nfcLockModeData.isEnabled}")
     }
 
     override fun onDestroy() {

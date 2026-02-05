@@ -177,4 +177,40 @@
     <string name="guide">Guide</string>
     <string name="go_back">Go back</string>
     <string name="block_making_changes_to_blockers_during_this_period">Block making changes to blockers during this period.</string>
+
+    <!-- NFC Lock Mode -->
+    <string name="nfc_lock_mode">NFC Lock Mode</string>
+    <string name="nfc_lock_mode_desc">Lock/unlock apps by scanning an NFC tag</string>
+    <string name="configure_nfc_lock">Configure</string>
+    <string name="write_nfc_tag">Write NFC Tag</string>
+    <string name="emergency_unlock">Emergency Unlock</string>
+    <string name="warning_nfc_lock_settings">Enable App Blocker Accessibility Service to use NFC Lock Mode</string>
+    <string name="warning_nfc_not_available">NFC is not available on this device</string>
+    <string name="nfc_lock_enabled">Locked</string>
+    <string name="nfc_lock_disabled">Unlocked</string>
+    <string name="configure_nfc_lock_mode">Configure NFC Lock Mode</string>
+    <string name="failsafe_hours">Failsafe Timer (hours)</string>
+    <string name="failsafe_hours_desc">Auto-unlock after this many hours (0 = disabled)</string>
+    <string name="emergency_password">Emergency Password</string>
+    <string name="emergency_password_desc">Password to unlock without NFC tag</string>
+    <string name="require_tag_validation">Require Tag Validation</string>
+    <string name="require_tag_validation_desc">Only allow registered NFC tags</string>
+    <string name="register_tag">Register Tag</string>
+    <string name="registered_tags">Registered Tags: %1$d</string>
+    <string name="write_nfc_tag_title">Write NFC Tag</string>
+    <string name="write_nfc_tag_desc">Hold an NFC tag near your device to write the DigiPaws toggle command.</string>
+    <string name="writing_tag">Writing to tag...</string>
+    <string name="tag_written_success">Tag written successfully</string>
+    <string name="tag_write_failed">Failed to write tag</string>
+    <string name="emergency_unlock_title">Emergency Unlock</string>
+    <string name="emergency_unlock_desc">Enter your emergency password to unlock NFC Lock Mode</string>
+    <string name="unlock">Unlock</string>
+    <string name="incorrect_password">Incorrect password</string>
+    <string name="nfc_lock_unlocked">NFC Lock Mode unlocked</string>
+    <string name="scan_tag_to_register">Scan an NFC tag to register it</string>
+    <string name="tag_registered">Tag registered successfully</string>
+    <string name="block_all_except_selected">Block all apps except selected</string>
+    <string name="block_only_selected">Block only selected apps</string>
+    <string name="nfc_uri_info_title">Manual NFC Tag Setup</string>
+    <string name="nfc_uri_info_desc">You can use an external NFC writing app (like NFC Tools) to write this URI to your tag. The tag will then work with DigiPaws NFC Lock Mode.</string>
 </resources>
