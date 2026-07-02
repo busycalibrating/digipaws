@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -38,6 +40,11 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     private val gson = Gson()
     private val rest by lazy { SupabaseRest() }
     private val keys by lazy { SecureKeyStore(context) }
+
+    // Flavor specific: the Play Store build answers with a real subscription
+    // check, the full build always says yes.
+    private val entitlement by lazy { SyncEntitlement(context) }
+    private val entitled get() = entitlement.billing.value.entitled
     private val db by lazy { AppDatabase.getInstance(context) }
     private val dataStore by lazy { DataStoreManager.getSettingsDataStore(context, gson) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -74,13 +81,46 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     override val status: StateFlow<SyncStatus> = _status
     override val isAvailable = true
 
+    override val billing get() = entitlement.billing
+    override fun launchBillingFlow(activity: android.app.Activity) = entitlement.launchPurchase(activity)
+    override fun refreshBilling() = entitlement.refresh()
+
     override fun start() {
         scope.launch { ensureStarted() }
+        watchEntitlement()
+    }
+
+    private var entitlementWatched = false
+
+    /** Starts sync the moment a subscription activates and cuts it when one lapses. */
+    @Synchronized
+    private fun watchEntitlement() {
+        if (entitlementWatched) return
+        entitlementWatched = true
+        scope.launch {
+            entitlement.billing
+                .map { it.entitled }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { nowEntitled ->
+                    if (nowEntitled) {
+                        ensureStarted()
+                        if (session != null && dek != null) onSignedIn()
+                    } else {
+                        stopRealtime()
+                        publishStatus()
+                    }
+                }
+        }
     }
 
     private suspend fun ensureStarted() = startMutex.withLock {
         if (session != null) return
         runCatching { SyncWorker.schedule(context) }
+        if (!entitled) {
+            publishStatus()
+            return
+        }
         val refresh = keys.refreshToken ?: return
         try {
             session = rest.refresh(refresh).also { persistSession(it) }
@@ -99,7 +139,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     fun wake() {
         scope.launch {
             ensureStarted()
-            if (session != null && dek != null) {
+            if (session != null && dek != null && entitled) {
                 ensureFreshToken()
                 runCatching { pullSinceCursor() }
                 runCatching { pushUsage() }
@@ -274,7 +314,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         registerFcmToken()
         vaultExists = if (dek != null) true else runCatching { rest.getVault(s) != null }.getOrElse { vaultExists }
         publishStatus()
-        if (dek != null) {
+        if (dek != null && entitled) {
             startObservers()
             if (!neth.iecal.curbox.BuildConfig.SYNC_USE_FCM) startRealtime()
             startSafetyPoll()
@@ -336,7 +376,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
                     else -> 10_000L
                 }
                 delay(interval)
-                if (dek == null || session == null) continue
+                if (dek == null || session == null || !entitled) continue
                 ensureFreshToken()
                 runCatching { pullSinceCursor() }
             }
@@ -361,7 +401,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         observersStarted = true
         scope.launch {
             dataStore.data.debounce(1500).collect { settings ->
-                if (dek == null) return@collect
+                if (dek == null || !entitled) return@collect
                 val norm = gson.toJson(normalize(settings))
                 if (norm != lastConfigJson) {
                     lastConfigJson = norm
@@ -374,21 +414,21 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             dataStore.data
                 .distinctUntilChangedBy { it.activeManualFocusGroupId }
                 .collect { settings ->
-                    if (dek != null) runCatching { pushFocusFrom(settings) }
+                    if (dek != null && entitled) runCatching { pushFocusFrom(settings) }
                 }
         }
         scope.launch {
             currentDayFlow().flatMapLatest { native ->
                 db.websiteStatsDao().observeStatsForDate(native).map { native to it }
             }.sample(USAGE_PUSH_SAMPLE_MS).collect { (native, rows) ->
-                if (dek != null) runCatching { pushWebRows(isoFor(native), rows) }
+                if (dek != null && entitled) runCatching { pushWebRows(isoFor(native), rows) }
             }
         }
         scope.launch {
             currentDayFlow().flatMapLatest { native ->
                 db.appUsageDao().observeForDate(native).map { native to it }
             }.sample(USAGE_PUSH_SAMPLE_MS).collect { (native, rows) ->
-                if (dek != null) runCatching { pushAppRows(isoFor(native), rows) }
+                if (dek != null && entitled) runCatching { pushAppRows(isoFor(native), rows) }
             }
         }
     }
@@ -420,6 +460,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     private fun pushConfigJson(norm: String) {
+        if (!entitled) return
         val s = session ?: return
         val d = dek ?: return
         val aad = CryptoBox.recordAad(s.userId, NS_ANDROID_CONFIG, "config")
@@ -475,6 +516,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     private fun pushUsageRecord(s: SupabaseRest.Session, d: ByteArray, namespace: String, recordKey: String, payload: JsonObject) {
+        if (!entitled) return
         val hashKey = "$namespace/$recordKey"
         if (pushedHashes[hashKey] == payload.hashCode()) return
         val aad = CryptoBox.recordAad(s.userId, namespace, recordKey)
@@ -509,6 +551,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     private fun pushFocusFrom(settings: Settings) {
+        if (!entitled) return
         val s = session ?: return
         val d = dek ?: return
         val (groupId, endsAt) = settings.activeManualFocusGroupId
@@ -588,6 +631,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     private fun pushFocusGroups(settings: Settings) {
+        if (!entitled) return
         val s = session ?: return
         val d = dek ?: return
         val present = HashSet<String>()
@@ -648,6 +692,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     private suspend fun pullSinceCursor() {
+        if (!entitled) return
         val s = session ?: return
         val d = dek ?: return
         try {

@@ -25,7 +25,7 @@ The app should ensure no matter what happens the AppBlockerService never crashes
 # Build variants
 Three product flavors in the "version" dimension (app/build.gradle.kts):
 - **full**: every feature, including cross device sync.
-- **playstore**: sync, but no UI hider and no anti uninstall. Its manifest (app/src/playstore/AndroidManifest.xml) strips the AdminReceiver (device admin) and NodePickerService with tools:node="remove", so the build never holds those capabilities.
+- **playstore**: sync, but no UI hider and no anti uninstall. Its manifest (app/src/playstore/AndroidManifest.xml) strips the AdminReceiver (device admin) and NodePickerService with tools:node="remove", so the build never holds those capabilities. Sync is the one paid feature here: a Google Play yearly subscription (product id curbox_sync) gates it via SyncEntitlement, which has a real Play Billing implementation in src/playstore and an always free stub in src/full.
 - **fdroid**: every feature except sync. No INTERNET permission, no Firebase, no Supabase code compiled in.
 
 Feature availability is gated by BuildConfig flags: SUPPORTS_UI_HIDER and SUPPORTS_ANTI_UNINSTALL (true by default, false in playstore). FDROID_VARIANT gates sync UI. Check these flags before surfacing either feature in UI, services, or the Curbox API.

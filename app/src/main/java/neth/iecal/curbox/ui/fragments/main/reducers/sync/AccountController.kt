@@ -14,6 +14,7 @@ import com.google.zxing.BarcodeFormat
 import com.journeyapps.barcodescanner.BarcodeEncoder
 import kotlinx.coroutines.launch
 import neth.iecal.curbox.R
+import neth.iecal.curbox.data.sync.SyncBillingStatus
 import neth.iecal.curbox.data.sync.SyncGateway
 import neth.iecal.curbox.data.sync.SyncStatus
 
@@ -39,6 +40,7 @@ class AccountController(
 
     private var mode = Mode.SIGN_IN
     private var last = SyncStatus()
+    private var lastBilling = SyncBillingStatus()
 
     private val title = root.findViewById<TextView>(R.id.text_title)
     private val subtitle = root.findViewById<TextView>(R.id.text_subtitle)
@@ -53,6 +55,8 @@ class AccountController(
     private val passphrase = root.findViewById<TextInputEditText>(R.id.input_passphrase)
     private val pairInput = root.findViewById<TextInputEditText>(R.id.input_pair)
 
+    private val sectionPaywall = root.findViewById<View>(R.id.section_paywall)
+    private val paywallPrice = root.findViewById<TextView>(R.id.text_paywall_price)
     private val sectionAuth = root.findViewById<View>(R.id.section_auth)
     private val sectionVerify = root.findViewById<View>(R.id.section_verify)
     private val sectionForgot = root.findViewById<View>(R.id.section_forgot)
@@ -123,11 +127,26 @@ class AccountController(
         }
         root.findViewById<View>(R.id.btn_signout).setOnClickListener { submit { provider.signOut() } }
 
+        root.findViewById<View>(R.id.btn_subscribe).setOnClickListener {
+            provider.launchBillingFlow(fragment.requireActivity())
+        }
+        root.findViewById<View>(R.id.btn_restore_purchase).setOnClickListener {
+            provider.refreshBilling()
+            Toast.makeText(fragment.requireContext(), R.string.sync_paywall_checking, Toast.LENGTH_SHORT).show()
+        }
+
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             fragment.viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 provider.status.collect { last = it; apply() }
             }
         }
+        fragment.viewLifecycleOwner.lifecycleScope.launch {
+            fragment.viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                provider.billing.collect { lastBilling = it; apply() }
+            }
+        }
+        // Purchases made or refunded outside the app show up on the next check.
+        provider.refreshBilling()
         apply()
     }
 
@@ -139,6 +158,26 @@ class AccountController(
         val signedIn = last.signedIn
         val unlocked = last.unlocked
         val verifying = !signedIn && last.pendingEmail != null
+
+        // Sync is the one paid feature. When this build sells it and there is no
+        // active subscription, the paywall replaces the whole account flow.
+        val needsSubscription = lastBilling.required && !lastBilling.entitled
+        sectionPaywall.visibility = vis(needsSubscription)
+        if (needsSubscription) {
+            paywallPrice.text = fragment.getString(
+                R.string.sync_paywall_price,
+                lastBilling.price ?: fragment.getString(R.string.sync_paywall_price_fallback),
+            )
+            sectionAuth.visibility = View.GONE
+            sectionForgot.visibility = View.GONE
+            sectionReset.visibility = View.GONE
+            sectionVerify.visibility = View.GONE
+            sectionPassphrase.visibility = View.GONE
+            pairingBlock.visibility = View.GONE
+            sectionUnlocked.visibility = View.GONE
+            qr.visibility = View.GONE
+            return
+        }
 
         sectionAuth.visibility = vis(!signedIn && !verifying && (mode == Mode.SIGN_IN || mode == Mode.SIGN_UP))
         sectionForgot.visibility = vis(!signedIn && !verifying && mode == Mode.FORGOT)

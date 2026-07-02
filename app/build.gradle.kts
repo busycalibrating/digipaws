@@ -165,6 +165,10 @@ dependencies {
     "playstoreImplementation"(platform("com.google.firebase:firebase-bom:33.5.1"))
     "playstoreImplementation"("com.google.firebase:firebase-messaging")
 
+    // Google Play Billing, Play Store flavor ONLY. Sync is the one paid feature
+    // there; the full and F-Droid builds never compile any billing code.
+    "playstoreImplementation"("com.android.billingclient:billing:8.0.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

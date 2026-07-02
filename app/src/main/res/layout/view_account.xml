@@ -36,6 +36,47 @@
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurface" />
 
+    <!-- Paywall, only ever visible in builds that sell sync -->
+    <LinearLayout
+        android:id="@+id/section_paywall"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:layout_marginTop="18dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:text="@string/sync_paywall_body" />
+
+        <TextView
+            android:id="@+id/text_paywall_price"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_subscribe"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/sync_paywall_subscribe" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_restore_purchase"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/sync_paywall_restore" />
+    </LinearLayout>
+
     <!-- Sign in / Sign up -->
     <LinearLayout
         android:id="@+id/section_auth"

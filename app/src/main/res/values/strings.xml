@@ -326,6 +326,12 @@
     <string name="onboarding_restricted_settings_desc">Android 13+ restricts Accessibility services for apps installed outside of app stores (like F-Droid or Play Store). To enable permissions, you\'ll need to manually allow \'Restricted settings\' for Curbox. Alternatively, install via the F-Droid app(not website) to avoid this.</string>
     <string name="onboarding_show_tutorial">Show tutorial to enable permissions</string>
     <string name="onboarding_shizuku_grant">Grant all permissions with Shizuku</string>
+    <string name="sync_paywall_body">Everything in Curbox is free. Syncing your data across devices is the one paid feature, because it needs a server that costs money to run. Your data stays encrypted so even I cannot read it.</string>
+    <string name="sync_paywall_price">Sync costs %1$s a year.</string>
+    <string name="sync_paywall_price_fallback">$30</string>
+    <string name="sync_paywall_subscribe">Subscribe</string>
+    <string name="sync_paywall_restore">I already subscribed</string>
+    <string name="sync_paywall_checking">Checking your subscription with Google Play</string>
     <string name="pairing_code_warning_title">Keep this code private</string>
     <string name="pairing_code_warning_message">This code holds the secret key that unlocks all your synced data. Anyone who snaps a photo of it can read your data. Please do not screenshot or share it. The code hides itself after one minute.</string>
     <string name="pairing_code_show">Show code</string>

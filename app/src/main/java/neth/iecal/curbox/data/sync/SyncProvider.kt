@@ -1,17 +1,39 @@
 package neth.iecal.curbox.data.sync
 
+import android.app.Activity
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
+ * Billing state for builds that sell sync. Everything in Curbox is free except
+ * cross device sync, which the Play Store flavor puts behind a yearly
+ * subscription. Free builds keep these defaults and never show a paywall.
+ */
+data class SyncBillingStatus(
+    /** True when this build requires a subscription before sync will run. */
+    val required: Boolean = false,
+    /** True when the user may sync right now. */
+    val entitled: Boolean = true,
+    /** Localized yearly price from the store, when known. */
+    val price: String? = null,
+)
+
+private val FreeBilling = MutableStateFlow(SyncBillingStatus())
+
+/**
  * The sync surface the UI talks to. The real implementation lives only in the
- * playstore flavor. The F-Droid flavor binds [NoopSyncProvider] through its own
+ * sync flavors. The F-Droid flavor binds [NoopSyncProvider] through its own
  * [createSyncProvider], so no network or Supabase code is ever compiled in.
  */
 interface SyncProvider {
     val isAvailable: Boolean
     val status: StateFlow<SyncStatus>
+
+    /** Free builds keep the defaults; the Play Store flavor overrides all three. */
+    val billing: StateFlow<SyncBillingStatus> get() = FreeBilling
+    fun launchBillingFlow(activity: Activity) {}
+    fun refreshBilling() {}
 
     fun start()
     suspend fun signUp(email: String, password: String)
