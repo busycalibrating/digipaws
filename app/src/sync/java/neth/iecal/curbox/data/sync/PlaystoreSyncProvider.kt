@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -50,6 +51,11 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
 
     // Websites visited for less than this in a day aren't worth syncing.
     private val MIN_WEBSITE_SYNC_MS = 60_000L
+
+    // Usage stats don't need instant sync. Sampling the Room flows caps how often a day's
+    // usage row is rewritten on the server, which keeps row churn, network, and battery low.
+    // Focus and config changes are not sampled and still sync instantly.
+    private val USAGE_PUSH_SAMPLE_MS = 5 * 60_000L
 
     private var session: SupabaseRest.Session? = null
     private var dek: ByteArray? = null
@@ -239,11 +245,13 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
 
     private fun requireSession(): SupabaseRest.Session = session ?: throw IllegalStateException("sign in first")
 
-    private fun isRejectedToken(e: Exception): Boolean {
-        val m = e.message?.lowercase() ?: return false
-        return "invalid" in m || "expired" in m || "revoked" in m ||
-            "refresh token" in m || "not found" in m || "jwt" in m
-    }
+    /**
+     * Only a definitive auth rejection may wipe the stored keys, because clearing them also
+     * deletes the local DEK. Matching on error text here once wiped the vault on transient
+     * server errors, so this now trusts nothing but the auth endpoint's own status code.
+     */
+    private fun isRejectedToken(e: Exception): Boolean =
+        e is SupabaseRest.AuthHttpException && e.code in setOf(400, 401, 403)
 
     private fun persistSession(s: SupabaseRest.Session) {
         keys.accessToken = s.accessToken
@@ -372,14 +380,14 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         scope.launch {
             currentDayFlow().flatMapLatest { native ->
                 db.websiteStatsDao().observeStatsForDate(native).map { native to it }
-            }.collect { (native, rows) ->
+            }.sample(USAGE_PUSH_SAMPLE_MS).collect { (native, rows) ->
                 if (dek != null) runCatching { pushWebRows(isoFor(native), rows) }
             }
         }
         scope.launch {
             currentDayFlow().flatMapLatest { native ->
                 db.appUsageDao().observeForDate(native).map { native to it }
-            }.collect { (native, rows) ->
+            }.sample(USAGE_PUSH_SAMPLE_MS).collect { (native, rows) ->
                 if (dek != null) runCatching { pushAppRows(isoFor(native), rows) }
             }
         }

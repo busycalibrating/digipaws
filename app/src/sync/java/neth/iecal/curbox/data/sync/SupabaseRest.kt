@@ -16,6 +16,9 @@ class SupabaseRest(
     private val gson = Gson()
     private val jsonType = "application/json".toMediaType()
 
+    /** Thrown when the auth endpoint itself rejects a request, carrying the HTTP status. */
+    class AuthHttpException(val code: Int, message: String) : IOException(message)
+
     data class Session(
         val accessToken: String,
         val refreshToken: String,
@@ -62,7 +65,7 @@ class SupabaseRest(
             if (!resp.isSuccessful) {
                 val msg = obj.get("error_description")?.asString ?: obj.get("msg")?.asString
                 ?: obj.get("error")?.asString ?: "request failed (${resp.code})"
-                throw IOException(msg)
+                throw AuthHttpException(resp.code, msg)
             }
             return obj
         }

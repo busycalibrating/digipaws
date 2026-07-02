@@ -30,6 +30,11 @@ class AccountController(
 ) {
     private enum class Mode { SIGN_IN, SIGN_UP, FORGOT, RESET }
 
+    private companion object {
+        // How long the pairing QR stays on screen before it hides itself.
+        const val PAIRING_CODE_VISIBLE_MS = 60_000L
+    }
+
     private val provider get() = SyncGateway.provider
 
     private var mode = Mode.SIGN_IN
@@ -104,12 +109,14 @@ class AccountController(
         root.findViewById<View>(R.id.btn_pair).setOnClickListener { submit { provider.pairWithCode(text(pairInput)) } }
         root.findViewById<View>(R.id.btn_scan).setOnClickListener { requestScan() }
         root.findViewById<View>(R.id.btn_show_code).setOnClickListener {
-            submit {
-                val payload = provider.makePairingCode()
-                val bmp = BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 600, 600)
-                qr.setImageBitmap(bmp)
-                qr.visibility = View.VISIBLE
-            }
+            // The code contains the raw secret key, so the user confirms first and
+            // the QR takes itself down instead of sitting on screen.
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(fragment.requireContext())
+                .setTitle(R.string.pairing_code_warning_title)
+                .setMessage(R.string.pairing_code_warning_message)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.pairing_code_show) { _, _ -> showPairingCode() }
+                .show()
         }
         root.findViewById<View>(R.id.btn_force_sync).setOnClickListener {
             submit("Syncing your latest data now") { provider.pushNow(); provider.refresh() }
@@ -188,6 +195,18 @@ class AccountController(
     private fun vis(show: Boolean) = if (show) View.VISIBLE else View.GONE
 
     private fun text(field: TextInputEditText): String = field.text?.toString()?.trim().orEmpty()
+
+    private fun showPairingCode() {
+        submit {
+            val payload = provider.makePairingCode()
+            val bmp = BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 600, 600)
+            qr.setImageBitmap(bmp)
+            qr.visibility = View.VISIBLE
+            kotlinx.coroutines.delay(PAIRING_CODE_VISIBLE_MS)
+            qr.setImageBitmap(null)
+            qr.visibility = View.GONE
+        }
+    }
 
     private fun submit(toast: String? = null, block: suspend () -> Unit) {
         fragment.viewLifecycleOwner.lifecycleScope.launch {
