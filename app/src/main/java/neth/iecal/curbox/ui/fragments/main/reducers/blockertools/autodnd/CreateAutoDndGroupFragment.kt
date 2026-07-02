@@ -1,7 +1,5 @@
 package neth.iecal.curbox.ui.fragments.main.reducers.blockertools.autodnd
 
-import android.app.NotificationManager
-import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -84,11 +82,7 @@ class CreateAutoDndGroupFragment : Fragment() {
             val autoTurnOnDnd = true
 
             // Check for DND access before saving
-            val nm = requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (!nm.isNotificationPolicyAccessGranted) {
-                val intent = android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                startActivity(intent)
-                Toast.makeText(requireContext(), "Please grant Do Not Disturb access to use this feature", Toast.LENGTH_LONG).show()
+            if (!neth.iecal.curbox.utils.DndHelper.ensureDndAccess(requireContext())) {
                 return@setOnClickListener
             }
 

@@ -326,7 +326,8 @@
     <string name="onboarding_restricted_settings_desc">Android 13+ restricts Accessibility services for apps installed outside of app stores (like F-Droid or Play Store). To enable permissions, you\'ll need to manually allow \'Restricted settings\' for Curbox. Alternatively, install via the F-Droid app(not website) to avoid this.</string>
     <string name="onboarding_show_tutorial">Show tutorial to enable permissions</string>
     <string name="onboarding_shizuku_grant">Grant all permissions with Shizuku</string>
-    <string name="onboarding_dnd_access">Do Not Disturb Access</string>
+    <string name="dnd_access_dialog_title">Do Not Disturb</string>
+    <string name="dnd_access_dialog_message">Curbox needs this to turn on Do Not Disturb for you, so it can mute calls and alerts while you focus. Without it, Curbox cannot silence distractions on its own.\n\n🔒 100% Private: Curbox does not collect, send, or store any of your data on a server. Everything stays on your phone.\n\n🛡️ Curbox respects your peace: It uses this only to mute distractions when you ask it to.</string>
     <string name="picker_dialog_block_element">Block This Element</string>
     <string name="picker_dialog_generated_rule">Generated Rule:</string>
     <string name="picker_dialog_rule_desc">Auto-generated from your selection. Toggle chips below to customize.</string>

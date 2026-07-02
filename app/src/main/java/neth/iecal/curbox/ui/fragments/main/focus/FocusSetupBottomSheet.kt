@@ -2,7 +2,6 @@ package neth.iecal.curbox.ui.fragments.main.focus
 
 import android.app.Activity
 import android.app.Dialog
-import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -143,14 +142,8 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
         }
 
         binding.autoTurnOnDnd.setOnCheckedChangeListener { buttonView, isChecked ->
-            if (isChecked) {
-                val nm = requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                if (!nm.isNotificationPolicyAccessGranted) {
-                    binding.autoTurnOnDnd.isChecked = false
-                    val intent = Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                    startActivity(intent)
-                    android.widget.Toast.makeText(requireContext(), "Please grant Do Not Disturb access to use this feature", android.widget.Toast.LENGTH_LONG).show()
-                }
+            if (isChecked && !neth.iecal.curbox.utils.DndHelper.ensureDndAccess(requireContext())) {
+                binding.autoTurnOnDnd.isChecked = false
             }
         }
 
