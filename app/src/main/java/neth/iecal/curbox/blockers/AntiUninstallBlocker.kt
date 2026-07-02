@@ -27,7 +27,7 @@ class AntiUninstallBlocker : BaseBlocker() {
         // The AOSP activity that activates or deactivates a device admin.
         const val DEVICE_ADMIN_SCREEN_CLASS = "DeviceAdminAdd"
         const val SETTINGS_PACKAGE = "com.android.settings"
-        val SERVICE_LABELS = listOf("App Blocker", "Usage Tracker")
+        val SERVICE_LABELS = listOf("App Blocker")
     }
 
     @Volatile private var config: AntiUninstallConfig = AntiUninstallConfig()
@@ -76,9 +76,8 @@ class AntiUninstallBlocker : BaseBlocker() {
             }
 
             val nodes = service.rootInActiveWindow.findAccessibilityNodeInfosByText(service.getString(R.string.accessibility_permission_app_blocker))
-            val nodes2 = service.rootInActiveWindow.findAccessibilityNodeInfosByText(service.getString(R.string.accessibility_permission_usage_tracker))
 
-            if(!(nodes.isNullOrEmpty() || nodes2.isNullOrEmpty())){
+            if(!nodes.isNullOrEmpty()){
                 service.pressBack()
                 service.pressHome()
             }

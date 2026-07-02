@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Play Store flavor keeps cross device sync but ships without the UI hider
-     and anti uninstall features. Their components are stripped from the merged
-     manifest here so this build never holds the device admin capability. -->
+<!-- Network access exists only in the full and Play Store flavors, for cross
+     device sync. The F-Droid flavor never merges these in, so it stays fully
+     offline. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
@@ -25,16 +25,6 @@
             android:name="com.google.firebase.provider.FirebaseInitProvider"
             android:authorities="${applicationId}.firebaseinitprovider"
             android:exported="false"
-            tools:node="remove" />
-
-        <!-- Anti uninstall relies on device admin, which Play Store builds drop. -->
-        <receiver
-            android:name=".receivers.AdminReceiver"
-            tools:node="remove" />
-
-        <!-- The UI hider's node inspection service is dropped as well. -->
-        <service
-            android:name=".services.NodePickerService"
             tools:node="remove" />
     </application>
 </manifest>

@@ -74,24 +74,6 @@
         </service>
 
         <service
-            android:name=".services.UsageTrackingService"
-            android:exported="true"
-            android:label="Usage Tracker"
-            android:foregroundServiceType="specialUse"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/usage_tracker_service_config" />
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Usage tracking for digital wellbeing" />
-        </service>
-
-        <service
             android:name=".services.NodePickerService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

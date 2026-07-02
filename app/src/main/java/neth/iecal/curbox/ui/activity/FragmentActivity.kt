@@ -49,6 +49,19 @@ class FragmentActivity : AppCompatActivity() {
         }
 
         super.onCreate(savedInstanceState)
+
+        // Screens for features this flavor does not ship stay unreachable even
+        // through shortcuts or external intents.
+        val strippedFromFlavor =
+            (!neth.iecal.curbox.BuildConfig.SUPPORTS_UI_HIDER &&
+                (selectedFragment == UiHiderFragment.FRAGMENT_ID || selectedFragment == UiHiderEditorFragment.FRAGMENT_ID)) ||
+            (!neth.iecal.curbox.BuildConfig.SUPPORTS_ANTI_UNINSTALL &&
+                selectedFragment == AntiUninstallFragment.FRAGMENT_ID)
+        if (strippedFromFlavor) {
+            finish()
+            return
+        }
+
         enableEdgeToEdge()
         setContentView(R.layout.activity_fragment)
 

@@ -27,9 +27,6 @@ open class BaseBlockingService : AccessibilityService() {
         DataStoreManager(this)
     }
 
-    /** Overridden as true by AppBlockerService so the heartbeat knows which side it is. */
-    protected open val isAppBlockerService: Boolean = false
-
     private val protectionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var lastHeartbeatMs = 0L
 
@@ -54,8 +51,8 @@ open class BaseBlockingService : AccessibilityService() {
     }
 
     /**
-     * Writes this service's "alive" stamp and, if its partner in the other process has been switched
-     * off, repairs both through Shizuku. Throttled so it runs at most twice a minute.
+     * Writes the service's "alive" stamp and keeps the background execution exemptions fresh.
+     * Throttled so it runs at most twice a minute.
      */
     private fun maybeHeartbeat() {
         val now = SystemClock.uptimeMillis()
@@ -71,17 +68,7 @@ open class BaseBlockingService : AccessibilityService() {
 
             val nowMs = System.currentTimeMillis()
             dataStoreManager.updateServiceProtectionConfig {
-                if (isAppBlockerService) it.copy(appBlockerLastAliveMs = nowMs)
-                else it.copy(usageTrackerLastAliveMs = nowMs)
-            }
-
-            val partnerEnabled = if (isAppBlockerService) {
-                ServiceProtectionManager.isUsageTrackerEnabled(this)
-            } else {
-                ServiceProtectionManager.isAppBlockerEnabled(this)
-            }
-            if (!partnerEnabled && config.selfHealWithShizuku && ServiceProtectionManager.canSelfHeal()) {
-                ServiceProtectionManager.healNow(this)
+                it.copy(appBlockerLastAliveMs = nowMs)
             }
         } catch (_: Exception) {
         }

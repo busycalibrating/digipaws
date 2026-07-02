@@ -24,18 +24,24 @@ android {
         versionName = "1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resValue("string", "app_name", "Curbox")
+
+        // Every flavor ships every feature unless it opts out below.
+        buildConfigField("Boolean", "SUPPORTS_UI_HIDER", "true")
+        buildConfigField("Boolean", "SUPPORTS_ANTI_UNINSTALL", "true")
     }
 
     productFlavors {
+        // Fully offline, otherwise every feature except cross device sync.
         create("fdroid") {
             dimension = "version"
             versionNameSuffix = "-fdroid"
             buildConfigField("Boolean", "FDROID_VARIANT", "true")
         }
 
-        create("playstore") {
+        // Everything: sync plus all blocker features.
+        create("full") {
             dimension = "version"
-            versionNameSuffix = "-playstore"
+            versionNameSuffix = "-full"
             buildConfigField("Boolean", "FDROID_VARIANT", "false")
             // Staging switch for the FCM push migration. While false, the realtime
             // websocket + poll stay on (no regression) and FCM only adds background
@@ -44,6 +50,24 @@ android {
             // and battery win lands.
             buildConfigField("Boolean", "SYNC_USE_FCM", "true")
         }
+
+        // Play Store policy build: keeps sync but strips the UI hider and anti
+        // uninstall (no device admin), see src/playstore/AndroidManifest.xml.
+        create("playstore") {
+            dimension = "version"
+            versionNameSuffix = "-playstore"
+            buildConfigField("Boolean", "FDROID_VARIANT", "false")
+            buildConfigField("Boolean", "SYNC_USE_FCM", "true")
+            buildConfigField("Boolean", "SUPPORTS_UI_HIDER", "false")
+            buildConfigField("Boolean", "SUPPORTS_ANTI_UNINSTALL", "false")
+        }
+    }
+
+    sourceSets {
+        // Cross device sync code shared by the full and playstore flavors.
+        // F-Droid never compiles it, so that build stays offline.
+        getByName("full") { java.srcDir("src/sync/java") }
+        getByName("playstore") { java.srcDir("src/sync/java") }
     }
 
 
@@ -123,16 +147,21 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Cross device sync. These live only in the playstore flavor so the F-Droid
-    // build compiles with no network, no auth, and no Supabase code at all.
+    // Cross device sync. These live only in the full and playstore flavors so the
+    // F-Droid build compiles with no network, no auth, and no Supabase code at all.
+    "fullImplementation"(libs.okhttp)
+    "fullImplementation"(libs.androidx.security.crypto)
+    "fullImplementation"(libs.androidx.work.runtime.ktx)
     "playstoreImplementation"(libs.okhttp)
     "playstoreImplementation"(libs.androidx.security.crypto)
     "playstoreImplementation"(libs.androidx.work.runtime.ktx)
 
-    // FCM push, Play Store flavor ONLY, so the phone can sync instantly in the
+    // FCM push, sync flavors ONLY, so the phone can sync instantly in the
     // background without holding a websocket open. F-Droid never pulls in Firebase
     // or Google Play Services. Initialised manually from FcmConfig, so the
     // google-services Gradle plugin and google-services.json are NOT required.
+    "fullImplementation"(platform("com.google.firebase:firebase-bom:33.5.1"))
+    "fullImplementation"("com.google.firebase:firebase-messaging")
     "playstoreImplementation"(platform("com.google.firebase:firebase-bom:33.5.1"))
     "playstoreImplementation"("com.google.firebase:firebase-messaging")
 
@@ -159,9 +188,9 @@ androidComponents {
                 // Grant Accessibility Permission
                 exec {
                     val baseId = "neth.iecal.curbox"
-                    val combinedServices = "$appId/$baseId.services.AppBlockerService:$appId/$baseId.services.UsageTrackingService"
+                    val services = "$appId/$baseId.services.AppBlockerService"
 
-                    commandLine(adbPath, "shell", "settings", "put", "secure", "enabled_accessibility_services", combinedServices)
+                    commandLine(adbPath, "shell", "settings", "put", "secure", "enabled_accessibility_services", services)
                 }
 
                 // Launch MainActivity
