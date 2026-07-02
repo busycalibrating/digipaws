@@ -41,17 +41,20 @@ class DataStoreManager(private val context: Context) {
         private var INSTANCE: androidx.datastore.core.DataStore<Settings>? = null
 
         fun getSettingsDataStore(context: Context, gson: Gson): androidx.datastore.core.DataStore<Settings> {
+            // Double checked locking: the inner re-check is essential. Without it,
+            // two threads racing the first access each build a DataStore for the
+            // same file, which crashes with "There are multiple DataStores active
+            // for the same file". This is easy to hit on a cold start (e.g. right
+            // after a reinstall) when several coroutines touch settings at once.
             return INSTANCE ?: synchronized(this) {
-                val instance = MultiProcessDataStoreFactory.create(
+                INSTANCE ?: MultiProcessDataStoreFactory.create(
                     serializer = GsonSerializer(
                         gson = gson,
                         type = Settings::class.java,
                         defaultValue = Settings()
                     ),
                     produceFile = { File(context.applicationContext.filesDir, "datastore/settings.json") }
-                )
-                INSTANCE = instance
-                instance
+                ).also { INSTANCE = it }
             }
         }
     }
