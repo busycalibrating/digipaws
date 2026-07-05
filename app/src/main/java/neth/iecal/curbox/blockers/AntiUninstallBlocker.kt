@@ -1,6 +1,6 @@
 package neth.iecal.curbox.blockers
 
-import android.util.Log
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.CoroutineScope
@@ -13,7 +13,6 @@ import neth.iecal.curbox.data.models.AntiUninstallConfig
 import neth.iecal.curbox.services.AppBlockerService
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.utils.AntiUninstallManager
-import neth.iecal.curbox.utils.ViewUtils
 
 /**
  * Keeps Curbox installed and running by bouncing the user away from the screens that could undo
@@ -27,6 +26,7 @@ class AntiUninstallBlocker : BaseBlocker() {
         // The AOSP activity that activates or deactivates a device admin.
         const val DEVICE_ADMIN_SCREEN_CLASS = "DeviceAdminAdd"
         const val SETTINGS_PACKAGE = "com.android.settings"
+        const val SCREEN_SCAN_INTERVAL_MS = 300L
         val SERVICE_LABELS = listOf("App Blocker")
     }
 
@@ -51,7 +51,7 @@ class AntiUninstallBlocker : BaseBlocker() {
     fun doAntiUninstallCheck(event: AccessibilityEvent?) {
         event ?: return
         val current = config
-        if (!current.isEnabled || !AntiUninstallManager.isAdminActive(service)) return
+        if (!current.isEnabled) return
 
         // A finished timed or cooldown unlock lifts protection for good.
         if (AntiUninstallManager.isUnlockComplete(current)) {
@@ -59,30 +59,40 @@ class AntiUninstallBlocker : BaseBlocker() {
             return
         }
 
-        if (event.className?.toString()?.contains(DEVICE_ADMIN_SCREEN_CLASS) == true) {
-            service.pressBack()
-            service.pressHome()
+        // isAdminActive is a binder call, so only pay for it on the screens we may bounce from.
+        val onAdminScreen = event.className?.toString()?.contains(DEVICE_ADMIN_SCREEN_CLASS) == true
+        val inSettings = event.packageName?.toString() == SETTINGS_PACKAGE
+        if (!onAdminScreen && !inSettings) return
+        if (!AntiUninstallManager.isAdminActive(service)) return
+
+        if (onAdminScreen) {
+            bounce()
             return
         }
 
-        if(event.packageName == SETTINGS_PACKAGE) {
-            // Bounce the moment the user taps Curbox's row in accessibility settings.
-            if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED && clickHitsOurService(
-                event.source
-            )) {
-                service.pressBack()
-                service.pressHome()
-                return
-            }
-
-            val nodes = service.rootInActiveWindow.findAccessibilityNodeInfosByText(service.getString(R.string.accessibility_permission_app_blocker))
-
-            if(!nodes.isNullOrEmpty()){
-                service.pressBack()
-                service.pressHome()
-            }
+        // Bounce the moment the user taps Curbox's row in accessibility settings.
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED && clickHitsOurService(event.source)) {
+            bounce()
+            return
         }
 
+        val now = SystemClock.uptimeMillis()
+        if (now - lastScreenScan < SCREEN_SCAN_INTERVAL_MS) return
+        lastScreenScan = now
+
+        val root = service.rootInActiveWindow ?: return
+        val nodes = root.findAccessibilityNodeInfosByText(
+            service.getString(R.string.accessibility_permission_app_blocker)
+        )
+        if (!nodes.isNullOrEmpty()) {
+            nodes.forEach { NodeFinder.recycle(it) }
+            bounce()
+        }
+    }
+
+    private fun bounce() {
+        service.pressBack()
+        service.pressHome()
     }
 
     /** True if the clicked node, or anything under it, is one of Curbox's accessibility services. */
@@ -93,8 +103,6 @@ class AntiUninstallBlocker : BaseBlocker() {
                 val matches = source.findAccessibilityNodeInfosByText(label)
                 val found = !matches.isNullOrEmpty()
                 matches?.forEach { NodeFinder.recycle(it) }
-                Log.d("Anti Uninstall","click found")
-
                 found
             }
         } finally {

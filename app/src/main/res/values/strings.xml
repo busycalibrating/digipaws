@@ -955,6 +955,7 @@
     <string name="anti_uninstall_card_subtitle">Make it harder to remove Curbox</string>
     <string name="anti_uninstall_subtitle">When this is on, Curbox cannot be uninstalled until you turn it off the way you chose. Think of it like a seatbelt for your willpower.</string>
     <string name="anti_uninstall_disable_warning">Curbox keeps itself installed to protect your focus. Turn off uninstall protection inside the app first.</string>
+    <string name="anti_uninstall_setup_again">Something went wrong. Please choose your unlock method again.</string>
     <string name="anti_uninstall_admin_explanation">Curbox uses this to stop itself from being uninstalled while protection is on.</string>
     <string name="anti_uninstall_admin_needed">I need this permission to keep Curbox installed.</string>
     <string name="anti_uninstall_help_popup">When this is on, Curbox cannot be uninstalled and its services cannot be switched off until you turn it off using the method you picked: a password, a wait of a few days, or a one day cooldown you can stop anytime.</string>
