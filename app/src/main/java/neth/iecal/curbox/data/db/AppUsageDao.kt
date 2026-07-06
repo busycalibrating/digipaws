@@ -28,4 +28,10 @@ interface AppUsageDao {
 
     @Query("SELECT MIN(lastUsed) FROM app_usage_stats WHERE lastUsed > 0")
     suspend fun earliestTimestamp(): Long?
+
+    @Query("SELECT DISTINCT date FROM app_usage_stats")
+    suspend fun getDistinctDates(): List<String>
+
+    @Query("DELETE FROM app_usage_stats WHERE date IN (:dates)")
+    suspend fun deleteByDates(dates: List<String>)
 }

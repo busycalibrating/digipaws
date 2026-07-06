@@ -102,7 +102,18 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
             val datastore = DataStoreManager(getApplication())
             ignoredPackages.addAll(datastore.settings.first().usageTrackerIgnoredApps)
             loadWeekData()
+            refreshSyncedUsage()
         }
+    }
+
+    // Usage records never send a push to this device, so the freshest usage from
+    // other devices only arrives when we ask. Pull once when the screen opens,
+    // then reload with whatever came in.
+    private suspend fun refreshSyncedUsage() {
+        val provider = neth.iecal.curbox.data.sync.SyncGateway.provider
+        if (!provider.isAvailable) return
+        runCatching { provider.refresh() }
+        loadWeekData()
     }
 
     fun goToPreviousWeek() {

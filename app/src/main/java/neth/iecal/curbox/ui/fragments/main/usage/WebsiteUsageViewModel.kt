@@ -71,6 +71,19 @@ class WebsiteUsageViewModel(application: Application, private val packageName: S
 
     fun initialize() {
         loadWeekData()
+        if (isSynced) refreshSyncedUsage()
+    }
+
+    // Usage records never send a push to this device, so the freshest browsing
+    // from other devices only arrives when we ask. Pull once when the screen
+    // opens, then reload with whatever came in.
+    private fun refreshSyncedUsage() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val provider = neth.iecal.curbox.data.sync.SyncGateway.provider
+            if (!provider.isAvailable) return@launch
+            runCatching { provider.refresh() }
+            loadWeekData()
+        }
     }
 
     fun goToPreviousWeek() {

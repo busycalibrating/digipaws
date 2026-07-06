@@ -70,8 +70,16 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     private var realtime: RealtimeClient? = null
     @Volatile private var realtimeConnected = false
     private var pollStarted = false
-    private var lastConfigJson: String? = null
-    private var lastFocusJson: String? = null
+    // Compared structurally, not as JSON strings: Gson can serialize the same
+    // HashSet fields in a different order after a cross process DataStore
+    // re-read, and a string compare then re-pushes an unchanged config on
+    // every settings emission.
+    private var lastConfig: Settings? = null
+    // Dedup key for focus state. The wire payload stamps startedAt with the
+    // push time, so comparing full payloads never matches and every collector
+    // wake re-pushed an unchanged session. The key holds only the fields that
+    // define the state.
+    private var lastFocusKey: String? = null
     private val injectedGroupIds = HashSet<String>()
     private val focusGroupShadow = HashMap<String, String>()
     private val pushedHashes = HashMap<String, Int>()
@@ -211,8 +219,8 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         session = null
         dek = null
         vaultExists = false
-        lastConfigJson = null
-        lastFocusJson = null
+        lastConfig = null
+        lastFocusKey = null
         pendingEmail = null
         pushedHashes.clear()
         injectedGroupIds.clear()
@@ -268,7 +276,14 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         onSignedIn()
     }
 
-    override suspend fun refresh() = withContext(Dispatchers.IO) { pullSinceCursor() }
+    // Called from cold processes (SyncWorker) where start() may not have finished
+    // signing in yet, so establish the session first instead of silently doing
+    // nothing when it is still null.
+    override suspend fun refresh() = withContext(Dispatchers.IO) {
+        ensureStarted()
+        ensureFreshToken()
+        pullSinceCursor()
+    }
 
     override suspend fun remoteWebsiteUsage(dateIso: String): Map<String, Long> = withContext(Dispatchers.IO) {
         RemoteUsageStore(context).websiteTotals(dateIso)
@@ -279,6 +294,8 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     override suspend fun pushNow() = withContext(Dispatchers.IO) {
+        ensureStarted()
+        ensureFreshToken()
         pushConfig()
         pushUsage()
     }
@@ -402,10 +419,10 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         scope.launch {
             dataStore.data.debounce(1500).collect { settings ->
                 if (dek == null || !entitled) return@collect
-                val norm = gson.toJson(normalize(settings))
-                if (norm != lastConfigJson) {
-                    lastConfigJson = norm
-                    runCatching { pushConfigJson(norm) }.onFailure { publishStatus(error = it.message) }
+                val norm = normalize(settings)
+                if (norm != lastConfig) {
+                    lastConfig = norm
+                    runCatching { pushConfigJson(gson.toJson(norm)) }.onFailure { publishStatus(error = it.message) }
                 }
                 runCatching { pushFocusGroups(settings) }
             }
@@ -454,9 +471,10 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
 
     private suspend fun pushConfig() {
         val settings = dataStore.data.first()
-        val norm = gson.toJson(normalize(settings))
-        lastConfigJson = norm
-        pushConfigJson(norm)
+        val norm = normalize(settings)
+        if (norm == lastConfig) return
+        lastConfig = norm
+        pushConfigJson(gson.toJson(norm))
     }
 
     private fun pushConfigJson(norm: String) {
@@ -550,25 +568,38 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         return o.toString()
     }
 
+    // Everything that defines the session, excluding startedAt (stamped with the
+    // push time) and the cosmetic name, so echoes and re-invocations compare equal.
+    private fun focusKey(
+        active: Boolean,
+        groupId: String,
+        endsAt: Long,
+        domains: List<String>,
+        packages: List<String>,
+        mode: String,
+        exitable: Boolean,
+    ): String = "$active|$groupId|$endsAt|$mode|$exitable|${domains.sorted()}|${packages.sorted()}"
+
     private fun pushFocusFrom(settings: Settings) {
         if (!entitled) return
         val s = session ?: return
         val d = dek ?: return
         val (groupId, endsAt) = settings.activeManualFocusGroupId
         val active = groupId != null && endsAt > System.currentTimeMillis()
+        val g = if (active) settings.manualFocusGroups.find { it.groupId == groupId } else null
+        val domains = g?.keywords?.toList() ?: emptyList()
+        val packages = g?.packages?.toList() ?: emptyList()
+        val mode = if (g?.blockMode == FocusBlockMode.BLOCK_ALL_EXCEPT_SELECTED) "all-except" else "only"
+        val exitable = g?.exitable ?: true
+        val key = if (active) focusKey(true, groupId!!, endsAt, domains, packages, mode, exitable)
+                  else focusKey(false, "", 0, emptyList(), emptyList(), "only", true)
+        if (key == lastFocusKey) return
+        lastFocusKey = key
         val json = if (active) {
-            val g = settings.manualFocusGroups.find { it.groupId == groupId }
-            buildFocusJson(
-                true, groupId!!, g?.groupName ?: "Focus", endsAt, System.currentTimeMillis(),
-                g?.keywords?.toList() ?: emptyList(), g?.packages?.toList() ?: emptyList(),
-                if (g?.blockMode == FocusBlockMode.BLOCK_ALL_EXCEPT_SELECTED) "all-except" else "only",
-                g?.exitable ?: true,
-            )
+            buildFocusJson(true, groupId!!, g?.groupName ?: "Focus", endsAt, System.currentTimeMillis(), domains, packages, mode, exitable)
         } else {
             buildFocusJson(false, "", "", 0, 0, emptyList(), emptyList(), "only", true)
         }
-        if (json == lastFocusJson) return
-        lastFocusJson = json
         val aad = CryptoBox.recordAad(s.userId, NS_FOCUS, "active")
         val blob = CryptoBox.encryptRecord(d, aad, json)
         rest.upsertRecord(s, NS_FOCUS, "active", keys.deviceId, CryptoBox.toBase64Url(blob), System.currentTimeMillis())
@@ -587,7 +618,13 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val name = p.optString("name", "Focus")
         val exitable = p.optBoolean("exitable", true)
 
-        lastFocusJson = buildFocusJson(active, groupId, name, endsAt, p.optLong("startedAt"), domains, packages, mode, exitable)
+        // Match the key the local push will compute after this apply, so the
+        // resulting settings change is not echoed straight back up.
+        lastFocusKey = if (active && endsAt > System.currentTimeMillis()) {
+            focusKey(true, groupId, endsAt, domains, packages, mode, exitable)
+        } else {
+            focusKey(false, "", 0, emptyList(), emptyList(), "only", true)
+        }
 
         if (active && endsAt > System.currentTimeMillis()) {
             dataStore.updateData { local ->
@@ -733,9 +770,9 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val aad = CryptoBox.recordAad(s.userId, NS_ANDROID_CONFIG, row.recordKey)
         val json = CryptoBox.decryptRecord(d, aad, CryptoBox.fromBase64Url(row.ciphertext))
         val remote = gson.fromJson(json, Settings::class.java)
-        val norm = gson.toJson(normalize(remote))
-        if (norm == lastConfigJson) return
-        lastConfigJson = norm
+        val norm = normalize(remote)
+        if (norm == lastConfig) return
+        lastConfig = norm
         dataStore.updateData { local ->
             remote.copy(
                 activeManualFocusGroupId = local.activeManualFocusGroupId,

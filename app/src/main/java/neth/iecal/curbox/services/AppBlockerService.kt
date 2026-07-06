@@ -158,6 +158,7 @@ class AppBlockerService : BaseBlockingService() {
         mindfulMessage.setup(this)
         websiteUsageTracker.setup(this)
         appUsageTracker.setup(this)
+        neth.iecal.curbox.utils.UsageStatsCleaner.watch(this)
 
         focusModeBlocker.setupReceivers()
         appBlocker.setupReceivers()
