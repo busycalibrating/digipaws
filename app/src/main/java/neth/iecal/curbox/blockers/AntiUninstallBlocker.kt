@@ -1,5 +1,6 @@
 package neth.iecal.curbox.blockers
 
+import android.accessibilityservice.AccessibilityService
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -13,6 +14,8 @@ import neth.iecal.curbox.data.models.AntiUninstallConfig
 import neth.iecal.curbox.services.AppBlockerService
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.utils.AntiUninstallManager
+import java.util.Locale
+
 
 /**
  * Keeps Curbox installed and running by bouncing the user away from the screens that could undo
@@ -35,6 +38,7 @@ class AntiUninstallBlocker : BaseBlocker() {
     private lateinit var service: AppBlockerService
     private var settingsJob: kotlinx.coroutines.Job? = null
 
+    private var foundCount = 0
     fun setupBlocker(service: BaseBlockingService) {
         if (service !is AppBlockerService) return
         this.service = service
@@ -69,6 +73,22 @@ class AntiUninstallBlocker : BaseBlocker() {
             bounce()
             return
         }
+
+        val appNameMatch = service.rootInActiveWindow.findAccessibilityNodeInfosByText(service.getString(R.string.app_name))
+        if(appNameMatch!=null){
+            //Device admin check
+            val admMatch = service.rootInActiveWindow.findAccessibilityNodeInfosByText("device admin app")
+            if(!admMatch.isNullOrEmpty()) bounce()
+        }
+
+        //Accessibility Service Block
+        val matches = service.rootInActiveWindow.findAccessibilityNodeInfosByText("Curbox App Blocker shortcut")
+        if(!matches.isNullOrEmpty()){
+            bounce()
+            return
+        }
+
+
 
         // Bounce the moment the user taps Curbox's row in accessibility settings.
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED && clickHitsOurService(event.source)) {
@@ -107,6 +127,24 @@ class AntiUninstallBlocker : BaseBlocker() {
             }
         } finally {
             NodeFinder.recycle(source)
+        }
+    }
+    private fun traverseNodesForKeywords(node: AccessibilityNodeInfo?) {
+        if (node == null) {
+            return
+        }
+
+        if (node.getClassName() != null && node.getClassName() == "android.widget.TextView") {
+            val nodeText = node.text.toString() + node.contentDescription.toString()
+            val textContent = nodeText.toString().lowercase(Locale.getDefault())
+            if(textContent.contains("curbox")){
+                foundCount++
+            }
+        }
+
+        for (i in 0..<node.getChildCount()) {
+            val childNode = node.getChild(i)
+            traverseNodesForKeywords(childNode)
         }
     }
 
