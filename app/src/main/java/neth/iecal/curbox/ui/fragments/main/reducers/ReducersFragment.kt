@@ -121,6 +121,14 @@ class ReducersFragment : Fragment() {
             startActivity(intent)
         }
 
+        val settingsChangeDelayCard = view.findViewById<MaterialCardView>(R.id.card_settings_change_delay)
+        settingsChangeDelayCard.setOnClickListener {
+            val intent = Intent(requireContext(), FragmentActivity::class.java).apply {
+                putExtra("fragment", neth.iecal.curbox.ui.fragments.main.reducers.advanced.SettingsChangeDelayFragment.FRAGMENT_ID)
+            }
+            startActivity(intent)
+        }
+
         val serviceProtectionCard = view.findViewById<MaterialCardView>(R.id.card_service_protection)
         serviceProtectionCard.setOnClickListener {
             val intent = Intent(requireContext(), FragmentActivity::class.java).apply {

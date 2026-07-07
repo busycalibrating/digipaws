@@ -62,6 +62,11 @@ open class BaseBlockingService : AccessibilityService() {
     }
 
     private suspend fun runHeartbeat() {
+        // Lands settings changes whose delay has run out, even when the UI is never opened
+        try {
+            dataStoreManager.applyDuePendingChanges()
+        } catch (_: Exception) {
+        }
         try {
             val config = dataStoreManager.settings.first().serviceProtectionConfig
             if (!config.isEnabled) return

@@ -1009,6 +1009,43 @@
     <string name="anti_uninstall_remaining">%1$dh %2$dm %3$ds</string>
     <string name="anti_uninstall_remaining_with_days">%1$dd %2$dh %3$dm %4$ds</string>
 
+    <!-- Settings change delay -->
+    <string name="change_delay_title">Settings change delay</string>
+    <string name="change_delay_card_subtitle">Weaker settings wait before they apply</string>
+    <string name="change_delay_subtitle">This stops me from weakening my rules on impulse. Stricter changes work right away. Weaker changes wait for the timer, and I can cancel them while they wait.</string>
+    <string name="change_delay_master_title">Turn on change delay</string>
+    <string name="change_delay_master_desc">Turning this off or picking a shorter wait also has to wait out the full delay.</string>
+    <string name="change_delay_duration_header">How long do weaker changes wait?</string>
+    <string name="change_delay_none">None</string>
+    <string name="change_delay_10m">10 minutes</string>
+    <string name="change_delay_1h">1 hour</string>
+    <string name="change_delay_4h">4 hours</string>
+    <string name="change_delay_12h">12 hours</string>
+    <string name="change_delay_1d">1 day</string>
+    <string name="change_delay_2d">2 days</string>
+    <string name="change_delay_pending_header">Changes waiting to apply</string>
+    <string name="change_delay_pending_empty">Nothing is waiting right now.</string>
+    <string name="change_delay_applies_in">Starts working in %1$s</string>
+    <string name="change_delay_deferred_toast">Saved for later. This change starts working in %1$s. I can cancel it under Settings change delay.</string>
+    <string name="change_delay_cancelled_toast">The waiting change was cancelled. Nothing changed.</string>
+    <string name="change_delay_pending_note">If I make a stricter change to the same tool while one is waiting, the waiting change is dropped.</string>
+    <string name="change_delay_help_popup">When this is on, any change that weakens a rule waits before it starts working. That gives me time to change my mind.</string>
+    <string name="change_delay_field_app_groups">App blocker</string>
+    <string name="change_delay_field_auto_dnd">Auto DND</string>
+    <string name="change_delay_field_reel_blocker">Reel blocker</string>
+    <string name="change_delay_field_keyword_blocker">Keyword blocker</string>
+    <string name="change_delay_field_reel_counter">Reel counter</string>
+    <string name="change_delay_field_grayscale">Grayscale</string>
+    <string name="change_delay_field_mindful_messages">Mindful messages</string>
+    <string name="change_delay_field_ui_hider">UI hider</string>
+    <string name="change_delay_field_change_delay">Settings change delay</string>
+    <string name="change_delay_review_title">Hold on</string>
+    <string name="change_delay_review_message">This change weakens my %1$s rules, so it waits before it starts working. It applies in %2$s. Until then my old rules stay on.</string>
+    <string name="change_delay_review_replaced_note">A change for this tool was already waiting. This new one takes its place and the timer starts over.</string>
+    <string name="change_delay_review_keep">Keep it waiting</string>
+    <string name="change_delay_review_undo">Undo this change</string>
+    <string name="change_delay_dropped_toast">My stricter change works now. The change that was waiting for %1$s was dropped.</string>
+
     <!-- Curbox API permission screen -->
     <string name="api_permission_title">Allow access?</string>
     <string name="api_permission_message">%1$s wants to control Curbox. It can start focus sessions, turn blockers on or off, and read your screen time. You can remove this any time.</string>

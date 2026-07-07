@@ -66,6 +66,7 @@ An exported AIDL bound service (`CurboxApiService`, contract in `app/src/main/ai
 
 # Data
 - `data/models/`: plain data classes, including `Settings.kt`, the single Gson-serialized DataStore object. To add a setting: add a defaulted field to `Settings`, add an `updateX()` helper in `DataStoreManager`, then wire UI + feature refresh.
+- **Settings change delay:** the blocker/anti-stimulant `updateX()` methods in `DataStoreManager` go through `updateGated()`. When the user enables the delay (`SettingsChangeDelayConfig`), a write that weakens a restriction (per `utils/RestrictionComparator`, conservative: unprovable = weaker) is NOT applied; it is parked as a `PendingSettingsChange` and applied later by `applyDuePendingChanges()` (called from the service heartbeat, app start, and the delay screen). Stricter writes apply instantly and drop that field's pending change. New gated fields need: a `GatedSettingsField` entry, a `withFieldValue` branch, a `RestrictionComparator` case, and a label in `SettingsChangeDelayFragment`. UI is `reducers/advanced/SettingsChangeDelayFragment`.
 - `data/db/`: all Room objects (entities, DAOs, `AppDatabase`). Room stores large or growing data (usage stats, reel stats, focus stats, intent logs); DataStore stores configuration.
 - `utils/UsageStatsCleaner.kt` purges old local usage rows; `supabase/migrations/` holds backend SQL (pg_cron purge job) applied with the Supabase MCP/CLI, not part of the app build.
 
