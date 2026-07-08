@@ -1128,6 +1128,9 @@
     <string name="account_err_weak_password">Please use a password with at least 6 letters or numbers.</string>
     <string name="account_err_no_network">I cannot reach the internet right now. Check your connection and try again.</string>
 
+    <!-- Language -->
+    <string name="language">Language</string>
+
     <!-- Info screen -->
     <string name="info_official_documentation">Official Documentation</string>
     <string name="crash_logs_title">Crash Logs</string>

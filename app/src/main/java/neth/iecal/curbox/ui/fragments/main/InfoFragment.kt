@@ -21,6 +21,7 @@ import neth.iecal.curbox.data.sync.SyncGateway
 import neth.iecal.curbox.databinding.FragmentInfoBinding
 import neth.iecal.curbox.ui.activity.FragmentActivity
 import neth.iecal.curbox.ui.fragments.main.reducers.sync.SyncFragment
+import neth.iecal.curbox.utils.LanguageUtils
 
 class InfoFragment : Fragment() {
 
@@ -40,6 +41,7 @@ class InfoFragment : Fragment() {
 
         setupAccountSection()
         setupClickListeners()
+        LanguageUtils.bindLanguageSelector(binding.languageSelector, binding.textCurrentLanguage)
     }
 
     // Account and sync live here in the Play Store build only. F-Droid stays
