@@ -358,6 +358,7 @@
     <string name="empty_intents_desc">Try adjusting your filters or unlocking an app.</string>
     <string name="grayscale_shizuku_title">Shizuku Permission Required</string>
     <string name="grayscale_shizuku_desc">This feature needs Shizuku permission to apply the grayscale filter correctly.</string>
+    <string name="grayscale_secure_settings_desc">Curbox needs a one time permission to change your screen colors. Grant it once with Shizuku. After that grayscale works on its own, even after you restart your phone.</string>
     <string name="btn_grant_permission">Grant Permission</string>
     <string name="picker_control_tap_to_select">Tap an element to select it</string>
     <string name="btn_deeper">Deeper</string>

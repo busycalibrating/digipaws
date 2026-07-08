@@ -69,6 +69,12 @@ object PermissionUtils {
                 isAccessibilityServiceEnabled(context, AppBlockerService::class.java)
     }
 
+    fun hasWriteSecureSettings(context: Context): Boolean {
+        return ActivityCompat.checkSelfPermission(
+            context, Manifest.permission.WRITE_SECURE_SETTINGS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun isShizukuAvailable(): Boolean {
         return try {
             rikka.shizuku.Shizuku.pingBinder()

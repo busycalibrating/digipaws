@@ -267,9 +267,18 @@ class OnboardingPermissionsFragment : Fragment() {
         val pkg = requireContext().packageName
         val svc1 = "$pkg/${AppBlockerService::class.java.name}"
 
+        // Full and fdroid also take WRITE_SECURE_SETTINGS here so grayscale keeps
+        // working without Shizuku later on.
+        val secureSettingsGrant = if (neth.iecal.curbox.BuildConfig.SUPPORTS_WRITE_SECURE_SETTINGS) {
+            "pm grant $pkg android.permission.WRITE_SECURE_SETTINGS"
+        } else {
+            ""
+        }
+
         val command = """
             appops set $pkg SYSTEM_ALERT_WINDOW allow
             pm grant $pkg android.permission.POST_NOTIFICATIONS
+            $secureSettingsGrant
             cmd notification allow_dnd $pkg
 
             CURRENT_ACC_SVCS=${'$'}(settings get secure enabled_accessibility_services)

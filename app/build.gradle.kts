@@ -28,6 +28,9 @@ android {
         // Every flavor ships every feature unless it opts out below.
         buildConfigField("Boolean", "SUPPORTS_UI_HIDER", "true")
         buildConfigField("Boolean", "SUPPORTS_ANTI_UNINSTALL", "true")
+        // Holds WRITE_SECURE_SETTINGS (granted once via Shizuku) so grayscale can
+        // flip secure settings directly instead of shelling out per toggle.
+        buildConfigField("Boolean", "SUPPORTS_WRITE_SECURE_SETTINGS", "true")
     }
 
     productFlavors {
@@ -60,6 +63,7 @@ android {
             buildConfigField("Boolean", "SYNC_USE_FCM", "true")
             buildConfigField("Boolean", "SUPPORTS_UI_HIDER", "false")
             buildConfigField("Boolean", "SUPPORTS_ANTI_UNINSTALL", "false")
+            buildConfigField("Boolean", "SUPPORTS_WRITE_SECURE_SETTINGS", "false")
         }
     }
 
