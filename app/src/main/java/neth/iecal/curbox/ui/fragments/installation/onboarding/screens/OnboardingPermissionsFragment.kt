@@ -113,7 +113,7 @@ class OnboardingPermissionsFragment : Fragment() {
                 )
                 val newGroup = AppGroup(
                     id = UUID.randomUUID().toString(),
-                    name = "$targetApp Limits",
+                    name = getString(R.string.onboarding_app_limit_group_name, targetApp),
                     selectedPackages = listOf(pkg),
                     blockingType = AppBlockingType.Usage,
                     isActive = true,
@@ -136,9 +136,9 @@ class OnboardingPermissionsFragment : Fragment() {
         binding.overlayPermRoot.setOnClickListener {
             if (Settings.canDrawOverlays(requireContext())) return@setOnClickListener
             showExplanationDialog(
-                title = "Screen Overlay",
-                rationale = "Curbox needs this to show a calm pause screen on top of distracting apps when you open them. Without it, Curbox cannot place anything over those apps to help you stop and think.",
-                openSourceExplanation = "\uD83D\uDEE1\uFE0F Open Source: Think of Curbox like a restaurant with an open kitchen. The whole codebase is public, so anyone can check that Curbox is not doing anything sneaky. There are no closed doors here."
+                title = getString(R.string.onboarding_perm_overlay_title),
+                rationale = getString(R.string.onboarding_perm_overlay_rationale),
+                openSourceExplanation = getString(R.string.onboarding_perm_overlay_opensource)
             ) {
                 val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
                     data = Uri.parse("package:${requireContext().packageName}")
@@ -151,9 +151,9 @@ class OnboardingPermissionsFragment : Fragment() {
             if (neth.iecal.curbox.utils.PermissionUtils.isNotificationPermissionGiven(requireContext())) return@setOnClickListener
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 showExplanationDialog(
-                    title = "Notifications",
-                    rationale = "Curbox needs this to stay running in the background so your blocks keep working, and to gently remind you of your goals. Without it, Android can stop Curbox and your blocks may fail.",
-                    openSourceExplanation = "\uD83D\uDEE1\uFE0F Not a Data Broker: Many apps hide their code because they make money by harvesting your data. Curbox keeps all its code public, so you can check yourself that nothing is quietly sending your information away."
+                    title = getString(R.string.onboarding_perm_notif_title),
+                    rationale = getString(R.string.onboarding_perm_notif_rationale),
+                    openSourceExplanation = getString(R.string.onboarding_perm_notif_opensource)
                 ) {
                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
@@ -163,9 +163,9 @@ class OnboardingPermissionsFragment : Fragment() {
         binding.blockerAccPermRoot.setOnClickListener {
             if (neth.iecal.curbox.utils.PermissionUtils.isAccessibilityServiceEnabled(requireContext(), AppBlockerService::class.java)) return@setOnClickListener
             showExplanationDialog(
-                title = "App Blocker (Accessibility API)",
-                rationale = "Curbox needs this to notice when you open a blocked app and show the blocker screen. It also uses it to count your screen time and how many reels you scroll. Without it, Curbox cannot work at all.",
-                openSourceExplanation = "\uD83D\uDEE1\uFE0F Transparency for Deep Access: This is a powerful permission, which is why being open source matters so much. You do not have to take Curbox at its word. The global community has reviewed its public code and confirmed it only blocks apps and tracks usage."
+                title = getString(R.string.onboarding_perm_accessibility_title),
+                rationale = getString(R.string.onboarding_perm_accessibility_rationale),
+                openSourceExplanation = getString(R.string.onboarding_perm_accessibility_opensource)
             ) {
                 PermissionUtils.openAccessibilityServiceScreen(requireContext(),AppBlockerService::class.java)
             }
@@ -197,7 +197,7 @@ class OnboardingPermissionsFragment : Fragment() {
 
     private fun setupDescText() {
         val baseText = getString(R.string.to_create_friction_and_give_you)
-        val actionText = " Read Documentation"
+        val actionText = getString(R.string.onboarding_read_documentation)
         val fullText = "$baseText $actionText"
         val spannableString = SpannableString(fullText)
 
@@ -250,19 +250,19 @@ class OnboardingPermissionsFragment : Fragment() {
     }
 
     private fun showExplanationDialog(title: String, rationale: String, openSourceExplanation: String, onProceed: () -> Unit) {
-        val privacy = "\n\n\uD83D\uDD12 100% Private: Curbox does not collect, send, or store any of your data on a server. Everything stays on your phone.\n\n"
-        
+        val privacy = getString(R.string.onboarding_privacy_note)
+
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(title)
             .setMessage(rationale + privacy + openSourceExplanation)
-            .setPositiveButton("Proceed") { _, _ -> onProceed() }
-            .setNegativeButton("Cancel", null)
+            .setPositiveButton(R.string.proceed) { _, _ -> onProceed() }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun runShizukuGrantAllCommand() {
         binding.btnShizukuGrantAll.isEnabled = false
-        binding.btnShizukuGrantAll.text = "Granting Permissions..."
+        binding.btnShizukuGrantAll.text = getString(R.string.onboarding_granting_permissions)
 
         val pkg = requireContext().packageName
         val svc1 = "$pkg/${AppBlockerService::class.java.name}"
@@ -299,7 +299,7 @@ class OnboardingPermissionsFragment : Fragment() {
             override fun onCommandResult(output: String, done: Boolean) {
                 if (done) {
                     activity?.runOnUiThread {
-                        binding.btnShizukuGrantAll.text = "Permissions Granted!"
+                        binding.btnShizukuGrantAll.text = getString(R.string.onboarding_permissions_granted)
                         binding.btnShizukuGrantAll.isEnabled = true
                         updatePermissionsState()
                     }
@@ -309,7 +309,7 @@ class OnboardingPermissionsFragment : Fragment() {
             override fun onCommandError(error: String) {
                 activity?.runOnUiThread {
                     binding.btnShizukuGrantAll.isEnabled = true
-                    binding.btnShizukuGrantAll.text = "Error, Tap to Retry"
+                    binding.btnShizukuGrantAll.text = getString(R.string.onboarding_error_tap_retry)
                     updatePermissionsState()
                 }
             }
@@ -362,9 +362,9 @@ class OnboardingPermissionsFragment : Fragment() {
         val allGranted = hasOverlay && hasNotif && hasBlocker
         binding.btnAction.isEnabled = allGranted
         if (allGranted) {
-            binding.btnAction.text = "Curb me!"
+            binding.btnAction.text = getString(R.string.onboarding_curb_me)
         } else {
-            binding.btnAction.text = "I still need more permissions"
+            binding.btnAction.text = getString(R.string.onboarding_need_more_permissions)
         }
     }
 

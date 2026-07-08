@@ -156,13 +156,13 @@ class InfoFragment : Fragment() {
         }
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Crash Logs")
+            .setTitle(R.string.crash_logs_title)
             .setMessage(displayContent)
-            .setPositiveButton("Share") { _, _ ->
+            .setPositiveButton(R.string.share) { _, _ ->
                 shareCrashLogs(content)
             }
-            .setNegativeButton("Close", null)
-            .setNeutralButton("Clear") { _, _ ->
+            .setNegativeButton(R.string.close, null)
+            .setNeutralButton(R.string.clear) { _, _ ->
                 if (logFile.exists() && logFile.delete()) {
                     Toast.makeText(requireContext(), getString(R.string.crash_logs_cleared), Toast.LENGTH_SHORT).show()
                 }

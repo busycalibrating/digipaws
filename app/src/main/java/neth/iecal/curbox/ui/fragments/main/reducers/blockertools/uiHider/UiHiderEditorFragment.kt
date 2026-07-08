@@ -9,6 +9,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.UiHiderScript
 import neth.iecal.curbox.databinding.FragmentUiHiderEditorBinding
 import neth.iecal.curbox.hardcoded.isPresetUiHiderScript
@@ -72,7 +73,7 @@ class UiHiderEditorFragment : Fragment() {
         val label = binding.editLabel.text?.toString()?.trim().orEmpty()
 
         if (packageName.isEmpty()) {
-            Toast.makeText(requireContext(), "Enter a package name", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), R.string.uihider_enter_package, Toast.LENGTH_SHORT).show()
             return
         }
 

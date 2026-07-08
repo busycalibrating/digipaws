@@ -322,8 +322,8 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
     fun getAppMetadata(packageName: String): AppMetadata {
         if (packageName == neth.iecal.curbox.data.sync.SYNCED_WEB_PACKAGE) {
             return AppMetadata(
-                label = "Synced browsing",
-                category = "OTHER DEVICES",
+                label = getApplication<android.app.Application>().getString(neth.iecal.curbox.R.string.synced_browsing),
+                category = getApplication<android.app.Application>().getString(neth.iecal.curbox.R.string.synced_other_devices),
                 isSystemApp = false,
                 installDate = "",
                 lastUpdate = "",

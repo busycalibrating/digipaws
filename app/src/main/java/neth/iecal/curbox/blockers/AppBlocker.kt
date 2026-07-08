@@ -126,7 +126,7 @@ class AppBlocker() : BaseBlocker() {
             if (endTime < System.currentTimeMillis()) {
                 removeCooldownFrom(packageName)
             } else {
-                notificationManager.startTimer(totalMillis = endTime - System.currentTimeMillis(), timerId = packageName, title = "Remaining usage before lockdown")
+                notificationManager.startTimer(totalMillis = endTime - System.currentTimeMillis(), timerId = packageName, title = service.getString(R.string.notification_remaining_usage_lockdown))
                 return // Still in cooldown, let them use it
             }
         }
@@ -306,7 +306,7 @@ class AppBlocker() : BaseBlocker() {
         Log.d("cooldown for ", durationMillis.toString())
         val realTimeEndMillis = System.currentTimeMillis() + durationMillis
 
-        notificationManager.startTimer(totalMillis = durationMillis.toLong(), timerId = coolPackage, title = "Remaining usage before lockdown")
+        notificationManager.startTimer(totalMillis = durationMillis.toLong(), timerId = coolPackage, title = service.getString(R.string.notification_remaining_usage_lockdown))
 
         putCooldownTo(coolPackage, realTimeEndMillis)
         setUpForcedRefreshChecker(coolPackage, realTimeEndMillis)

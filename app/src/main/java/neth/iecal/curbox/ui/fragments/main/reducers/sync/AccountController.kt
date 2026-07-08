@@ -92,11 +92,11 @@ class AccountController(
         }
         root.findViewById<View>(R.id.btn_resend).setOnClickListener {
             val e = last.pendingEmail ?: return@setOnClickListener
-            submit("I sent a new code to $e") { provider.resendSignupCode(e) }
+            submit(fragment.getString(R.string.account_msg_new_code_sent, e)) { provider.resendSignupCode(e) }
         }
         root.findViewById<View>(R.id.btn_send_reset).setOnClickListener {
             val e = text(forgotEmail)
-            submit("I sent a reset code to $e") { provider.sendPasswordReset(e); resetEmail = e; mode = Mode.RESET; apply() }
+            submit(fragment.getString(R.string.account_msg_reset_code_sent, e)) { provider.sendPasswordReset(e); resetEmail = e; mode = Mode.RESET; apply() }
         }
         root.findViewById<View>(R.id.btn_set_password).setOnClickListener {
             submit { provider.resetPassword(resetEmail, text(resetCode), text(newPassword)) }
@@ -105,7 +105,7 @@ class AccountController(
         passphraseBtn.setOnClickListener {
             val phrase = text(passphrase)
             if (!last.hasVault && phrase.length < 8) {
-                Toast.makeText(fragment.requireContext(), "Please pick a secret phrase with at least 8 letters.", Toast.LENGTH_LONG).show()
+                Toast.makeText(fragment.requireContext(), R.string.account_msg_phrase_too_short, Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
             submit { if (last.hasVault) provider.unlock(phrase) else provider.setPassphrase(phrase) }
@@ -123,7 +123,7 @@ class AccountController(
                 .show()
         }
         root.findViewById<View>(R.id.btn_force_sync).setOnClickListener {
-            submit("Syncing your latest data now") { provider.pushNow(); provider.refresh() }
+            submit(fragment.getString(R.string.account_msg_syncing)) { provider.pushNow(); provider.refresh() }
         }
         root.findViewById<View>(R.id.btn_signout).setOnClickListener { submit { provider.signOut() } }
 
@@ -192,38 +192,38 @@ class AccountController(
         if (!unlocked) qr.visibility = View.GONE
 
         if (mode == Mode.SIGN_UP) {
-            primaryAuth.text = "Create account"
-            togglePrompt.text = "Already have an account? "
-            toggleMode.text = "Sign in"
+            primaryAuth.text = fragment.getString(R.string.account_create_account_action)
+            togglePrompt.text = fragment.getString(R.string.account_already_have_account)
+            toggleMode.text = fragment.getString(R.string.account_sign_in)
         } else {
-            primaryAuth.text = "Sign in"
-            togglePrompt.text = "New here? "
-            toggleMode.text = "Create an account"
+            primaryAuth.text = fragment.getString(R.string.account_sign_in)
+            togglePrompt.text = fragment.getString(R.string.account_new_here)
+            toggleMode.text = fragment.getString(R.string.account_create_account)
         }
 
         if (signedIn && !unlocked) {
-            passphraseBtn.text = if (last.hasVault) "Unlock my data" else "Turn on sync"
+            passphraseBtn.text = fragment.getString(if (last.hasVault) R.string.account_unlock_data else R.string.account_turn_on_sync)
         }
 
         title.text = when {
-            unlocked -> "Sync is on"
-            signedIn -> if (last.hasVault) "Unlock my data" else "Make a secret phrase"
-            verifying -> "Check your email"
-            mode == Mode.FORGOT -> "Reset password"
-            mode == Mode.RESET -> "Choose a new password"
-            mode == Mode.SIGN_UP -> "Create your account"
-            else -> "Welcome back"
+            unlocked -> fragment.getString(R.string.account_title_sync_on)
+            signedIn -> fragment.getString(if (last.hasVault) R.string.account_unlock_data else R.string.account_make_secret_phrase)
+            verifying -> fragment.getString(R.string.account_title_check_email)
+            mode == Mode.FORGOT -> fragment.getString(R.string.account_title_reset_password)
+            mode == Mode.RESET -> fragment.getString(R.string.account_title_choose_new_password)
+            mode == Mode.SIGN_UP -> fragment.getString(R.string.account_title_create_account)
+            else -> fragment.getString(R.string.account_title_welcome_back)
         }
 
         subtitle.text = when {
-            unlocked -> "Your settings and time stats stay in step on every device."
-            signedIn && last.hasVault -> "Type the secret phrase you made on your first device. Or if that device is nearby, tap Scan a code below to bring this one in without typing anything."
-            signedIn -> "This one phrase unlocks your data on every device. I never send it anywhere, so pick something you will remember and keep it safe. If you forget it, your data cannot be opened again."
-            verifying -> "I sent a code to ${last.pendingEmail}. Type it below to finish setting up."
-            mode == Mode.FORGOT -> "Tell me your email and I will send you a code to set a new password."
-            mode == Mode.RESET -> "Type the code I emailed you and your new password."
-            mode == Mode.SIGN_UP -> "Make an account so your settings and stats can travel with you."
-            else -> "Sign in to keep your settings and time stats in step on every device, end to end encrypted."
+            unlocked -> fragment.getString(R.string.account_sub_sync_on)
+            signedIn && last.hasVault -> fragment.getString(R.string.account_sub_unlock)
+            signedIn -> fragment.getString(R.string.account_sub_make_phrase)
+            verifying -> fragment.getString(R.string.account_sub_verify, last.pendingEmail)
+            mode == Mode.FORGOT -> fragment.getString(R.string.account_sub_forgot)
+            mode == Mode.RESET -> fragment.getString(R.string.account_sub_reset)
+            mode == Mode.SIGN_UP -> fragment.getString(R.string.account_sub_sign_up)
+            else -> fragment.getString(R.string.account_sub_sign_in)
         }
 
         val msg = last.error
@@ -261,23 +261,23 @@ class AccountController(
     // Turns raw server and network errors into calm, plain language. Keeps the
     // reader unworried and tells them what to do next.
     private fun friendly(raw: String?): String {
-        val m = raw?.lowercase() ?: return "Something went wrong. Please try again."
+        val m = raw?.lowercase() ?: return fragment.getString(R.string.account_err_generic)
         return when {
             "invalid login" in m || ("invalid" in m && "credential" in m) ->
-                "That email or password did not match. Please try again."
+                fragment.getString(R.string.account_err_invalid_login)
             "already registered" in m || "already been registered" in m ->
-                "You already have an account with this email. Please sign in instead."
-            "email not confirmed" in m -> "Please confirm your email first. I can send you a new code."
+                fragment.getString(R.string.account_err_already_registered)
+            "email not confirmed" in m -> fragment.getString(R.string.account_err_email_not_confirmed)
             "token has expired" in m || "otp" in m || ("invalid" in m && "code" in m) ->
-                "That code did not work. Check it or ask me for a new one."
+                fragment.getString(R.string.account_err_bad_code)
             "for security purposes" in m || "rate limit" in m || "too many" in m ->
-                "Please wait a moment, then try again."
+                fragment.getString(R.string.account_err_rate_limit)
             "password should be" in m || "at least" in m && "character" in m ->
-                "Please use a password with at least 6 letters or numbers."
+                fragment.getString(R.string.account_err_weak_password)
             "unable to resolve host" in m || "failed to connect" in m || "timeout" in m ||
                 "network" in m || "no address associated" in m ->
-                "I cannot reach the internet right now. Check your connection and try again."
-            else -> raw ?: "Something went wrong. Please try again."
+                fragment.getString(R.string.account_err_no_network)
+            else -> raw ?: fragment.getString(R.string.account_err_generic)
         }
     }
 }

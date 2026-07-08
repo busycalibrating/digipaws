@@ -39,7 +39,7 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
             if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
             val selectedApps = result.data?.getStringArrayListExtra("SELECTED_APPS") ?: return@registerForActivityResult
             viewModel.newGroupSelectedApps = HashSet(selectedApps)
-            binding.selectedAppCount.text = "Selected: " + selectedApps.size
+            binding.selectedAppCount.text = getString(R.string.selected_count, selectedApps.size)
         }
 
     override fun onCreateView(
@@ -73,8 +73,8 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
             binding.groupName.setText("")
             viewModel.newGroupSelectedApps = HashSet()
             viewModel.newGroupSelectedKeywords = hashSetOf()
-            binding.selectedAppCount.text = "Selected: 0"
-            binding.selectedWebsiteCount.text = "Selected: ${viewModel.newGroupSelectedKeywords.size}"
+            binding.selectedAppCount.text = getString(R.string.selected_count, 0)
+            binding.selectedWebsiteCount.text = getString(R.string.selected_count, viewModel.newGroupSelectedKeywords.size)
             binding.exitable.isChecked = true
             binding.autoTurnOnDnd.isChecked = false
             
@@ -104,8 +104,8 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
             binding.groupName.setText(group.groupName)
             viewModel.newGroupSelectedApps = HashSet(group.packages)
             viewModel.newGroupSelectedKeywords = HashSet(group.keywords)
-            binding.selectedAppCount.text = "Selected: ${group.packages.size}"
-            binding.selectedWebsiteCount.text = "Selected: ${group.keywords.size}"
+            binding.selectedAppCount.text = getString(R.string.selected_count, group.packages.size)
+            binding.selectedWebsiteCount.text = getString(R.string.selected_count, group.keywords.size)
             if (group.blockMode == FocusBlockMode.BLOCK_SELECTED) {
                 binding.selectedBlockAction.check(R.id.btn_selected)
             } else {
@@ -118,16 +118,16 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
         binding.btnDeleteGroup.setOnClickListener {
             val group = viewModel.selectedGroup ?: return@setOnClickListener
             MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Delete Focus Group")
-                .setMessage("Are you sure you want to delete this group? All associated focus statistics will also be deleted.")
-                .setPositiveButton("Delete") { _, _ ->
+                .setTitle(R.string.focus_delete_group_title)
+                .setMessage(R.string.focus_delete_group_message)
+                .setPositiveButton(R.string.delete) { _, _ ->
                     viewModel.removeGroup(group)
                     viewModel.selectedGroup = null
                     binding.groupDropdown.setText("", false)
                     binding.btnEditGroup.visibility = View.GONE
                     binding.btnDeleteGroup.visibility = View.GONE
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show()
         }
 
@@ -158,23 +158,23 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
                 if (!hasBrowserSelected) {
                     if (blockMode == FocusBlockMode.BLOCK_ALL_EXCEPT_SELECTED) {
                         MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("No Browser Selected")
-                            .setMessage("You have set some websites to be allowed, but no supported browser is in your 'Allowed Apps' list. \n\nTo access these websites, please add a browser (like Chrome or Firefox) to the selected apps.")
-                            .setPositiveButton("Add Browser") { _, _ ->
+                            .setTitle(R.string.focus_no_browser_title)
+                            .setMessage(R.string.focus_no_browser_allow_message)
+                            .setPositiveButton(R.string.focus_add_browser) { _, _ ->
                                 binding.btnSelectApps.performClick()
                             }
-                            .setNegativeButton("Save Anyway") { _, _ ->
+                            .setNegativeButton(R.string.focus_save_anyway) { _, _ ->
                                 saveFocusGroup(isEditing, blockMode)
                             }
                             .show()
                     } else {
                         MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("Website Blocking Notice")
-                            .setMessage("You have set some websites to be blocked, but no browser is in your 'Blocked Apps' list. \n\nNote that website blocking only works on supported browsers (like Chrome or Firefox). Any other browser will still be able to access these websites. Consider blocking unsupported browsers if needed.")
-                            .setPositiveButton("Add Browser") { _, _ ->
+                            .setTitle(R.string.focus_block_notice_title)
+                            .setMessage(R.string.focus_block_notice_message)
+                            .setPositiveButton(R.string.focus_add_browser) { _, _ ->
                                 binding.btnSelectApps.performClick()
                             }
-                            .setNegativeButton("Save Anyway") { _, _ ->
+                            .setNegativeButton(R.string.focus_save_anyway) { _, _ ->
                                 saveFocusGroup(isEditing, blockMode)
                             }
                             .show()
@@ -244,13 +244,13 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
         }
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Add Websites/Keywords")
+            .setTitle(R.string.focus_add_websites_title)
             .setView(view)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 viewModel.newGroupSelectedKeywords = HashSet(tempKeywords)
-                binding.selectedWebsiteCount.text = "Selected: ${tempKeywords.size}"
+                binding.selectedWebsiteCount.text = getString(R.string.selected_count, tempKeywords.size)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 

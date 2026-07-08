@@ -51,13 +51,13 @@ class CreateAutoDndGroupFragment : Fragment() {
                     val group = groups.find { it.groupId == groupId }
                     if (group != null && !isEditing) {
                         isEditing = true
-                        binding.textView.text = "Edit Auto DND Group"
+                        binding.textView.text = getString(R.string.autodnd_group_edit_title)
                         binding.etGroupName.setText(group.groupName)
 
                         binding.btnDeleteGroup.visibility = View.VISIBLE
                         binding.btnDeleteGroup.setOnClickListener {
                             viewModel.removeGroup(group)
-                            Toast.makeText(requireContext(), "Group deleted", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(requireContext(), R.string.group_deleted, Toast.LENGTH_SHORT).show()
                             requireActivity().finish()
                         }
 

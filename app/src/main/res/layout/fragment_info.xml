@@ -300,7 +300,7 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="8dp"
-            android:text="Official Documentation"
+            android:text="@string/info_official_documentation"
             app:cornerRadius="16dp"/>
 
         <Space
