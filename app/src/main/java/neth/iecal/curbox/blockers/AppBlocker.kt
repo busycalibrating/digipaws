@@ -32,6 +32,7 @@ import neth.iecal.curbox.utils.ShizukuRunner
 import neth.iecal.curbox.utils.TimeTools
 import neth.iecal.curbox.utils.TimerNotification
 import neth.iecal.curbox.utils.UsageStatsHelper
+import neth.iecal.curbox.utils.getCurrentKeyboardPackageName
 import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
 
@@ -103,14 +104,14 @@ class AppBlocker() : BaseBlocker() {
 
     private lateinit var notificationManager: TimerNotification
 
-
+    private val ignoredApps = mutableListOf<String>("com.android.systemui")
 
     fun doAppBlockerCheck(event: AccessibilityEvent?) {
         if (event == null || (event.eventType and TARGET_EVENTS_MASK) == 0) return
 
         val packageName = event.packageName?.toString() ?: return
 
-        if (lastPackage == packageName || packageName == service.packageName || packageName == "com.android.systemui") {
+        if (lastPackage == packageName || packageName == service.packageName || ignoredApps.contains(packageName)) {
             return
         }
 
@@ -214,6 +215,9 @@ class AppBlocker() : BaseBlocker() {
         prefs = service.getSharedPreferences("app_blocker_prefs", Context.MODE_PRIVATE)
         loadPersistedData()
         usageStats = UsageStatsHelper(service)
+
+        ignoredApps.add(getCurrentKeyboardPackageName(service)?:"com.google.android.inputmethod.latin")
+        ignoredApps.add("com.google.android.apps.wellbeing")
 
         settingsJob?.cancel()
         settingsJob = CoroutineScope(Dispatchers.IO).launch {
