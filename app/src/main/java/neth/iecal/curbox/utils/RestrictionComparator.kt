@@ -21,6 +21,7 @@ import neth.iecal.curbox.data.models.Settings
 import neth.iecal.curbox.data.models.SettingsChangeDelayConfig
 import neth.iecal.curbox.data.models.TimeInterval
 import neth.iecal.curbox.data.models.UiHiderConfig
+import neth.iecal.curbox.hardcoded.allScripts
 
 /**
  * Decides whether a proposed settings value keeps every restriction at least as strong as
@@ -159,8 +160,8 @@ object RestrictionComparator {
     fun uiHider(old: UiHiderConfig, new: UiHiderConfig): Boolean {
         if (!old.isActive) return true
         if (!new.isActive) return false
-        return old.scripts.filter { it.isEnabled }.all { o ->
-            val n = new.scripts.find { it.id == o.id } ?: return@all false
+        return old.allScripts().filter { it.isEnabled }.all { o ->
+            val n = new.allScripts().find { it.id == o.id } ?: return@all false
             n.isEnabled && n.packageName == o.packageName && n.source == o.source
         }
     }

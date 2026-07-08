@@ -17,6 +17,7 @@ import neth.iecal.curbox.data.models.PendingSettingsChange
 import neth.iecal.curbox.data.models.Settings
 import neth.iecal.curbox.data.models.SettingsChangeDelayConfig
 import neth.iecal.curbox.data.models.SettingsChangeDelayPrefs
+import neth.iecal.curbox.hardcoded.normalized
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -116,8 +117,8 @@ class DataStoreManager(private val context: Context) {
         updateGated(GatedSettingsField.MINDFUL_MESSAGES) { config }
     }
 
-    suspend fun updateUiHiderConfig(config: neth.iecal.curbox.data.models.UiHiderConfig) {
-        updateGated(GatedSettingsField.UI_HIDER) { config }
+    suspend fun updateUiHiderConfig(transform: (neth.iecal.curbox.data.models.UiHiderConfig) -> neth.iecal.curbox.data.models.UiHiderConfig) {
+        updateGated(GatedSettingsField.UI_HIDER) { transform(it.uiHiderConfig.normalized()) }
     }
 
     suspend fun updateReelCounterOverlayConfig(config: neth.iecal.curbox.data.models.ReelCounterOverlayConfig) {

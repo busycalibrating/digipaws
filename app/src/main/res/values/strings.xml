@@ -870,6 +870,7 @@
     <string name="ui_hider_label_hint">Label (optional)</string>
     <string name="ui_hider_script_label">SCRIPT</string>
     <string name="ui_hider_source_hint">if app != \"com.instagram.android\" { return }\n…</string>
+    <string name="ui_hider_preset_note">This preset comes with the app. You can read it here and turn it on or off, but you cannot change it.</string>
 
     <string name="node_picker_start">Start Node Picker</string>
     <string name="node_picker_channel_name">Node Picker</string>
