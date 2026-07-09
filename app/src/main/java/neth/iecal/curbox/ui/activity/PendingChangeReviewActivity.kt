@@ -25,17 +25,21 @@ class PendingChangeReviewActivity : AppCompatActivity() {
         const val EXTRA_FIELD = "field"
         const val EXTRA_APPLIES_AT_MS = "applies_at_ms"
         const val EXTRA_REPLACED_EXISTING = "replaced_existing"
+        const val EXTRA_TAMPER_GATED = "tamper_gated"
     }
 
     private var dialog: AlertDialog? = null
     private var fieldName = ""
     private var appliesAtMs = 0L
     private var replacedExisting = false
+    private var tamperGated = false
 
     private val ticker = Handler(Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
         override fun run() {
-            if (appliesAtMs - System.currentTimeMillis() <= 0) {
+            // A tamper gated change has no real countdown to wait out; it stays parked until
+            // the user turns tamper protection off, so the dialog shouldn't auto dismiss on it
+            if (!tamperGated && appliesAtMs - System.currentTimeMillis() <= 0) {
                 finish()
                 return
             }
@@ -60,12 +64,24 @@ class PendingChangeReviewActivity : AppCompatActivity() {
         fieldName = intent.getStringExtra(EXTRA_FIELD) ?: ""
         appliesAtMs = intent.getLongExtra(EXTRA_APPLIES_AT_MS, 0L)
         replacedExisting = intent.getBooleanExtra(EXTRA_REPLACED_EXISTING, false)
+        tamperGated = intent.getBooleanExtra(EXTRA_TAMPER_GATED, false)
     }
 
     private fun buildMessage(): String {
-        val remaining = SettingsChangeDelayUtils.formatRemaining(this, appliesAtMs - System.currentTimeMillis())
         val label = SettingsChangeDelayUtils.fieldLabel(this, fieldName)
-        var message = getString(R.string.change_delay_review_message, label, remaining)
+        val remaining = appliesAtMs - System.currentTimeMillis()
+        var message = if (remaining > 0) {
+            getString(
+                R.string.change_delay_review_message,
+                label,
+                SettingsChangeDelayUtils.formatRemaining(this, remaining)
+            )
+        } else {
+            getString(R.string.change_delay_review_message_no_timer, label)
+        }
+        if (tamperGated) {
+            message += "\n\n" + getString(R.string.change_delay_review_tamper_note)
+        }
         if (replacedExisting) {
             message += "\n\n" + getString(R.string.change_delay_review_replaced_note)
         }

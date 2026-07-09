@@ -35,12 +35,9 @@ Click on any image to enlarge it.
 
 ### Why Curbox Stands Out
 
-Most screen time tools are closed source and require internet access. This raises concerns about your private usage data being tracked or sold. Curbox takes a different path.
-* All screen time apps use a powerful Android feature (Accessibility service) that lets them see everything you do, including your private messages. They all connect to the internet, posing a severe security threat. Curbox uses this same feature, but it does not have internet access (it doesn't declare the permission in the manifest). This means your personal data can never leave your phone, keeping it completely private and secure.
+Most screen time tools are closed source. This raises concerns about your private usage data being tracked or sold. Curbox takes a different path.
 * Open Source Transparency
 The entire codebase is public. Anyone can verify how the app works. This ensures there are no hidden trackers or malicious behaviors. Open source doesn't mean anyone can see how you use the app. 
-* Respect for Your Data
-Because there is no cloud connection, you are the sole owner of your statistics. There are literally a few companies selling your usage insights for millions so the algorithm can be further strengthened to keep you trapped.
 
 ### Platforms:
 - Android (this repository)

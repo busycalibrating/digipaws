@@ -137,9 +137,9 @@ class DataStoreManager(private val context: Context) {
         settingsDataStore.updateData { it.copy(serviceProtectionConfig = transform(it.serviceProtectionConfig)) }
     }
 
-    suspend fun updateSettingsChangeDelay(isEnabled: Boolean, delayMinutes: Int) {
+    suspend fun updateSettingsChangeDelay(isEnabled: Boolean, delayMinutes: Int, requireTamperProtectionOff: Boolean) {
         val clamped = delayMinutes.coerceIn(0, SettingsChangeDelayConfig.MAX_DELAY_MINUTES)
-        updateGated(GatedSettingsField.CHANGE_DELAY) { SettingsChangeDelayPrefs(isEnabled, clamped) }
+        updateGated(GatedSettingsField.CHANGE_DELAY) { SettingsChangeDelayPrefs(isEnabled, clamped, requireTamperProtectionOff) }
     }
 
     suspend fun cancelPendingSettingsChange(fieldName: String) {
@@ -160,8 +160,12 @@ class DataStoreManager(private val context: Context) {
         var appliedAny = false
         settingsDataStore.updateData { current ->
             val now = System.currentTimeMillis()
-            val (due, waiting) = current.settingsChangeDelayConfig.pendingChanges
-                .partition { it.appliesAtMs <= now }
+            val delayConfig = current.settingsChangeDelayConfig
+            // Tamper protection being on holds every pending change back, no matter how long
+            // its own timer has already run out, until the user turns tamper protection off
+            val tamperBlocked = delayConfig.requireTamperProtectionOff && current.antiUninstallConfig.isEnabled
+            val (due, waiting) = delayConfig.pendingChanges
+                .partition { it.appliesAtMs <= now && !tamperBlocked }
             appliedAny = due.isNotEmpty()
             if (due.isEmpty()) {
                 current
@@ -187,23 +191,30 @@ class DataStoreManager(private val context: Context) {
     private suspend fun updateGated(field: GatedSettingsField, computeNewValue: (Settings) -> Any) {
         var deferredUntilMs = 0L
         var hadPendingForField = false
+        var tamperGated = false
         settingsDataStore.updateData { current ->
             deferredUntilMs = 0L
             hadPendingForField = false
+            tamperGated = false
             val newValueJson = gson.toJson(computeNewValue(current))
             val proposed = withFieldValue(current, field, newValueJson) ?: return@updateData current
             hadPendingForField = current.settingsChangeDelayConfig.pendingChanges.any { it.field == field.name }
             val delayConfig = current.settingsChangeDelayConfig
-            if (!delayConfig.isEnabled || delayConfig.delayMinutes <= 0 ||
+            val timeGateActive = delayConfig.isEnabled && delayConfig.delayMinutes > 0
+            tamperGated = delayConfig.requireTamperProtectionOff && current.antiUninstallConfig.isEnabled
+            if ((!timeGateActive && !tamperGated) ||
                 RestrictionComparator.isSameOrStricter(field, current, proposed)
             ) {
+                tamperGated = false
                 val proposedDelayConfig = proposed.settingsChangeDelayConfig
                 proposed.copy(settingsChangeDelayConfig = proposedDelayConfig.copy(
                     pendingChanges = proposedDelayConfig.pendingChanges.filterNot { it.field == field.name }
                 ))
             } else {
                 val now = System.currentTimeMillis()
-                deferredUntilMs = now + delayConfig.delayMinutes * 60_000L
+                // With no active timer, the pending value is due the instant tamper protection
+                // turns off; applyDuePendingChanges re-checks that condition on every sweep.
+                deferredUntilMs = if (timeGateActive) now + delayConfig.delayMinutes * 60_000L else now
                 val pending = PendingSettingsChange(
                     field = field.name,
                     newValueJson = newValueJson,
@@ -216,7 +227,7 @@ class DataStoreManager(private val context: Context) {
             }
         }
         if (deferredUntilMs > 0L) {
-            notifyChangeDeferred(field, deferredUntilMs, hadPendingForField)
+            notifyChangeDeferred(field, deferredUntilMs, hadPendingForField, tamperGated)
         } else if (hadPendingForField) {
             notifyPendingChangeDropped(field)
         }
@@ -258,7 +269,8 @@ class DataStoreManager(private val context: Context) {
                     val prefs = gson.fromJson(valueJson, SettingsChangeDelayPrefs::class.java)
                     settings.copy(settingsChangeDelayConfig = settings.settingsChangeDelayConfig.copy(
                         isEnabled = prefs.isEnabled,
-                        delayMinutes = prefs.delayMinutes
+                        delayMinutes = prefs.delayMinutes,
+                        requireTamperProtectionOff = prefs.requireTamperProtectionOff
                     ))
                 }
             }
@@ -270,7 +282,12 @@ class DataStoreManager(private val context: Context) {
      * Falls back to a toast when the screen cannot be shown, for example when the change came
      * from the Curbox API while the app is in the background.
      */
-    private fun notifyChangeDeferred(field: GatedSettingsField, appliesAtMs: Long, replacedExisting: Boolean) {
+    private fun notifyChangeDeferred(
+        field: GatedSettingsField,
+        appliesAtMs: Long,
+        replacedExisting: Boolean,
+        tamperGated: Boolean
+    ) {
         val appContext = context.applicationContext
         Handler(Looper.getMainLooper()).post {
             try {
@@ -279,16 +296,18 @@ class DataStoreManager(private val context: Context) {
                     putExtra(neth.iecal.curbox.ui.activity.PendingChangeReviewActivity.EXTRA_FIELD, field.name)
                     putExtra(neth.iecal.curbox.ui.activity.PendingChangeReviewActivity.EXTRA_APPLIES_AT_MS, appliesAtMs)
                     putExtra(neth.iecal.curbox.ui.activity.PendingChangeReviewActivity.EXTRA_REPLACED_EXISTING, replacedExisting)
+                    putExtra(neth.iecal.curbox.ui.activity.PendingChangeReviewActivity.EXTRA_TAMPER_GATED, tamperGated)
                 }
                 appContext.startActivity(intent)
             } catch (e: Exception) {
                 try {
-                    val remaining = SettingsChangeDelayUtils.formatRemaining(appContext, appliesAtMs - System.currentTimeMillis())
-                    Toast.makeText(
-                        appContext,
-                        appContext.getString(R.string.change_delay_deferred_toast, remaining),
-                        Toast.LENGTH_LONG
-                    ).show()
+                    val message = if (tamperGated) {
+                        appContext.getString(R.string.change_delay_tamper_gated_toast)
+                    } else {
+                        val remaining = SettingsChangeDelayUtils.formatRemaining(appContext, appliesAtMs - System.currentTimeMillis())
+                        appContext.getString(R.string.change_delay_deferred_toast, remaining)
+                    }
+                    Toast.makeText(appContext, message, Toast.LENGTH_LONG).show()
                 } catch (_: Exception) {
                 }
             }

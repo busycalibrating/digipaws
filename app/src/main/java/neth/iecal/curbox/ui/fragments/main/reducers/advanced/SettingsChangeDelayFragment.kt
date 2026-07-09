@@ -40,11 +40,14 @@ class SettingsChangeDelayFragment : Fragment() {
     private lateinit var switchDelay: MaterialSwitch
     private lateinit var groupDuration: View
     private lateinit var chipsDelay: ChipGroup
+    private lateinit var switchTamperLock: MaterialSwitch
     private lateinit var containerPending: LinearLayout
     private lateinit var textPendingEmpty: TextView
 
     private var isEnabled = false
     private var delayMinutes = 0
+    private var requireTamperProtectionOff = false
+    private var antiUninstallEnabled = false
     private var pendingChanges: List<PendingSettingsChange> = emptyList()
     private var renderedPendingKey = ""
     private val countdownViews = mutableMapOf<String, TextView>()
@@ -79,6 +82,7 @@ class SettingsChangeDelayFragment : Fragment() {
         switchDelay = view.findViewById(R.id.switch_change_delay)
         groupDuration = view.findViewById(R.id.group_duration)
         chipsDelay = view.findViewById(R.id.chips_delay)
+        switchTamperLock = view.findViewById(R.id.switch_tamper_lock)
         containerPending = view.findViewById(R.id.container_pending)
         textPendingEmpty = view.findViewById(R.id.text_pending_empty)
 
@@ -94,12 +98,15 @@ class SettingsChangeDelayFragment : Fragment() {
         }
 
         switchDelay.setOnClickListener {
-            requestUpdate(switchDelay.isChecked, delayMinutes)
+            requestUpdate(switchDelay.isChecked, delayMinutes, requireTamperProtectionOff)
         }
         chipsDelay.setOnCheckedStateChangeListener { _, checkedIds ->
             if (isRendering) return@setOnCheckedStateChangeListener
             val minutes = checkedIds.firstOrNull()?.let { chipMinutes[it] } ?: return@setOnCheckedStateChangeListener
-            if (minutes != delayMinutes) requestUpdate(isEnabled, minutes)
+            if (minutes != delayMinutes) requestUpdate(isEnabled, minutes, requireTamperProtectionOff)
+        }
+        switchTamperLock.setOnClickListener {
+            requestUpdate(isEnabled, delayMinutes, switchTamperLock.isChecked)
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -108,6 +115,8 @@ class SettingsChangeDelayFragment : Fragment() {
                     val config = settings.settingsChangeDelayConfig
                     isEnabled = config.isEnabled
                     delayMinutes = config.delayMinutes
+                    requireTamperProtectionOff = config.requireTamperProtectionOff
+                    antiUninstallEnabled = settings.antiUninstallConfig.isEnabled
                     pendingChanges = config.pendingChanges.sortedBy { it.appliesAtMs }
                     render()
                 }
@@ -132,9 +141,9 @@ class SettingsChangeDelayFragment : Fragment() {
      * right away; anything weaker gets parked and the collected settings snap the UI back,
      * so no local state is touched here.
      */
-    private fun requestUpdate(enable: Boolean, minutes: Int) {
+    private fun requestUpdate(enable: Boolean, minutes: Int, tamperLock: Boolean) {
         viewLifecycleOwner.lifecycleScope.launch {
-            dataStore.updateSettingsChangeDelay(enable, minutes)
+            dataStore.updateSettingsChangeDelay(enable, minutes, tamperLock)
         }
     }
 
@@ -144,6 +153,7 @@ class SettingsChangeDelayFragment : Fragment() {
 
         switchDelay.isChecked = isEnabled
         groupDuration.isVisible = isEnabled
+        switchTamperLock.isChecked = requireTamperProtectionOff
         val chipId = chipMinutes.entries.find { it.value == delayMinutes }?.key
         if (chipId != null) chipsDelay.check(chipId) else chipsDelay.clearCheck()
 
@@ -178,14 +188,19 @@ class SettingsChangeDelayFragment : Fragment() {
     private fun tick() {
         if (!isAdded) return
         val now = System.currentTimeMillis()
+        val tamperBlocked = requireTamperProtectionOff && antiUninstallEnabled
         var anyDue = false
         pendingChanges.forEach { change ->
             val remaining = change.appliesAtMs - now
-            if (remaining <= 0) anyDue = true
-            countdownViews[change.field]?.text = getString(
-                R.string.change_delay_applies_in,
-                SettingsChangeDelayUtils.formatRemaining(requireContext(), remaining)
-            )
+            if (remaining <= 0 && !tamperBlocked) anyDue = true
+            countdownViews[change.field]?.text = if (tamperBlocked) {
+                getString(R.string.change_delay_blocked_by_tamper)
+            } else {
+                getString(
+                    R.string.change_delay_applies_in,
+                    SettingsChangeDelayUtils.formatRemaining(requireContext(), remaining)
+                )
+            }
         }
         if (anyDue) {
             viewLifecycleOwner.lifecycleScope.launch {

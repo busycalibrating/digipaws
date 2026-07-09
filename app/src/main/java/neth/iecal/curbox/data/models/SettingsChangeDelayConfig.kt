@@ -35,13 +35,19 @@ data class PendingSettingsChange(
  */
 data class SettingsChangeDelayPrefs(
     val isEnabled: Boolean = false,
-    val delayMinutes: Int = SettingsChangeDelayConfig.DEFAULT_DELAY_MINUTES
+    val delayMinutes: Int = SettingsChangeDelayConfig.DEFAULT_DELAY_MINUTES,
+    val requireTamperProtectionOff: Boolean = false
 )
 
 data class SettingsChangeDelayConfig(
     val isEnabled: Boolean = false,
     val delayMinutes: Int = DEFAULT_DELAY_MINUTES,
-    val pendingChanges: List<PendingSettingsChange> = emptyList()
+    val pendingChanges: List<PendingSettingsChange> = emptyList(),
+    /**
+     * When on, a weakening change stays parked for as long as tamper protection is on,
+     * regardless of [delayMinutes]. It only releases once the user turns tamper protection off.
+     */
+    val requireTamperProtectionOff: Boolean = false
 ) {
     companion object {
         /** No wait by default; the gate only defers changes once the user picks a duration. */

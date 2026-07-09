@@ -65,9 +65,12 @@ object RestrictionComparator {
     }
 
     fun changeDelay(old: SettingsChangeDelayConfig, new: SettingsChangeDelayConfig): Boolean {
-        // Off or set to no wait means the gate holds nothing, so any change passes
-        if (!old.isEnabled || old.delayMinutes <= 0) return true
-        return new.isEnabled && new.delayMinutes >= old.delayMinutes
+        // Off or set to no wait means the timer holds nothing, so any change to it passes
+        val timeOk = !old.isEnabled || old.delayMinutes <= 0 ||
+            (new.isEnabled && new.delayMinutes >= old.delayMinutes)
+        // Turning this off is itself a reduction, so it has to earn its own way past the gate
+        val tamperGateOk = !old.requireTamperProtectionOff || new.requireTamperProtectionOff
+        return timeOk && tamperGateOk
     }
 
     fun appGroups(old: List<AppGroup>, new: List<AppGroup>): Boolean {
