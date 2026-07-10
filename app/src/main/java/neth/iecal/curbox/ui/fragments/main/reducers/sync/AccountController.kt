@@ -9,9 +9,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.textfield.TextInputEditText
 import com.google.zxing.BarcodeFormat
 import com.journeyapps.barcodescanner.BarcodeEncoder
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.sync.SyncBillingStatus
@@ -45,6 +48,7 @@ class AccountController(
     private val title = root.findViewById<TextView>(R.id.text_title)
     private val subtitle = root.findViewById<TextView>(R.id.text_subtitle)
     private val message = root.findViewById<TextView>(R.id.text_message)
+    private val progress = root.findViewById<LinearProgressIndicator>(R.id.progress_account)
 
     private val email = root.findViewById<TextInputEditText>(R.id.input_email)
     private val password = root.findViewById<TextInputEditText>(R.id.input_password)
@@ -72,11 +76,11 @@ class AccountController(
     private val qr = root.findViewById<ImageView>(R.id.image_qr)
 
     fun bind() {
-        primaryAuth.setOnClickListener {
+        primaryAuth.setOnClickListener { btn ->
             if (mode == Mode.SIGN_UP) {
-                submit { provider.signUp(text(email), text(password)) }
+                submit(button = btn) { provider.signUp(text(email), text(password)) }
             } else {
-                submit { provider.signIn(text(email), text(password)) }
+                submit(button = btn) { provider.signIn(text(email), text(password)) }
             }
         }
         toggleMode.setOnClickListener {
@@ -86,53 +90,56 @@ class AccountController(
         root.findViewById<View>(R.id.btn_forgot).setOnClickListener { mode = Mode.FORGOT; apply() }
         root.findViewById<View>(R.id.btn_forgot_back).setOnClickListener { mode = Mode.SIGN_IN; apply() }
 
-        root.findViewById<View>(R.id.btn_verify).setOnClickListener {
+        root.findViewById<View>(R.id.btn_verify).setOnClickListener { btn ->
             val e = last.pendingEmail ?: return@setOnClickListener
-            submit { provider.verifySignupCode(e, text(code)) }
+            submit(button = btn) { provider.verifySignupCode(e, text(code)) }
         }
-        root.findViewById<View>(R.id.btn_resend).setOnClickListener {
+        root.findViewById<View>(R.id.btn_resend).setOnClickListener { btn ->
             val e = last.pendingEmail ?: return@setOnClickListener
-            submit(fragment.getString(R.string.account_msg_new_code_sent, e)) { provider.resendSignupCode(e) }
+            submit(toast = fragment.getString(R.string.account_msg_new_code_sent, e), button = btn) { provider.resendSignupCode(e) }
         }
-        root.findViewById<View>(R.id.btn_send_reset).setOnClickListener {
+        root.findViewById<View>(R.id.btn_send_reset).setOnClickListener { btn ->
             val e = text(forgotEmail)
-            submit(fragment.getString(R.string.account_msg_reset_code_sent, e)) { provider.sendPasswordReset(e); resetEmail = e; mode = Mode.RESET; apply() }
+            submit(toast = fragment.getString(R.string.account_msg_reset_code_sent, e), button = btn) {
+                provider.sendPasswordReset(e); resetEmail = e; mode = Mode.RESET; apply()
+            }
         }
-        root.findViewById<View>(R.id.btn_set_password).setOnClickListener {
-            submit { provider.resetPassword(resetEmail, text(resetCode), text(newPassword)) }
+        root.findViewById<View>(R.id.btn_set_password).setOnClickListener { btn ->
+            submit(button = btn) { provider.resetPassword(resetEmail, text(resetCode), text(newPassword)) }
         }
 
-        passphraseBtn.setOnClickListener {
+        passphraseBtn.setOnClickListener { btn ->
             val phrase = text(passphrase)
             if (!last.hasVault && phrase.length < 8) {
-                Toast.makeText(fragment.requireContext(), R.string.account_msg_phrase_too_short, Toast.LENGTH_LONG).show()
+                fragment.context?.let { Toast.makeText(it, R.string.account_msg_phrase_too_short, Toast.LENGTH_LONG).show() }
                 return@setOnClickListener
             }
-            submit { if (last.hasVault) provider.unlock(phrase) else provider.setPassphrase(phrase) }
+            submit(button = btn) { if (last.hasVault) provider.unlock(phrase) else provider.setPassphrase(phrase) }
         }
-        root.findViewById<View>(R.id.btn_pair).setOnClickListener { submit { provider.pairWithCode(text(pairInput)) } }
+        root.findViewById<View>(R.id.btn_pair).setOnClickListener { btn -> submit(button = btn) { provider.pairWithCode(text(pairInput)) } }
         root.findViewById<View>(R.id.btn_scan).setOnClickListener { requestScan() }
-        root.findViewById<View>(R.id.btn_show_code).setOnClickListener {
+        root.findViewById<View>(R.id.btn_show_code).setOnClickListener { btn ->
             // The code contains the raw secret key, so the user confirms first and
             // the QR takes itself down instead of sitting on screen.
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(fragment.requireContext())
+            val ctx = fragment.context ?: return@setOnClickListener
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
                 .setTitle(R.string.pairing_code_warning_title)
                 .setMessage(R.string.pairing_code_warning_message)
                 .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.pairing_code_show) { _, _ -> showPairingCode() }
+                .setPositiveButton(R.string.pairing_code_show) { _, _ -> showPairingCode(btn) }
                 .show()
         }
-        root.findViewById<View>(R.id.btn_force_sync).setOnClickListener {
-            submit(fragment.getString(R.string.account_msg_syncing)) { provider.pushNow(); provider.refresh() }
+        root.findViewById<View>(R.id.btn_force_sync).setOnClickListener { btn ->
+            submit(toast = fragment.getString(R.string.account_msg_syncing), button = btn) { provider.pushNow(); provider.refresh() }
         }
-        root.findViewById<View>(R.id.btn_signout).setOnClickListener { submit { provider.signOut() } }
+        root.findViewById<View>(R.id.btn_signout).setOnClickListener { btn -> submit(button = btn) { provider.signOut() } }
 
         root.findViewById<View>(R.id.btn_subscribe).setOnClickListener {
-            provider.launchBillingFlow(fragment.requireActivity())
+            fragment.activity?.let { provider.launchBillingFlow(it) }
         }
         root.findViewById<View>(R.id.btn_restore_purchase).setOnClickListener {
             provider.refreshBilling()
-            Toast.makeText(fragment.requireContext(), R.string.sync_paywall_checking, Toast.LENGTH_SHORT).show()
+            fragment.context?.let { Toast.makeText(it, R.string.sync_paywall_checking, Toast.LENGTH_SHORT).show() }
         }
 
         fragment.viewLifecycleOwner.lifecycleScope.launch {
@@ -235,25 +242,56 @@ class AccountController(
 
     private fun text(field: TextInputEditText): String = field.text?.toString()?.trim().orEmpty()
 
-    private fun showPairingCode() {
-        submit {
-            val payload = provider.makePairingCode()
-            val bmp = BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 600, 600)
-            qr.setImageBitmap(bmp)
-            qr.visibility = View.VISIBLE
-            kotlinx.coroutines.delay(PAIRING_CODE_VISIBLE_MS)
+    // Generating the code is the only part that waits on anything; the 60s
+    // auto-hide afterwards is not "loading" and must not keep the button
+    // disabled or the progress bar spinning for a full minute.
+    private fun showPairingCode(button: View) {
+        fragment.viewLifecycleOwner.lifecycleScope.launch {
+            beginLoading(button)
+            try {
+                val payload = provider.makePairingCode()
+                val bmp = BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 600, 600)
+                qr.setImageBitmap(bmp)
+                qr.visibility = View.VISIBLE
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                fragment.context?.let { Toast.makeText(it, friendly(e.message), Toast.LENGTH_LONG).show() }
+                return@launch
+            } finally {
+                endLoading(button)
+            }
+            delay(PAIRING_CODE_VISIBLE_MS)
             qr.setImageBitmap(null)
             qr.visibility = View.GONE
         }
     }
 
-    private fun submit(toast: String? = null, block: suspend () -> Unit) {
+    private fun beginLoading(button: View?) {
+        button?.isEnabled = false
+        progress.visibility = View.VISIBLE
+    }
+
+    private fun endLoading(button: View?) {
+        button?.isEnabled = true
+        progress.visibility = View.GONE
+    }
+
+    private fun submit(toast: String? = null, button: View? = null, block: suspend () -> Unit) {
         fragment.viewLifecycleOwner.lifecycleScope.launch {
+            beginLoading(button)
             try {
                 block()
-                if (toast != null) Toast.makeText(fragment.requireContext(), toast, Toast.LENGTH_LONG).show()
+                fragment.context?.let { ctx -> if (toast != null) Toast.makeText(ctx, toast, Toast.LENGTH_LONG).show() }
+            } catch (e: CancellationException) {
+                // The fragment's view is on its way out (activity finished, back
+                // pressed mid-request, etc). Let it die quietly instead of
+                // trying to toast on a context that no longer exists.
+                throw e
             } catch (e: Exception) {
-                Toast.makeText(fragment.requireContext(), friendly(e.message), Toast.LENGTH_LONG).show()
+                fragment.context?.let { ctx -> Toast.makeText(ctx, friendly(e.message), Toast.LENGTH_LONG).show() }
+            } finally {
+                endLoading(button)
             }
         }
     }

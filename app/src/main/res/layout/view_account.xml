@@ -36,6 +36,15 @@
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurface" />
 
+    <!-- Shown whenever a button below is waiting on a network call -->
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/progress_account"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:indeterminate="true"
+        android:visibility="gone" />
+
     <!-- Paywall, only ever visible in builds that sell sync -->
     <LinearLayout
         android:id="@+id/section_paywall"
