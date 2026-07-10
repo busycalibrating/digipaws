@@ -11,6 +11,7 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.os.Bundle
 import android.text.TextUtils
 import android.util.Log
@@ -139,16 +140,25 @@ class AllAppsUsageFragment : Fragment() {
             usageStatsHelper = UsageStatsHelper(requireContext().applicationContext)
 
             val asciiArts = listOf(
-                R.string.ascii_brain,
-                R.string.ascii_aim,
-                R.string.ascii_star1,
-                R.string.ascii_star2,
-                R.string.ascii_kitty,
-                R.string.ascii_star3,
-                R.string.ascii_star4,
-                R.string.ascii_star5,
+//                R.string.ascii_brain,
+//                R.string.ascii_aim,
+//                R.string.ascii_star1,
+//                R.string.ascii_star2,
+//                R.string.ascii_kitty,
+//                R.string.ascii_star3,
+//                R.string.ascii_star4,
+//                R.string.ascii_star5,
+//                R.string.ascii_coolstars,
+//                R.string.ascii_coolflower,
+//                R.string.ascii_chillguy,
+                R.string.ascii_god,
+                R.string.ascii_jellyfish,
+                R.string.ascii_lotus,
+                R.string.ascii_sharks
+
             )
             binding.asciiArt.text = getString(asciiArts.random())
+            binding.asciiArt.foreground = createAsciiFade()
 
             if (!PermissionUtils.hasAllRequiredPermissions(requireContext())) {
                 val intent = Intent(requireContext(), FragmentActivity::class.java).apply {
@@ -484,6 +494,35 @@ class AllAppsUsageFragment : Fragment() {
                     val name = "UsageData_${dateFormat.format(Date(startMs))}.csv"
                     createCsvLauncher.launch(name)
                 }
+            }
+        }
+
+        // Softens the top and bottom edges of the background ascii art so tall
+        // pieces (like ascii_god) melt into the surface instead of looking cut off.
+        // The overlay fades to the surface color, which is the same color drawn
+        // behind the art, so it stays clean even through the view's 0.5 alpha.
+        private fun createAsciiFade(): Drawable {
+            val surface = MaterialColors.getColor(
+                binding.root,
+                com.google.android.material.R.attr.colorSurface
+            )
+            val transparent = surface and 0x00FFFFFF
+            val fadeHeight = (48 * resources.displayMetrics.density).toInt()
+
+            val top = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(surface, transparent)
+            )
+            val bottom = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(surface, transparent)
+            )
+
+            return LayerDrawable(arrayOf(top, bottom)).apply {
+                setLayerGravity(0, Gravity.TOP)
+                setLayerHeight(0, fadeHeight)
+                setLayerGravity(1, Gravity.BOTTOM)
+                setLayerHeight(1, fadeHeight)
             }
         }
 
