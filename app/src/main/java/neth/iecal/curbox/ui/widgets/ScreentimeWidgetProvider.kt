@@ -12,12 +12,14 @@ import android.widget.RemoteViews
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import neth.iecal.curbox.R
+import neth.iecal.curbox.data.sync.SyncGateway
 import neth.iecal.curbox.ui.activity.FragmentActivity
 import neth.iecal.curbox.ui.fragments.main.usage.AllAppsUsageFragment
 import neth.iecal.curbox.utils.DataStoreManager
 import neth.iecal.curbox.utils.TimeTools
 import neth.iecal.curbox.utils.UsageStatsHelper
 import neth.iecal.curbox.utils.getDefaultLauncherPackageName
+import java.time.LocalDate
 
 class ScreentimeWidgetProvider : AppWidgetProvider() {
 
@@ -77,11 +79,24 @@ class ScreentimeWidgetProvider : AppWidgetProvider() {
         }
         ignoredPackages.addAll(ignoredApps)
 
-        val list = runBlocking { usageStatsHelper.getForegroundStatsByRelativeDay(0) }.filter {
+        val localList = runBlocking { usageStatsHelper.getForegroundStatsByRelativeDay(0) }.filter {
             it.totalTime >= 1_000 && it.packageName !in ignoredPackages
         }
 
-        val totalScreentime = list.sumOf { it.totalTime }
+        // Fold in app + website usage synced from the user's other devices, same
+        // as AllAppsUsageViewModel, so the widget total matches the in-app total.
+        // Empty on F-Droid (NoopSyncProvider) and whenever nothing has synced yet.
+        val today = LocalDate.now().toString()
+        val remoteApps = runBlocking {
+            runCatching { SyncGateway.provider.remoteAppUsage(today) }.getOrDefault(emptyMap())
+        }
+        val remoteWebsiteTime = runBlocking {
+            runCatching { SyncGateway.provider.remoteWebsiteUsage(today) }.getOrDefault(emptyMap())
+        }.values.sum()
+
+        val list = mergeRemoteApps(localList, remoteApps, ignoredPackages).sortedByDescending { it.totalTime }
+
+        val totalScreentime = list.sumOf { it.totalTime } + remoteWebsiteTime
 
         try {
             val views = RemoteViews(context.packageName, R.layout.widget_app_stats).apply {
@@ -117,6 +132,35 @@ class ScreentimeWidgetProvider : AppWidgetProvider() {
         } catch (e: Exception) {
             Log.e(TAG, "Error updating widget $widgetId", e)
         }
+    }
+
+    // Combines other devices' per app time into this device's list: matching apps
+    // get their time added together, and apps that only ran on another device are
+    // appended as their own rows. Mirrors AllAppsUsageViewModel.mergeRemoteApps.
+    private fun mergeRemoteApps(
+        local: List<AllAppsUsageFragment.Stat>,
+        remote: Map<String, Long>,
+        ignoredPackages: Set<String>,
+    ): List<AllAppsUsageFragment.Stat> {
+        if (remote.isEmpty()) return local
+        val localByPkg = local.associateBy { it.packageName }
+        val merged = ArrayList<AllAppsUsageFragment.Stat>(local.size + remote.size)
+        for (st in local) {
+            val extra = remote[st.packageName] ?: 0L
+            merged.add(
+                if (extra > 0L) {
+                    AllAppsUsageFragment.Stat(st.packageName, st.totalTime + extra, st.sessions, st.hourlyUsage)
+                } else {
+                    st
+                }
+            )
+        }
+        for ((pkg, ms) in remote) {
+            if (pkg !in localByPkg && ms >= 1_000 && pkg !in ignoredPackages) {
+                merged.add(AllAppsUsageFragment.Stat(pkg, ms))
+            }
+        }
+        return merged
     }
 
     private fun setAppUsageText(

@@ -180,7 +180,7 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
             val totalTimeMs = if (isFuture) {
                 0L
             } else {
-                getFilteredStatsForDay(date).sumOf { it.totalTime }
+                totalTimeForDay(date)
             }
 
             val hours = totalTimeMs / (1000f * 60f * 60f)
@@ -207,18 +207,14 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private suspend fun loadDayStats(date: LocalDate) {
-        val stats = getFilteredStatsForDay(date)
-
         // Fold in app usage synced from the user's other Android devices, summed
         // per app so each row shows combined time across every device. Empty on
         // F-Droid and when nothing has synced.
-        val remoteApps = runCatching {
-            neth.iecal.curbox.data.sync.SyncGateway.provider.remoteAppUsage(date.toString())
-        }.getOrDefault(emptyMap())
+        val remoteApps = remoteAppTotals(date)
+        val stats = getFilteredStatsForDay(date)
         val appStats = if (remoteApps.isEmpty()) stats else mergeRemoteApps(stats, remoteApps)
 
         preloadAppMetadata(appStats.map { it.packageName })
-        val total = appStats.sumOf { it.totalTime }
         val today = LocalDate.now()
         val isToday = date == today
 
@@ -233,9 +229,7 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
 
         // Fold in website usage synced from other devices (e.g. the browser
         // extension) as a single "Synced browsing" row. Empty on F-Droid.
-        val remote = runCatching {
-            neth.iecal.curbox.data.sync.SyncGateway.provider.remoteWebsiteUsage(date.toString())
-        }.getOrDefault(emptyMap())
+        val remote = remoteWebsiteTotals(date)
 
         var statsOut = appStats.sortedByDescending { it.totalTime }
         var websiteOut = websiteStats
@@ -257,6 +251,10 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
             )).sortedByDescending { it.totalTime }
         }
 
+        // Computed from statsOut (not appStats) so synced website time, folded in
+        // above as the "Synced browsing" row, counts toward the header total too.
+        val total = statsOut.sumOf { it.totalTime }
+
         withContext(Dispatchers.Main) {
             _selectedDayStats.value = statsOut
             _selectedDayWebsiteStats.value = websiteOut
@@ -264,6 +262,26 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
             _dateSublabel.value = sublabel
         }
     }
+
+    // Local + synced app time, plus synced website time, for one day. Used both
+    // for the weekly bar graph and (via loadDayStats) the header total, so a
+    // day's bar always matches what you see when you tap into it.
+    private suspend fun totalTimeForDay(date: LocalDate): Long {
+        val remoteApps = remoteAppTotals(date)
+        val stats = getFilteredStatsForDay(date)
+        val appStats = if (remoteApps.isEmpty()) stats else mergeRemoteApps(stats, remoteApps)
+        val remoteWebsites = remoteWebsiteTotals(date)
+        return appStats.sumOf { it.totalTime } + remoteWebsites.values.sum()
+    }
+
+    // Empty on F-Droid (NoopSyncProvider) and whenever nothing has synced yet.
+    private suspend fun remoteAppTotals(date: LocalDate): Map<String, Long> = runCatching {
+        neth.iecal.curbox.data.sync.SyncGateway.provider.remoteAppUsage(date.toString())
+    }.getOrDefault(emptyMap())
+
+    private suspend fun remoteWebsiteTotals(date: LocalDate): Map<String, Long> = runCatching {
+        neth.iecal.curbox.data.sync.SyncGateway.provider.remoteWebsiteUsage(date.toString())
+    }.getOrDefault(emptyMap())
 
     // Combines other devices' per app time into this device's list: matching apps
     // get their time added together, and apps that only ran on another device are
