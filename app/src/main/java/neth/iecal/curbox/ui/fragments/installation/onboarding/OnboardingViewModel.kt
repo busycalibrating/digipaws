@@ -23,6 +23,10 @@ class OnboardingViewModel : ViewModel() {
         _targetAppPackage.value = packageName
     }
 
+    fun skipTargetApp() {
+        _targetAppPackage.value = null
+    }
+
     fun setDailyLimit(limit: Long) {
         _dailyLimitMinutes.value = limit
     }

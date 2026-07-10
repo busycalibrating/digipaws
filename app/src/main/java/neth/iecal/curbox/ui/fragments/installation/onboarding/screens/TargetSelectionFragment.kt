@@ -60,6 +60,11 @@ class TargetSelectionFragment : Fragment() {
         binding.btnAction.setOnClickListener {
             (parentFragment as? OnboardingFragment)?.goToNextPage()
         }
+
+        binding.btnSkip.setOnClickListener {
+            viewModel.skipTargetApp()
+            (parentFragment as? OnboardingFragment)?.goToNextPage()
+        }
     }
 
     override fun onDestroyView() {

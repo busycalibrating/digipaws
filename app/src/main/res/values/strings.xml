@@ -232,6 +232,7 @@
     <string name="limit_1_hour">1 hour</string>
     <string name="limit_2_hours">2 hours</string>
     <string name="add_friction_to_this_app">Add friction to this app</string>
+    <string name="skip_choosing_a_target_app">I\'ll pick this later</string>
     <string name="give_us_the_keys">Give us the keys.</string>
     <string name="to_create_friction_and_give_you">To create friction and give you your time back, we need deep system access.</string>
     <string name="display_over_other_apps">Display over other apps</string>
