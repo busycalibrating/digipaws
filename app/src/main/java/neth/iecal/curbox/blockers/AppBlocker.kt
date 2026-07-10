@@ -119,7 +119,6 @@ class AppBlocker() : BaseBlocker() {
             removeCooldownFrom(lastPackage)
         }
 
-        lastPackage = packageName
 
         if (cooldownAppsList.containsKey(packageName)) {
             val endTime = cooldownAppsList[packageName]!!
@@ -186,6 +185,8 @@ class AppBlocker() : BaseBlocker() {
         }
 
         notificationManager.stopTimer()
+
+        lastPackage = packageName
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
