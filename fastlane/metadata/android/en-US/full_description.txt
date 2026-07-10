@@ -1,14 +1,11 @@
-Curbox is a free and open source app blocker and screen time tracker built for digital wellbeing and a real digital detox. Block apps, websites, reels and shorts, then watch your screen time drop and your focus come back.
-
-Everything runs on your phone. Curbox has no internet permission, so your usage data can never leave your device. No ads, no accounts, no tracking, fully open source.
-
+Curbox (Digipaws) is a free and open source app blocker and screen time tracker built for digital wellbeing and a real digital detox. As an app blocker it lets you block apps, websites, reels and shorts, then watch your screen time drop and your focus come back.
 
 <b>Block apps and websites</b>
 
 • <b>App and Website Blocker</b>: block any distracting app or website completely
 • <b>URL Path Blocking</b>: block just one part of a site, like m.youtube.com/shorts, while the rest of YouTube still works
 • <b>Short Form Content Blocker</b>: shut off Instagram Reels and YouTube Shorts so the feed stops pulling you back
-
+• <b>Tamper Protection</b>: make it difficult to uninstall curbox or change configurations
 
 <b>Hide only the distracting parts</b>
 
@@ -46,14 +43,4 @@ When you try to open something outside its schedule, you decide what it takes to
 • <b>Unlock Limits</b>: cap how many unlocks you get every few hours
 
 
-<b>Private by design</b>
-
-Most screen time apps use the Accessibility service to see everything you do, and they also connect to the internet. Curbox uses the same Accessibility service to block and track, but it never asks for internet permission. Your data stays on your phone, and the full source code is public so anyone can verify it.
-
-
-<b>Setup</b>
-
-1. Open Curbox on your Android phone
-2. Grant the permissions it asks for, like Accessibility, Notifications and Draw over other apps
-3. On Android 13 and above, allow restricted settings before you turn on the Accessibility permission. Watch a short guide here: https://youtu.be/91B72lEpcqc?si=PCKKUSwM1aLdELqJ
-4. For the smoothest setup and updates, install Curbox from the F-Droid app (please avoid website)
+Curbox is the app blocker for anyone who wants to block distracting apps and websites, cut screen time, and take back their focus. Free, open source, no ads.
