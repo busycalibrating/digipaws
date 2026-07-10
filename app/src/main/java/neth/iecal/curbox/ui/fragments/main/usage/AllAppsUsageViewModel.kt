@@ -94,7 +94,15 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
 
     private val dayLabelFormatter = DateTimeFormatter.ofPattern("MMM d")
 
+    // The fragment's view gets recreated (and initialize() re-invoked) whenever
+    // it returns from a child screen like AppUsageBreakdown, even though this
+    // same ViewModel instance already has data loaded. Guard against redoing
+    // that first-time setup, which would otherwise re-flash the loading overlay.
+    private var hasLoadedOnce = false
+
     fun initialize() {
+        if (hasLoadedOnce) return
+        hasLoadedOnce = true
         viewModelScope.launch(Dispatchers.IO) {
             getDefaultLauncherPackageName(getApplication<Application>().packageManager)?.let {
                 ignoredPackages.add(it)
@@ -151,7 +159,13 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private suspend fun loadWeekData() {
-        withContext(Dispatchers.Main) { _isLoading.value = true }
+        // Only show the full-screen loading overlay when there's nothing on
+        // screen yet. Reloads triggered by revisiting this screen (returning
+        // from AppUsageBreakdown, resuming the app) already have data to show
+        // while they refresh in the background, so flashing the overlay for
+        // those is just an annoying flicker rather than useful feedback.
+        val silent = _selectedDayStats.value != null
+        if (!silent) withContext(Dispatchers.Main) { _isLoading.value = true }
 
         val offset = withContext(Dispatchers.Main) { _weekOffset.value ?: 0 }
         val weekStart = getWeekStart(offset)
@@ -203,7 +217,7 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
         val selectedDate = weekStart.plusDays(defaultSelected.toLong())
         loadDayStats(selectedDate)
 
-        withContext(Dispatchers.Main) { _isLoading.value = false }
+        if (!silent) withContext(Dispatchers.Main) { _isLoading.value = false }
     }
 
     private suspend fun loadDayStats(date: LocalDate) {

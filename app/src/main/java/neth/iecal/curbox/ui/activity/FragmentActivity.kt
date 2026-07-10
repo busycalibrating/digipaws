@@ -157,23 +157,13 @@ class FragmentActivity : AppCompatActivity() {
 
                 if (savedInstanceState == null) {
                     bottomNav.selectedItemId = R.id.nav_usage
-                    supportFragmentManager.beginTransaction()
-                        .replace(R.id.fragment_holder, AllAppsUsageFragment())
-                        .commit()
+                    showTab(R.id.nav_usage, commitNow = true)
                 }
-                
+
                 bottomNav.setOnItemSelectedListener { item ->
                     if (item.itemId == bottomNav.selectedItemId) return@setOnItemSelectedListener false
 
-                    val fragment = when (item.itemId) {
-                        R.id.nav_usage -> AllAppsUsageFragment()
-                        R.id.nav_focus -> FocusFragment()
-                        R.id.nav_reducers -> ReducersFragment()
-                        R.id.nav_info -> neth.iecal.curbox.ui.fragments.main.InfoFragment()
-                        else -> AllAppsUsageFragment()
-                    }
-                    
-                    switchFragment(fragment)
+                    switchTab(item.itemId)
                     true
                 }
             }
@@ -212,26 +202,65 @@ class FragmentActivity : AppCompatActivity() {
         }
     }
 
-    private fun switchFragment(fragment: Fragment) {
+    // Tags used to keep each bottom nav tab's fragment (and its ViewModel/cached
+    // data) alive across switches, instead of recreating it every time. Recreating
+    // used to force a full reload (and its loading flash) on every tab revisit.
+    private val tabTags = mapOf(
+        R.id.nav_usage to "tab_usage",
+        R.id.nav_focus to "tab_focus",
+        R.id.nav_reducers to "tab_reducers",
+        R.id.nav_info to "tab_info",
+    )
+
+    private fun createTabFragment(itemId: Int): Fragment = when (itemId) {
+        R.id.nav_usage -> AllAppsUsageFragment()
+        R.id.nav_focus -> FocusFragment()
+        R.id.nav_reducers -> ReducersFragment()
+        R.id.nav_info -> neth.iecal.curbox.ui.fragments.main.InfoFragment()
+        else -> AllAppsUsageFragment()
+    }
+
+    private fun showTab(itemId: Int, commitNow: Boolean = false) {
+        val tag = tabTags[itemId] ?: return
+        val fm = supportFragmentManager
+        val transaction = fm.beginTransaction()
+
+        for ((id, otherTag) in tabTags) {
+            if (id != itemId) {
+                fm.findFragmentByTag(otherTag)?.let { transaction.hide(it) }
+            }
+        }
+
+        val target = fm.findFragmentByTag(tag)
+        if (target == null) {
+            transaction.add(R.id.fragment_holder, createTabFragment(itemId), tag)
+        } else {
+            transaction.show(target)
+        }
+
+        if (commitNow) transaction.commitNow() else transaction.commit()
+    }
+
+    private fun switchTab(itemId: Int) {
         val container = findViewById<android.view.View>(R.id.fragment_holder)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val animator = ValueAnimator.ofFloat(0f, 1f)
             animator.duration = 500 // Slightly longer for a more "premium" feel
 
-            var fragmentReplaced = false
+            var fragmentSwapped = false
 
             animator.addUpdateListener { animation ->
                 val fraction = animation.animatedFraction
-                
+
                 // Animate blur: 0 -> 40 -> 0
                 val blurRadius = if (fraction < 0.5f) fraction * 2 * 40f else (1f - fraction) * 2 * 40f
-                
+
                 // Animate alpha: 1.0 -> 0.0 -> 1.0 (Full dip to 0 to hide the swap)
                 val alphaValue = if (fraction < 0.5f) 1f - (fraction * 2f) else (fraction - 0.5f) * 2f
 
                 container.alpha = alphaValue
-                
+
                 if (blurRadius > 0.1f) {
                     container.setRenderEffect(
                         RenderEffect.createBlurEffect(
@@ -242,20 +271,15 @@ class FragmentActivity : AppCompatActivity() {
                     container.setRenderEffect(null)
                 }
 
-                if (fraction >= 0.5f && !fragmentReplaced) {
-                    fragmentReplaced = true
+                if (fraction >= 0.5f && !fragmentSwapped) {
+                    fragmentSwapped = true
                     // Remove the built-in fade animation here to avoid conflict with our manual alpha animation
-                    supportFragmentManager.beginTransaction()
-                        .replace(R.id.fragment_holder, fragment)
-                        .commitNow()
+                    showTab(itemId, commitNow = true)
                 }
             }
             animator.start()
         } else {
-            supportFragmentManager.beginTransaction()
-                .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out)
-                .replace(R.id.fragment_holder, fragment)
-                .commit()
+            showTab(itemId)
         }
     }
 }
