@@ -158,6 +158,20 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    // A user asked refresh: drop the cached day stats so the system's freshest
+    // usage is read again, pull the latest usage from other devices, then reload.
+    // Unlike reload() this always shows the loading overlay so the tap has visible feedback.
+    fun refresh() {
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) { _isLoading.value = true }
+            dayStatsCache.clear()
+            val provider = neth.iecal.curbox.data.sync.SyncGateway.provider
+            if (provider.isAvailable) runCatching { provider.refresh() }
+            loadWeekData()
+            withContext(Dispatchers.Main) { _isLoading.value = false }
+        }
+    }
+
     private suspend fun loadWeekData() {
         // Only show the full-screen loading overlay when there's nothing on
         // screen yet. Reloads triggered by revisiting this screen (returning

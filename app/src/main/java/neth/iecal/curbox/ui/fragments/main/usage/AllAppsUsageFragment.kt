@@ -242,6 +242,11 @@ class AllAppsUsageFragment : Fragment() {
                             true
                         }
 
+                        R.id.refresh_usage_stats -> {
+                            viewModel.refresh()
+                            true
+                        }
+
                         R.id.add_widget_usage_tracker -> {
                             val appWidgetManager = AppWidgetManager.getInstance(requireContext())
 

@@ -243,6 +243,7 @@
     <string name="restore_backup">Restore Backup</string>
     <string name="enable_permissions">Enable Permissions</string>
     <string name="add_widget_to_homescreen">Add Widget to Homescreen</string>
+    <string name="refresh_usage_stats">Refresh</string>
     <string name="export_data_as_csv">Export Data as CSV</string>
     <string name="usage">Usage</string>
     <string name="focus">Focus</string>

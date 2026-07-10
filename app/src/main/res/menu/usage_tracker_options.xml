@@ -4,6 +4,10 @@
         android:id="@+id/select_ignored"
         android:title="@string/select_ignored_apps" />
     <item
+        android:id="@+id/refresh_usage_stats"
+        android:title="@string/refresh_usage_stats" />
+
+    <item
         android:id="@+id/add_widget_usage_tracker"
         android:title="@string/add_widget_to_homescreen" />
 
