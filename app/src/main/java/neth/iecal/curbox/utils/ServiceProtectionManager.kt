@@ -3,6 +3,7 @@ package neth.iecal.curbox.utils
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
@@ -40,12 +41,26 @@ object ServiceProtectionManager {
         }
     }
 
-    /** Intent that asks the user to drop battery optimization for the app. */
+    /**
+     * Intent that lets the user drop battery optimization for the app. When we hold the
+     * REQUEST_IGNORE_BATTERY_OPTIMIZATIONS permission (full and fdroid flavors) we can show the one
+     * tap allow dialog. The playstore flavor ships without that permission, so we open the battery
+     * optimization list instead, which needs no permission.
+     */
     fun ignoreBatteryOptimizationsIntent(context: Context): Intent =
-        Intent(
-            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            Uri.parse("package:${context.packageName}")
-        )
+        if (canRequestIgnoreBatteryOptimizations(context)) {
+            Intent(
+                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:${context.packageName}")
+            )
+        } else {
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        }
+
+    /** True only when the permission is declared in the merged manifest (install time grant). */
+    private fun canRequestIgnoreBatteryOptimizations(context: Context): Boolean =
+        context.checkSelfPermission(android.Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) ==
+            PackageManager.PERMISSION_GRANTED
 
     /**
      * Checks both services and, if either is off and Shizuku can help, turns them back on. Always

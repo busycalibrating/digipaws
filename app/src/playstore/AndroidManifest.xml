@@ -13,6 +13,12 @@
         android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:node="remove" />
 
+    <!-- Play flags "run in background" (battery optimization exemption) as a
+         sensitive permission, so the playstore flavor drops it. -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        tools:node="remove" />
+
     <application>
         <!-- Wakes the app on a content-less push so it can pull right away, even
              with the screen off. Runs in the main process. -->
