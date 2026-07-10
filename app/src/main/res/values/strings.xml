@@ -83,6 +83,11 @@
     <string name="curboxapp">\@curb.me</string>
     <string name="follow_curbox">Follow Curbox</string>
     <string name="label_instagram">Instagram</string>
+    <string name="label_github">GitHub</string>
+    <string name="curbox_github_repo">curbox-android</string>
+    <string name="curbox_also_on">Curbox Also On</string>
+    <string name="label_browser_extension">Browser Extension</string>
+    <string name="curbox_extension_repo">curbox-extension</string>
     <string name="about_the_developer">About the Developer</string>
     <string name="view_on_github">View on GitHub ↗</string>
     <string name="donate_title">Donate</string>

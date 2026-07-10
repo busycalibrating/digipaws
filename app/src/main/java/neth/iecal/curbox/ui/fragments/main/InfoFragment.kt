@@ -116,6 +116,14 @@ class InfoFragment : Fragment() {
             openUrl("https://instagram.com/curbox.app")
         }
 
+        binding.cardGithub.setOnClickListener {
+            openUrl("https://github.com/curbox-app/curbox-android")
+        }
+
+        binding.cardBrowserExtension.setOnClickListener {
+            openUrl("https://github.com/curbox-app/curbox-extension")
+        }
+
         binding.btnActionCrashLogs.setOnClickListener {
             showCrashLogs()
         }
