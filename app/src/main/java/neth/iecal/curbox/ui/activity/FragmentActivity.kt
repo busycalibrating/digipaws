@@ -67,6 +67,7 @@ class FragmentActivity : AppCompatActivity() {
         setContentView(R.layout.activity_fragment)
 
         maybeShowTermsConsent()
+        maybeShowWhatsNew()
 
         val bottomNav = findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottom_nav)
 
@@ -191,6 +192,36 @@ class FragmentActivity : AppCompatActivity() {
             .setNegativeButton(R.string.terms_consent_exit) { _, _ ->
                 finishAffinity()
             }
+            .show()
+    }
+
+    // The changelog shown here is the same file fastlane ships to the stores,
+    // copied into assets/changelogs/<versionCode>.txt at build time.
+    private fun maybeShowWhatsNew() {
+        val prefs = getSharedPreferences("AppPreferences", Context.MODE_PRIVATE)
+
+        // A user who has not agreed to the terms yet is looking at that dialog.
+        // Leave the version unrecorded so the changelog shows on the next launch.
+        if (!prefs.getBoolean("hasAcceptedTerms", false)) return
+
+        val currentVersion = neth.iecal.curbox.BuildConfig.VERSION_CODE
+        if (prefs.getInt("lastSeenVersionCode", 0) == currentVersion) return
+        prefs.edit().putInt("lastSeenVersionCode", currentVersion).apply()
+
+        // Someone still in onboarding just installed the app, so nothing is new to them.
+        if (!prefs.getBoolean("isFirstLaunchComplete", false)) return
+
+        val changelog = try {
+            assets.open("changelogs/$currentVersion.txt").bufferedReader().use { it.readText() }.trim()
+        } catch (e: Exception) {
+            return
+        }
+        if (changelog.isEmpty()) return
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.whats_new_title)
+            .setMessage(changelog)
+            .setPositiveButton(R.string.whats_new_dismiss, null)
             .show()
     }
 

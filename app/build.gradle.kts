@@ -6,6 +6,19 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val changelogAssetsDir = layout.buildDirectory.dir("generated/changelogs")
+
+val copyFastlaneChangelogs = tasks.register<Copy>("copyFastlaneChangelogs") {
+    from(rootProject.file("fastlane/metadata/android/en-US/changelogs")) {
+        include("*.txt")
+    }
+    into(changelogAssetsDir.map { it.dir("changelogs") })
+}
+
+tasks.withType<com.android.build.gradle.tasks.MergeSourceSetFolders>().configureEach {
+    dependsOn(copyFastlaneChangelogs)
+}
+
 android {
     namespace = "neth.iecal.curbox"
     compileSdk = 34
@@ -72,6 +85,10 @@ android {
         // F-Droid never compiles it, so that build stays offline.
         getByName("full") { java.srcDir("src/sync/java") }
         getByName("playstore") { java.srcDir("src/sync/java") }
+
+        // The fastlane changelogs are the single source of truth: store listings
+        // and the in-app "what's new" dialog read the same files.
+        getByName("main") { assets.srcDir(changelogAssetsDir) }
     }
 
 
