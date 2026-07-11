@@ -9,9 +9,6 @@ on:
       tag:
         description: 'Tag/version name for the release (e.g. v1.2.0)'
         required: true
-      body:
-        description: 'Release description (use \n for new lines)'
-        required: false
 
 permissions:
   contents: write
@@ -35,27 +32,21 @@ jobs:
             echo "name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build release description
+      - name: Read changelog for this version
         id: desc
-        env:
-          BODY: ${{ github.event.inputs.body }}
-          TAG: ${{ steps.tag.outputs.name }}
         run: |
-          if [ -n "$BODY" ]; then
-            DESC="$(printf '%b' "$BODY")"
-          else
-            VERSION_CODE="$(grep -m1 -E '^\s*versionCode\s*=' app/build.gradle.kts | tr -dc '0-9')"
-            CHANGELOG="fastlane/metadata/android/en-US/changelogs/${VERSION_CODE}.txt"
-            if [ -f "$CHANGELOG" ]; then
-              DESC="$(cat "$CHANGELOG")"
-            else
-              echo "No changelog at $CHANGELOG and no body input given" >&2
-              exit 1
-            fi
+          VERSION_CODE="$(grep -m1 -E '^[[:space:]]*versionCode[[:space:]]*=' app/build.gradle.kts | tr -dc '0-9')"
+          CHANGELOG="fastlane/metadata/android/en-US/changelogs/${VERSION_CODE}.txt"
+
+          if [ ! -s "$CHANGELOG" ]; then
+            echo "::error::No changelog at $CHANGELOG. Write it before tagging the release."
+            exit 1
           fi
+
           {
             echo "body<<RELEASE_EOF"
-            echo "$DESC"
+            cat "$CHANGELOG"
+            echo ""
             echo "RELEASE_EOF"
           } >> $GITHUB_OUTPUT
 
