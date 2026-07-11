@@ -328,6 +328,10 @@ class AllAppsUsageFragment : Fragment() {
             binding.btnReadDocs.setOnClickListener {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://curbox.app/docs")))
             }
+
+            binding.btnStarRepo.setOnClickListener {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/nethical6/curbox")))
+            }
         }
 
         private fun observeViewModel(adapter: AppUsageAdapter) {

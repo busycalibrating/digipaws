@@ -180,6 +180,7 @@
     <string name="usage_welcome_title">Hello dear user</string>
     <string name="usage_welcome_message">Your app stats will show up right here. I started keeping track the moment you installed me. Please read the docs so you can use Curbox to its fullest.</string>
     <string name="usage_welcome_read_docs">Read documentation</string>
+    <string name="usage_welcome_star_repo">Star our repository</string>
     <string name="no_auto_dnd_groups_yet_create">No Auto DND Groups yet. Create one!</string>
     <string name="desc_10_apps_included">10 Apps • Included</string>
     <string name="create_autodnd_group">Create Auto DND Group</string>

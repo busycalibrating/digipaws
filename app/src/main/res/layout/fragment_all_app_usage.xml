@@ -198,8 +198,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="28dp"
-            android:layout_marginBottom="60dp"
             android:text="@string/usage_welcome_read_docs" />
+
+        <Button
+            android:id="@+id/btn_star_repo"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="60dp"
+            android:text="@string/usage_welcome_star_repo" />
 
     </LinearLayout>
 
