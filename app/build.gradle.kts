@@ -6,17 +6,38 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val changelogAssetsDir = layout.buildDirectory.dir("generated/changelogs")
+// The fastlane changelogs are the single source of truth: the store listings, the
+// GitHub release body and the in-app "what's new" dialog all read the same files.
+// They are copied into assets/changelogs/<versionCode>.txt at build time.
+abstract class CopyFastlaneChangelogsTask : DefaultTask() {
+    @get:InputDirectory
+    abstract val changelogs: DirectoryProperty
 
-val copyFastlaneChangelogs = tasks.register<Copy>("copyFastlaneChangelogs") {
-    from(rootProject.file("fastlane/metadata/android/en-US/changelogs")) {
-        include("*.txt")
+    @get:OutputDirectory
+    abstract val assetsDir: DirectoryProperty
+
+    @TaskAction
+    fun copyChangelogs() {
+        val target = assetsDir.get().dir("changelogs").asFile
+        target.deleteRecursively()
+        target.mkdirs()
+        changelogs.get().asFile.listFiles()
+            ?.filter { it.extension == "txt" }
+            ?.forEach { it.copyTo(target.resolve(it.name), overwrite = true) }
     }
-    into(changelogAssetsDir.map { it.dir("changelogs") })
 }
 
-tasks.withType<com.android.build.gradle.tasks.MergeSourceSetFolders>().configureEach {
-    dependsOn(copyFastlaneChangelogs)
+val copyFastlaneChangelogs = tasks.register<CopyFastlaneChangelogsTask>("copyFastlaneChangelogs") {
+    changelogs.set(rootProject.layout.projectDirectory.dir("fastlane/metadata/android/en-US/changelogs"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            copyFastlaneChangelogs,
+            CopyFastlaneChangelogsTask::assetsDir
+        )
+    }
 }
 
 android {
@@ -85,10 +106,6 @@ android {
         // F-Droid never compiles it, so that build stays offline.
         getByName("full") { java.srcDir("src/sync/java") }
         getByName("playstore") { java.srcDir("src/sync/java") }
-
-        // The fastlane changelogs are the single source of truth: store listings
-        // and the in-app "what's new" dialog read the same files.
-        getByName("main") { assets.srcDir(changelogAssetsDir) }
     }
 
 
