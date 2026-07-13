@@ -37,9 +37,11 @@ import neth.iecal.curbox.data.models.KeywordGroup
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.ui.activity.WarningActivity
 import neth.iecal.curbox.utils.KeywordMatcher
+import neth.iecal.curbox.utils.TimerNotification
 import neth.iecal.curbox.utils.TimeTools
 import java.util.Calendar
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 class KeywordBlocker : BaseBlocker() {
     companion object {
@@ -48,6 +50,7 @@ class KeywordBlocker : BaseBlocker() {
         private const val TARGET_EVENTS_MASK =
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         private const val BLOCK_SUPPRESSION_MS = 5_000L
+        private const val COOLDOWN_NOTIFICATION_ID = 1004
     }
 
     private lateinit var service: BaseBlockingService
@@ -62,7 +65,9 @@ class KeywordBlocker : BaseBlocker() {
     private var isTurnedOn = false
     private var isUnsupportedBrowserBlockingOn = false
     private var lastpkg = ""
-    private var cooldownGroupsList = HashMap<String, Long>()
+    private var cooldownGroupsList = ConcurrentHashMap<String, Long>()
+    private lateinit var notificationManager: TimerNotification
+    private var notifiedCooldownGroupId: String? = null
     private var observationJob: Job? = null
     private val observationGuard = Any()
     private var lastObservedSnapshot: WebsiteStatsEntity? = null
@@ -359,6 +364,9 @@ class KeywordBlocker : BaseBlocker() {
         this.service = service
         this.browserBlocker = BrowserBlocker(service)
         this.prefs = service.getSharedPreferences("keyword_blocker_prefs", Context.MODE_PRIVATE)
+        if (!::notificationManager.isInitialized) {
+            notificationManager = TimerNotification(service, COOLDOWN_NOTIFICATION_ID)
+        }
         loadPersistedData()
 
         if (!watchSettings) return
@@ -382,9 +390,12 @@ class KeywordBlocker : BaseBlocker() {
 
                 if (isTurnedOn) {
                     startObservingDatabase()
+                    showNextCooldownNotification()
                 } else {
                     observationJob?.cancel()
                     observationJob = null
+                    notificationManager.stopTimer()
+                    notifiedCooldownGroupId = null
                 }
             }
         }
@@ -411,13 +422,25 @@ class KeywordBlocker : BaseBlocker() {
             remove("cooldown_$id")
             putStringSet("cooldown_keys", cooldownGroupsList.keys)
         }
+        if (notifiedCooldownGroupId == id && ::notificationManager.isInitialized) {
+            notifiedCooldownGroupId = null
+            notificationManager.stopTimer()
+            Handler(Looper.getMainLooper()).postDelayed(
+                { showNextCooldownNotification() },
+                100L
+            )
+        }
     }
 
     private fun handleCooldownIntent(intent: Intent) {
         val groupId = intent.getStringExtra("result_id") ?: return
-        val duration = intent.getIntExtra("selected_time", 120000)
-        cooldownGroupsList[groupId] = System.currentTimeMillis() + duration
+        val duration = intent.getIntExtra("selected_time", 120000).toLong()
+        if (duration <= 0L) return
+
+        val cooldownEnd = System.currentTimeMillis() + duration
+        cooldownGroupsList[groupId] = cooldownEnd
         persistCooldownData()
+        showCooldownNotification(groupId, cooldownEnd)
 
         val date = TimeTools.getCurrentDate()
         CoroutineScope(Dispatchers.IO).launch {
@@ -427,6 +450,56 @@ class KeywordBlocker : BaseBlocker() {
                 evaluateAndBlock(latest)
             }
         }
+    }
+
+    private fun showNextCooldownNotification() {
+        if (!isTurnedOn || !::notificationManager.isInitialized) return
+
+        val now = System.currentTimeMillis()
+        val nextCooldown = cooldownGroupsList
+            .filterValues { it > now }
+            .minByOrNull { it.value }
+
+        if (nextCooldown == null) {
+            notificationManager.stopTimer()
+            notifiedCooldownGroupId = null
+            return
+        }
+
+        showCooldownNotification(nextCooldown.key, nextCooldown.value)
+    }
+
+    private fun showCooldownNotification(groupId: String, cooldownEnd: Long) {
+        if (!::notificationManager.isInitialized) return
+
+        val remaining = cooldownEnd - System.currentTimeMillis()
+        if (remaining <= 0L) {
+            removeCooldownFrom(groupId)
+            return
+        }
+
+        notifiedCooldownGroupId = groupId
+        notificationManager.startTimer(
+            totalMillis = remaining,
+            timerId = "keyword_cooldown:$groupId:$cooldownEnd",
+            title = service.getString(R.string.notification_remaining_usage_lockdown),
+            onFinishCallback = {
+                if (cooldownGroupsList[groupId] == cooldownEnd) {
+                    cooldownGroupsList.remove(groupId)
+                    prefs.edit {
+                        remove("cooldown_$groupId")
+                        putStringSet("cooldown_keys", cooldownGroupsList.keys)
+                    }
+                }
+                if (notifiedCooldownGroupId == groupId) {
+                    notifiedCooldownGroupId = null
+                    Handler(Looper.getMainLooper()).postDelayed(
+                        { showNextCooldownNotification() },
+                        100L
+                    )
+                }
+            }
+        )
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
@@ -446,6 +519,10 @@ class KeywordBlocker : BaseBlocker() {
         service.unregisterReceiver(refreshReceiver)
         observationJob?.cancel()
         observationJob = null
+        if (::notificationManager.isInitialized) {
+            notificationManager.release()
+        }
+        notifiedCooldownGroupId = null
     }
 
     private val refreshReceiver = object : BroadcastReceiver() {
