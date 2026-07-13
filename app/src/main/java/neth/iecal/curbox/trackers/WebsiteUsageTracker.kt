@@ -174,17 +174,13 @@ class WebsiteUsageTracker {
             val uri = java.net.URI(url)
             val domain = (uri.host ?: urlText).lowercase().removePrefix("www.")
 
-            // Keep only the first path segment so deep links and query changes
-            // within the same section collapse to one stable identifier
-            // (e.g. "youtube.com/shorts/abc?v=1" -> "youtube.com/shorts").
-            // Firefox shows the full URL in its address bar, so without this the
-            // identifier would change constantly and reset the usage timer.
-            val firstSegment = uri.path
-                ?.split('/')
-                ?.firstOrNull { it.isNotEmpty() }
-                ?.let { "/$it" }
-                .orEmpty()
-            val identifier = if (firstSegment.isEmpty()) domain else "$domain$firstSegment"
+            // Keep the complete URL identifier because keyword rules can target
+            // nested paths, query values, or fragments. Usage limits aggregate
+            // every matching identifier later, so URL changes remain combined.
+            val path = uri.rawPath.orEmpty().let { if (it == "/") "" else it }
+            val query = uri.rawQuery?.let { "?$it" }.orEmpty()
+            val fragment = uri.rawFragment?.let { "#$it" }.orEmpty()
+            val identifier = "$domain$path$query$fragment"
 
             SiteInfo(domain, identifier)
         } catch (e: Exception) {
