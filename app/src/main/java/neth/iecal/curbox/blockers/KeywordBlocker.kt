@@ -10,6 +10,7 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.util.LruCache
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
@@ -46,6 +47,7 @@ class KeywordBlocker : BaseBlocker() {
         const val INTENT_ACTION_REFRESH_KEYWORD_BLOCKER_COOLDOWN = "neth.iecal.curbox.refresh.keywordblocker.cooldown"
         private const val TARGET_EVENTS_MASK =
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        private const val BLOCK_SUPPRESSION_MS = 5_000L
     }
 
     private lateinit var service: BaseBlockingService
@@ -62,6 +64,11 @@ class KeywordBlocker : BaseBlocker() {
     private var lastpkg = ""
     private var cooldownGroupsList = HashMap<String, Long>()
     private var observationJob: Job? = null
+    private val observationGuard = Any()
+    private var lastObservedSnapshot: WebsiteStatsEntity? = null
+    private val blockGuard = Any()
+    private var lastBlockedTarget = ""
+    private var blockSuppressedUntil = 0L
 
     fun compileKeywords(keywords: Collection<String>): Pair<List<Regex>, List<String>> =
         KeywordMatcher.compileKeywords(keywords)
@@ -86,7 +93,7 @@ class KeywordBlocker : BaseBlocker() {
         return matchesPatterns(patterns, urlIdentifier)
     }
 
-    // TODO: instead of this approach, add a datastore obj that automatcally setups up focus mode blocker in the regular observer
+    // TODO: instead of this approach, add a datastore obj that automatically setups up focus mode blocker in the regular observer
     fun isFocusWebsiteBlocked(
         packageName: String,
         compiledKeywords: Pair<List<Regex>, List<String>>,
@@ -132,7 +139,8 @@ class KeywordBlocker : BaseBlocker() {
     }
 
     private fun startObservingDatabase() {
-        observationJob?.cancel()
+        if (observationJob?.isActive == true) return
+
         observationJob = CoroutineScope(Dispatchers.IO).launch {
             val db = AppDatabase.getInstance(service)
             val dao = db.websiteStatsDao()
@@ -145,12 +153,27 @@ class KeywordBlocker : BaseBlocker() {
             }.collect {
                 val date = TimeTools.getCurrentDate()
                 val latest = dao.getStatsForDate(date).maxByOrNull { it.lastVisited }
-                if (latest != null && latest.lastVisited > (System.currentTimeMillis() - 2500)) {
+                if (latest != null &&
+                    latest.lastVisited > (System.currentTimeMillis() - 2500) &&
+                    markSnapshotAsObserved(latest) &&
+                    !isBlockSuppressedFor(latest)
+                ) {
                     evaluateAndBlock(latest)
+                    Log.d("KeywordBlocker", "Evaluated $latest")
                 }
             }
         }
     }
+
+    private fun markSnapshotAsObserved(snapshot: WebsiteStatsEntity): Boolean =
+        synchronized(observationGuard) {
+            if (lastObservedSnapshot == snapshot) {
+                false
+            } else {
+                lastObservedSnapshot = snapshot
+                true
+            }
+        }
 
     private fun evaluateAndBlock(entry: WebsiteStatsEntity) {
         val matched = findMatchingGroups(entry.urlIdentifier)
@@ -166,6 +189,7 @@ class KeywordBlocker : BaseBlocker() {
                 else removeCooldownFrom(group.id)
             }
             if (isBlocked(group)) {
+                if (!claimBlock(entry)) return
                 handleBlocking(group)
                 return
             }
@@ -183,6 +207,26 @@ class KeywordBlocker : BaseBlocker() {
             }
         }
     }
+
+    private fun claimBlock(entry: WebsiteStatsEntity): Boolean = synchronized(blockGuard) {
+        val now = System.currentTimeMillis()
+        val target = blockTarget(entry)
+        if (target == lastBlockedTarget && now < blockSuppressedUntil) {
+            false
+        } else {
+            lastBlockedTarget = target
+            blockSuppressedUntil = now + BLOCK_SUPPRESSION_MS
+            true
+        }
+    }
+
+    private fun isBlockSuppressedFor(entry: WebsiteStatsEntity): Boolean = synchronized(blockGuard) {
+        blockTarget(entry) == lastBlockedTarget &&
+            System.currentTimeMillis() < blockSuppressedUntil
+    }
+
+    private fun blockTarget(entry: WebsiteStatsEntity): String =
+        "${entry.packageName}\u0000${entry.urlIdentifier}"
 
     private fun handleBlocking(group: KeywordGroup) {
         Thread.sleep(250)
@@ -336,7 +380,12 @@ class KeywordBlocker : BaseBlocker() {
 
                 detectionCache.evictAll()
 
-                if (isTurnedOn) startObservingDatabase() else observationJob?.cancel()
+                if (isTurnedOn) {
+                    startObservingDatabase()
+                } else {
+                    observationJob?.cancel()
+                    observationJob = null
+                }
             }
         }
     }
@@ -396,6 +445,7 @@ class KeywordBlocker : BaseBlocker() {
     fun removeReceivers() {
         service.unregisterReceiver(refreshReceiver)
         observationJob?.cancel()
+        observationJob = null
     }
 
     private val refreshReceiver = object : BroadcastReceiver() {
