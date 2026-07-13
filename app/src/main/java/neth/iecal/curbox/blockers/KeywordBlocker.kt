@@ -160,8 +160,7 @@ class KeywordBlocker : BaseBlocker() {
                 val latest = dao.getStatsForDate(date).maxByOrNull { it.lastVisited }
                 if (latest != null &&
                     latest.lastVisited > (System.currentTimeMillis() - 2500) &&
-                    markSnapshotAsObserved(latest) &&
-                    !isBlockSuppressedFor(latest)
+                    markSnapshotAsObserved(latest)
                 ) {
                     evaluateAndBlock(latest)
                     Log.d("KeywordBlocker", "Evaluated $latest")
@@ -194,7 +193,7 @@ class KeywordBlocker : BaseBlocker() {
                 else removeCooldownFrom(group.id)
             }
             if (isBlocked(group)) {
-                if (!claimBlock(entry)) return
+                if (!claimBlock(entry, group.id)) return
                 handleBlocking(group)
                 return
             }
@@ -213,9 +212,9 @@ class KeywordBlocker : BaseBlocker() {
         }
     }
 
-    private fun claimBlock(entry: WebsiteStatsEntity): Boolean = synchronized(blockGuard) {
+    private fun claimBlock(entry: WebsiteStatsEntity, groupId: String): Boolean = synchronized(blockGuard) {
         val now = System.currentTimeMillis()
-        val target = blockTarget(entry)
+        val target = blockTarget(entry, groupId)
         if (target == lastBlockedTarget && now < blockSuppressedUntil) {
             false
         } else {
@@ -225,13 +224,8 @@ class KeywordBlocker : BaseBlocker() {
         }
     }
 
-    private fun isBlockSuppressedFor(entry: WebsiteStatsEntity): Boolean = synchronized(blockGuard) {
-        blockTarget(entry) == lastBlockedTarget &&
-            System.currentTimeMillis() < blockSuppressedUntil
-    }
-
-    private fun blockTarget(entry: WebsiteStatsEntity): String =
-        "${entry.packageName}\u0000${entry.urlIdentifier}"
+    private fun blockTarget(entry: WebsiteStatsEntity, groupId: String): String =
+        "$groupId\u0000${entry.packageName}\u0000${entry.urlIdentifier}"
 
     private fun handleBlocking(group: KeywordGroup) {
         Thread.sleep(250)
@@ -411,7 +405,7 @@ class KeywordBlocker : BaseBlocker() {
 
     private fun persistCooldownData() {
         prefs.edit {
-            putStringSet("cooldown_keys", cooldownGroupsList.keys)
+            putStringSet("cooldown_keys", cooldownGroupsList.keys.toSet())
             cooldownGroupsList.forEach { (id, end) -> putLong("cooldown_$id", end) }
         }
     }
@@ -420,7 +414,7 @@ class KeywordBlocker : BaseBlocker() {
         cooldownGroupsList.remove(id)
         prefs.edit {
             remove("cooldown_$id")
-            putStringSet("cooldown_keys", cooldownGroupsList.keys)
+            putStringSet("cooldown_keys", cooldownGroupsList.keys.toSet())
         }
         if (notifiedCooldownGroupId == id && ::notificationManager.isInitialized) {
             notifiedCooldownGroupId = null
@@ -488,7 +482,7 @@ class KeywordBlocker : BaseBlocker() {
                     cooldownGroupsList.remove(groupId)
                     prefs.edit {
                         remove("cooldown_$groupId")
-                        putStringSet("cooldown_keys", cooldownGroupsList.keys)
+                        putStringSet("cooldown_keys", cooldownGroupsList.keys.toSet())
                     }
                 }
                 if (notifiedCooldownGroupId == groupId) {

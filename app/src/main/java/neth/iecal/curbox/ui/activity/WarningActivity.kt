@@ -243,7 +243,11 @@ class WarningActivity : AppCompatActivity() {
                 if (intentText.length < warningScreenConfig.minIntentLength.coerceAtLeast(1)) {
                     return@setOnClickListener
                 }
-                val pkg = targetId
+                val pkg = if (mode == Constants.WARNING_SCREEN_MODE_APP_BLOCKER) {
+                    intent.getStringExtra("launch_package") ?: targetId
+                } else {
+                    targetId
+                }
                 val time = binding.minsPicker.getValue() * 60_000L
                 
                 CoroutineScope(Dispatchers.IO).launch {
@@ -294,7 +298,8 @@ class WarningActivity : AppCompatActivity() {
                             AppBlocker.INTENT_ACTION_REFRESH_APP_BLOCKER_COOLDOWN,
                             finalTime
                         )
-                        val intent = packageManager.getLaunchIntentForPackage(it1)
+                        val launchPackage = intent.getStringExtra("launch_package") ?: it1
+                        val intent = packageManager.getLaunchIntentForPackage(launchPackage)
                         if (intent != null) {
                             startActivity(intent)
                         }
