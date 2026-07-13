@@ -145,9 +145,24 @@ class WarningActivity : AppCompatActivity() {
                                 button.isEnabled = false
                                 button.setText(R.string.proceed)
 
-                                binding.intentInputEdit.doAfterTextChanged { s ->
-                                    button.isEnabled = s?.toString()?.trim()?.isNotEmpty() == true
+                                val minLength = warningScreenConfig.minIntentLength.coerceAtLeast(1)
+                                fun updateIntentInputState(length: Int) {
+                                    button.isEnabled = length >= minLength
+                                    binding.intentInputLayout.helperText = if (length < minLength) {
+                                        resources.getQuantityString(
+                                            R.plurals.warning_intent_chars_needed,
+                                            minLength,
+                                            minLength,
+                                            minLength - length
+                                        )
+                                    } else {
+                                        null
+                                    }
                                 }
+                                binding.intentInputEdit.doAfterTextChanged { s ->
+                                    updateIntentInputState(s?.toString()?.trim()?.length ?: 0)
+                                }
+                                updateIntentInputState(binding.intentInputEdit.text.toString().trim().length)
                             } else if (warningScreenConfig.isTypingRequirementEnabled) {
                                 binding.typingTargetSentence.visibility = View.VISIBLE
                                 binding.typingTargetSentence.text = getString(R.string.warning_typing_quote, warningScreenConfig.typingSentence)
@@ -225,6 +240,9 @@ class WarningActivity : AppCompatActivity() {
 
             if (warningScreenConfig.isIntentRequirementEnabled) {
                 val intentText = binding.intentInputEdit.text.toString().trim()
+                if (intentText.length < warningScreenConfig.minIntentLength.coerceAtLeast(1)) {
+                    return@setOnClickListener
+                }
                 val pkg = targetId
                 val time = binding.minsPicker.getValue() * 60_000L
                 
