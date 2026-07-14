@@ -84,21 +84,24 @@ class WarningActivity : AppCompatActivity() {
         val targetId = intent.getStringExtra("result_id") ?: ""
         var isProceedLimitExceeded = false
         var timeUntilNextProceedMn = 0L
+        var proceedsLeft = -1
 
         if (warningScreenConfig.proceedLimitEnabled && targetId.isNotEmpty()) {
             val limitPrefs = getSharedPreferences("proceed_limits", Context.MODE_PRIVATE)
             val historyString = limitPrefs.getString("proceeds_$targetId", "") ?: ""
             val history = historyString.split(",").mapNotNull { it.toLongOrNull() }.toMutableList()
-            
+
             val nowTime = System.currentTimeMillis()
             val windowMillis = warningScreenConfig.proceedsTimeWindowMn * 60_000L
             val validHistory = history.filter { nowTime - it < windowMillis }
-            
+
             if (validHistory.size >= warningScreenConfig.allowedProceeds) {
                 isProceedLimitExceeded = true
                 val oldestProceed = validHistory.minOrNull() ?: nowTime
                 val expirationTime = oldestProceed + windowMillis
                 timeUntilNextProceedMn = (expirationTime - nowTime + 59_999) / 60_000L
+            } else {
+                proceedsLeft = warningScreenConfig.allowedProceeds - validHistory.size
             }
         }
 
@@ -119,6 +122,7 @@ class WarningActivity : AppCompatActivity() {
 
         if (warningScreenConfig.isProceedDisabled || isProceedLimitExceeded) {
             binding.btnProceed.visibility = View.GONE
+            binding.btnCancel.setText(R.string.okay)
             if (isProceedLimitExceeded) {
                 binding.proceedSeconds.visibility = View.VISIBLE
                 binding.proceedSeconds.text = getString(R.string.warning_proceed_limit_reached, warningScreenConfig.allowedProceeds, warningScreenConfig.proceedsTimeWindowMn, timeUntilNextProceedMn)
@@ -127,6 +131,10 @@ class WarningActivity : AppCompatActivity() {
             }
 
         } else {
+            if (proceedsLeft >= 0) {
+                binding.proceedsLeft.visibility = View.VISIBLE
+                binding.proceedsLeft.text = getString(R.string.warning_proceeds_left, proceedsLeft, warningScreenConfig.allowedProceeds)
+            }
             proceedTimer =
                 object : CountDownTimer(warningScreenConfig.proceedDelayInSecs * 1000L, 1000) {
                     override fun onTick(millisUntilFinished: Long) {
