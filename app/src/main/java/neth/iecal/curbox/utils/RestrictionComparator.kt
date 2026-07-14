@@ -56,6 +56,10 @@ object RestrictionComparator {
                     mindfulMessages(current.mindfulMessageConfig, proposed.mindfulMessageConfig)
                 GatedSettingsField.UI_HIDER ->
                     uiHider(current.uiHiderConfig, proposed.uiHiderConfig)
+                GatedSettingsField.APP_USAGE_TRACKING ->
+                    !current.isAppUsageTrackingEnabled || proposed.isAppUsageTrackingEnabled
+                GatedSettingsField.WEBSITE_USAGE_TRACKING ->
+                    !current.isWebsiteUsageTrackingEnabled || proposed.isWebsiteUsageTrackingEnabled
                 GatedSettingsField.CHANGE_DELAY ->
                     changeDelay(current.settingsChangeDelayConfig, proposed.settingsChangeDelayConfig)
             }

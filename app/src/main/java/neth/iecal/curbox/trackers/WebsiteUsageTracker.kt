@@ -46,6 +46,7 @@ class WebsiteUsageTracker {
     private var domainStartTimeMs: Long = 0L
 
     private var recheckJob: Job? = null
+    @Volatile private var trackingEnabled = true
 
     private val heartbeat = object : Runnable {
         override fun run() {
@@ -65,6 +66,9 @@ class WebsiteUsageTracker {
     private fun startObservingRecheckTime() {
         scope.launch {
             service.dataStoreManager.settings.collect { settings ->
+                val enabled = settings.isWebsiteUsageTrackingEnabled
+                trackingEnabled = enabled
+                if (!enabled) mainHandler.post { discardSession() }
                 val nextRecheck = settings.nextWebsiteRecheckTime
                 if (nextRecheck > System.currentTimeMillis()) {
                     scheduleRecheck(nextRecheck)
@@ -104,7 +108,7 @@ class WebsiteUsageTracker {
         return null
     }
     fun onEvent(event: AccessibilityEvent?) {
-        if (event == null) return
+        if (event == null || !trackingEnabled) return
         
         val packageName = event.packageName?.toString() ?: return
         
@@ -190,6 +194,7 @@ class WebsiteUsageTracker {
 
 
     private fun saveInitialSession() {
+        if (!trackingEnabled) return
         val domain = currentDomain
         val identifier = currentUrlIdentifier
         val packageName = currentPackage
@@ -198,6 +203,7 @@ class WebsiteUsageTracker {
             val date = TimeTools.getCurrentDate()
             val wallNow = System.currentTimeMillis()
             scope.launch {
+                if (!trackingEnabled) return@launch
                 try {
                     // Make the row visible immediately without ever touching
                     // totalTime, so an in flight time increment is never clobbered.
@@ -220,6 +226,7 @@ class WebsiteUsageTracker {
     }
 
     private fun saveSession() {
+        if (!trackingEnabled) return
         val domain = currentDomain
         val identifier = currentUrlIdentifier
         val packageName = currentPackage
@@ -241,6 +248,7 @@ class WebsiteUsageTracker {
         val date = TimeTools.getCurrentDate()
         val wallNow = System.currentTimeMillis()
         scope.launch {
+            if (!trackingEnabled) return@launch
             try {
                 val entity = WebsiteStatsEntity(
                     date = date,
@@ -265,5 +273,12 @@ class WebsiteUsageTracker {
     fun onDestroy() {
         recheckJob?.cancel()
         saveSession()
+    }
+
+    private fun discardSession() {
+        currentPackage = null
+        currentDomain = null
+        currentUrlIdentifier = null
+        domainStartTimeMs = 0L
     }
 }

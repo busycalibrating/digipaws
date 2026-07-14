@@ -1542,4 +1542,9 @@
     <!-- Service notifications -->
     <string name="notification_remaining_usage_lockdown">Remaining usage before lockdown</string>
     <string name="notification_remaining_usage_reels_lockdown">Remaining usage before reels lockdown</string>
+    <string name="usage_tracking_settings">Usage tracking</string>
+    <string name="usage_tracking_settings_description">Choose which usage data the accessibility service saves on this device.</string>
+    <string name="app_usage_tracking">App Usage Tracking</string>
+    <string name="website_usage_tracking">Website Usage Tracking</string>
+    <string name="usage_tracking_disabled_warning">Warning: Usage Based blocking options will not work for a tracking type while it is turned off.</string>
 </resources>
