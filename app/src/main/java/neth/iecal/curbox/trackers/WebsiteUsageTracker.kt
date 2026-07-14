@@ -19,7 +19,6 @@ import neth.iecal.curbox.hardcoded.URL_BAR_ID_LIST
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.utils.AccessibilityHelper
 import neth.iecal.curbox.utils.TimeTools
-import java.util.regex.Pattern
 import kotlin.text.endsWith
 import kotlin.text.substring
 
@@ -92,17 +91,29 @@ class WebsiteUsageTracker {
     private fun filterOutUrlFromPlainText(inputText: String?): String? {
         if (inputText.isNullOrBlank()) return null
 
-        val urlRegex = """(?:https?://|www\.)?[a-zA-Z0-9][a-zA-Z0-9\-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}(?:[/\?#][a-zA-Z0-9\-._~:/?#\[\]@!${'$'}&'()*+,;=%]*)?"""
-        val pattern = Pattern.compile(urlRegex, Pattern.CASE_INSENSITIVE)
-        val matcher = pattern.matcher(inputText)
+        Log.d("website", "filtering url $inputText")
+        val urlRegex = Regex(
+            pattern = """(?:https?://|www\.)?[^\s<>\"']+""",
+            option = RegexOption.IGNORE_CASE
+        )
 
-        if (matcher.find()) {
-            var cleanUrl = matcher.group(0) ?: return null
+        for (match in urlRegex.findAll(inputText)) {
+            val cleanUrl = match.value
+                .trimStart('(', '[', '{')
+                .trimEnd('.', ',', ')', ']', '}', '!', ';', ':')
+            val uriText = if (cleanUrl.startsWith("http://", ignoreCase = true) ||
+                cleanUrl.startsWith("https://", ignoreCase = true)
+            ) cleanUrl else "https://$cleanUrl"
 
-            // Strip trailing punctuation unlikely to be part of the URL
-            cleanUrl = cleanUrl.trimEnd('.', ',', ')', ']', '\'', '"', '>')
+            val uri = runCatching { java.net.URI(uriText) }.getOrNull() ?: continue
+            val host = uri.host ?: continue
+            if (!host.contains('.')) continue
 
-            return cleanUrl
+            val normalizedHost = host.removePrefix("www.")
+            val path = uri.rawPath.orEmpty().let { if (it == "/") "" else it }
+            val query = uri.rawQuery?.let { "?$it" }.orEmpty()
+            val fragment = uri.rawFragment?.let { "#$it" }.orEmpty()
+            return "$normalizedHost$path$query$fragment"
         }
 
         return null
