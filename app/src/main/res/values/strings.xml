@@ -7,13 +7,11 @@
     <string name="warning_message">Warning message</string>
     <string name="minutes">minutes</string>
     <string name="app_icon">app_icon</string>
-    <string name="accessibility_permission_app_blocker">
-        #CURBOX_TRIGGER#
+    <string name="accessibility_permission_app_blocker" translatable="false">
         This feature needs the Display over other apps permission to work. Please turn that on first, then turn this on. If something stops working, restart the app.\n\n
         Turning this on lets Curbox do these things for you:\n1. Block apps\n2. Block short form content\n3. Block websites and keywords\n4. Focus Mode\n5. Hide parts of an app\'s screen that distract you\n6. See how long you spend in each app\n7. Count how much short form content you scroll, and show the count in a floating overlay\n8. See which websites you visit and for how long\n\n
         Curbox needs accessibility access to see which app, website, or screen you are on, so it can block it the way you set and keep your usage stats. Without this, none of it can work.\n\n
-        Curbox keeps everything safely on your phone. It never shares or sends your data, so your privacy is always safe.
-        $CURBOX_TRIGGER$
+        Curbox never shares anything without your permission.
         \n\n
     </string>
     <string name="admin_permission_desc">Curbox Tamper Protection</string>
@@ -346,7 +344,7 @@
     <string name="pairing_code_warning_message">This code holds the secret key that unlocks all your synced data. Anyone who snaps a photo of it can read your data. Please do not screenshot or share it. The code hides itself after one minute.</string>
     <string name="pairing_code_show">Show code</string>
     <string name="dnd_access_dialog_title">Do Not Disturb</string>
-    <string name="dnd_access_dialog_message">Curbox needs this to turn on Do Not Disturb for you, so it can mute calls and alerts while you focus. Without it, Curbox cannot silence distractions on its own.\n\n🔒 100% Private: Curbox does not collect, send, or store any of your data on a server. Everything stays on your phone.\n\n🛡️ Curbox respects your peace: It uses this only to mute distractions when you ask it to.</string>
+    <string name="dnd_access_dialog_message">Curbox needs this to turn on Do Not Disturb for you, so it can mute calls and alerts while you focus. Without it, Curbox cannot silence distractions on its own.\n\n🔒 Curbox does not collect, send, or store any of your data on a server without your permission.\n\n🛡️ Curbox respects your peace: It uses this only to mute distractions when you ask it to.</string>
     <string name="picker_dialog_block_element">Block This Element</string>
     <string name="picker_dialog_generated_rule">Generated Rule:</string>
     <string name="picker_dialog_rule_desc">Auto-generated from your selection. Toggle chips below to customize.</string>
@@ -1439,7 +1437,7 @@
     <string name="onboarding_perm_accessibility_rationale">Curbox needs this to notice when you open a blocked app and show the blocker screen. It also uses it to count your screen time and how many reels you scroll. Without it, Curbox cannot work at all.</string>
     <string name="onboarding_perm_accessibility_opensource">🛡️ Transparency for Deep Access: This is a powerful permission, which is why being open source matters so much. You do not have to take Curbox at its word. The global community has reviewed its public code and confirmed it only blocks apps and tracks usage.</string>
     <string name="onboarding_read_documentation">Read Documentation</string>
-    <string name="onboarding_privacy_note">"\n\n🔒 100% Private: Curbox does not collect, send, or store any of your data on a server. Everything stays on your phone.\n\n"</string>
+    <string name="onboarding_privacy_note">"\n\n🔒 Curbox does not collect, send, or store any of your data on a server without your permission. Everything stays on your phone.\n\n"</string>
     <string name="onboarding_granting_permissions">Granting Permissions…</string>
     <string name="onboarding_permissions_granted">Permissions Granted!</string>
     <string name="onboarding_error_tap_retry">Error, Tap to Retry</string>
