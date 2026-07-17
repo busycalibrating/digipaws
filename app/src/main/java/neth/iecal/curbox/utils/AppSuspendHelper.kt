@@ -14,7 +14,7 @@ object AppSuspendHelper {
     }
 
     fun unsuspendApps(packages: List<String>) {
-//        executePmCommand(packages, "unsuspend")
+        executePmCommand(packages, "unsuspend")
     }
 
     fun unsuspendAllApps(context: Context) {

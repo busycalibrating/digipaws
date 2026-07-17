@@ -1,0 +1,3 @@
+- fix website blocker not working properly
+- make both website usage tracker and app usage tracker turnoffable
+- remove pm suspend from focus mode (it was buggy asf)
