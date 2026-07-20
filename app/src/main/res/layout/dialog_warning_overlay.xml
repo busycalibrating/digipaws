@@ -55,7 +55,9 @@
         android:layout_marginStart="8dp"
         android:layout_marginEnd="8dp"
         android:layout_marginTop="8dp"
-        android:gravity="center"
+        android:gravity="start"
+        android:maxLines="8"
+        android:scrollbars="vertical"
         android:visibility="gone"
         android:textStyle="italic" />
 
@@ -67,10 +69,15 @@
         android:layout_margin="8dp"
         android:visibility="gone"
         android:hint="@string/hint_type_sentence">
-        <com.google.android.material.textfield.TextInputEditText
+        <neth.iecal.curbox.ui.views.NoPasteTextInputEditText
             android:id="@+id/typing_input_edit"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:gravity="top|start"
+            android:inputType="textVisiblePassword|textMultiLine"
+            android:maxLines="8"
+            android:minLines="3"
+            android:scrollbars="vertical" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout

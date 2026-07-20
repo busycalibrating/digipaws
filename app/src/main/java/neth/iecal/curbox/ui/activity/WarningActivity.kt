@@ -8,6 +8,8 @@ import android.os.CountDownTimer
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AlertDialog
@@ -30,6 +32,7 @@ import kotlinx.coroutines.launch
 import android.widget.Toast
 import androidx.core.content.edit
 import androidx.core.widget.doAfterTextChanged
+import com.google.android.material.color.MaterialColors
 import neth.iecal.curbox.anti_stimulants.MindfulMessage
 
 class WarningActivity : AppCompatActivity() {
@@ -172,14 +175,46 @@ class WarningActivity : AppCompatActivity() {
                                 }
                                 updateIntentInputState(binding.intentInputEdit.text.toString().trim().length)
                             } else if (warningScreenConfig.isTypingRequirementEnabled) {
+                                // Text pasted while configuring the challenge may contain CRLF
+                                // line endings, while Android keyboards insert LF. Treat them as
+                                // the same so visually identical multiline text can be unlocked.
+                                val requiredSentence = warningScreenConfig.typingSentence
+                                    .replace("\r\n", "\n")
+                                    .replace('\r', '\n')
                                 binding.typingTargetSentence.visibility = View.VISIBLE
-                                binding.typingTargetSentence.text = getString(R.string.warning_typing_quote, warningScreenConfig.typingSentence)
+                                binding.typingTargetSentence.text =
+                                    getString(R.string.warning_typing_quote, requiredSentence)
                                 binding.typingInputLayout.visibility = View.VISIBLE
                                 button.isEnabled = false
                                 button.setText(R.string.proceed)
-                                
+
+                                val mismatchColor = MaterialColors.getColor(
+                                    binding.typingInputEdit,
+                                    com.google.android.material.R.attr.colorError
+                                )
                                 binding.typingInputEdit.doAfterTextChanged { s ->
-                                    button.isEnabled = s?.toString() == warningScreenConfig.typingSentence
+                                    val entered = s ?: return@doAfterTextChanged
+                                    entered.getSpans(
+                                        0,
+                                        entered.length,
+                                        ForegroundColorSpan::class.java
+                                    ).forEach(entered::removeSpan)
+
+                                    entered.indices.forEach { index ->
+                                        if (
+                                            index >= requiredSentence.length ||
+                                            entered[index] != requiredSentence[index]
+                                        ) {
+                                            entered.setSpan(
+                                                ForegroundColorSpan(mismatchColor),
+                                                index,
+                                                index + 1,
+                                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                            )
+                                        }
+                                    }
+                                    button.isEnabled =
+                                        entered.toString() == requiredSentence
                                 }
                             } else if (warningScreenConfig.isQrUnlockRequirementEnabled && !isQrScanned) {
                                 button.text = getString(R.string.warning_scan_qr_code)
