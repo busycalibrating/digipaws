@@ -16,6 +16,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -68,6 +71,19 @@ class SelectAppsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySelectAppsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, windowInsets ->
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val safeInsets = Insets.max(systemBars, ime)
+
+            view.setPadding(
+                safeInsets.left,
+                safeInsets.top,
+                safeInsets.right,
+                safeInsets.bottom
+            )
+            windowInsets
+        }
         selectedAppList =
             intent.getStringArrayListExtra("PRE_SELECTED_APPS")?.toHashSet() ?: HashSet()
 
