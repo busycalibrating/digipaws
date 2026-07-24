@@ -1336,6 +1336,17 @@
     <string name="change_delay_review_keep">Keep it waiting</string>
     <string name="change_delay_review_undo">Undo this change</string>
     <string name="change_delay_dropped_toast">My stricter change works now. The change that was waiting for %1$s was dropped.</string>
+    <string name="temporary_disable_title">Temporarily disable %1$s</string>
+    <string name="temporary_disable_5m">5 minutes</string>
+    <string name="temporary_disable_15m">15 minutes</string>
+    <string name="temporary_disable_1h">1 hour</string>
+    <string name="temporary_disable_until_enabled">Until I turn it back on</string>
+    <string name="temporary_disable_custom">Custom minutes</string>
+    <string name="temporary_disable_custom_hint">Minutes</string>
+    <string name="temporary_disable_action">Disable temporarily</string>
+    <string name="temporary_disable_invalid">Enter a duration from 1 to 43,200 minutes.</string>
+    <string name="temporary_disable_until">Temporarily disabled for %1$s</string>
+    <string name="temporary_disable_until_manually_enabled">Disabled until I turn it back on</string>
 
     <!-- Curbox API permission screen -->
     <string name="api_permission_title">Allow access?</string>

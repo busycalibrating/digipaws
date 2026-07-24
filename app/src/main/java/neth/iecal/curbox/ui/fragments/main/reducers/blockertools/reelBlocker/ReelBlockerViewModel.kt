@@ -25,11 +25,14 @@ class ReelBlockerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _reelBlockerConfig = MutableStateFlow(ReelBlocker())
     val reelBlockerConfig: StateFlow<ReelBlocker> = _reelBlockerConfig
+    private val _temporaryDisableAvailable = MutableStateFlow(true)
+    val temporaryDisableAvailable: StateFlow<Boolean> = _temporaryDisableAvailable
 
     init {
         viewModelScope.launch {
             dataStoreManager.settings.collectLatest { settings ->
                 _reelBlockerConfig.value = settings.reelBlockerConfig
+                _temporaryDisableAvailable.value = !settings.settingsChangeDelayConfig.isEnabled
             }
         }
     }
@@ -47,7 +50,20 @@ class ReelBlockerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun setIsActive(isActive: Boolean) {
-        updateConfig(_reelBlockerConfig.value.copy(isActive = isActive))
+        updateConfig(
+            _reelBlockerConfig.value.copy(
+                isActive = isActive,
+                temporarilyDisabledUntilMs = 0L
+            )
+        )
+    }
+
+    fun temporarilyDisable(durationMinutes: Long) {
+        viewModelScope.launch {
+            if (dataStoreManager.temporarilyDisableReelBlocker(durationMinutes)) {
+                requestReelBlockerRefresh()
+            }
+        }
     }
 
     fun setBlockingType(type: ReelBlockingType) {

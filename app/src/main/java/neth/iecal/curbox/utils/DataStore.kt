@@ -20,6 +20,7 @@ import neth.iecal.curbox.data.models.Settings
 import neth.iecal.curbox.data.models.SettingsChangeDelayConfig
 import neth.iecal.curbox.data.models.SettingsChangeDelayPrefs
 import neth.iecal.curbox.hardcoded.normalized
+import neth.iecal.curbox.services.TemporaryGroupDisableJob
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -155,9 +156,144 @@ class DataStoreManager(private val context: Context) {
         settingsDataStore.updateData { it.copy(serviceProtectionConfig = transform(it.serviceProtectionConfig)) }
     }
 
-    suspend fun updateSettingsChangeDelay(isEnabled: Boolean, delayMinutes: Int, requireTamperProtectionOff: Boolean) {
+    suspend fun updateSettingsChangeDelay(
+        isEnabled: Boolean,
+        delayMinutes: Int,
+        requireTamperProtectionOff: Boolean
+    ) {
         val clamped = delayMinutes.coerceIn(0, SettingsChangeDelayConfig.MAX_DELAY_MINUTES)
-        updateGated(GatedSettingsField.CHANGE_DELAY) { SettingsChangeDelayPrefs(isEnabled, clamped, requireTamperProtectionOff) }
+        updateGated(GatedSettingsField.CHANGE_DELAY) {
+            SettingsChangeDelayPrefs(
+                isEnabled,
+                clamped,
+                requireTamperProtectionOff
+            )
+        }
+    }
+
+    suspend fun temporarilyDisableAppGroup(groupId: String, durationMinutes: Long): Boolean {
+        val untilMs = temporaryDisableDeadline(durationMinutes)
+        var changed = false
+        var nextDeadline: Long? = null
+        settingsDataStore.updateData { current ->
+            if (current.settingsChangeDelayConfig.isEnabled) return@updateData current
+            val groups = current.blockedAppGroups.map { group ->
+                if (group.id == groupId && group.isActive) {
+                    changed = true
+                    group.copy(isActive = false, temporarilyDisabledUntilMs = untilMs)
+                } else {
+                    group
+                }
+            }
+            val updated = current.copy(blockedAppGroups = groups)
+            nextDeadline = earliestTemporaryDisable(updated)
+            updated
+        }
+        if (changed) {
+            neth.iecal.curbox.services.TemporaryGroupDisableJob.schedule(context, nextDeadline)
+        }
+        return changed
+    }
+
+    suspend fun temporarilyDisableKeywordGroup(groupId: String, durationMinutes: Long): Boolean {
+        val untilMs = temporaryDisableDeadline(durationMinutes)
+        var changed = false
+        var nextDeadline: Long? = null
+        settingsDataStore.updateData { current ->
+            if (current.settingsChangeDelayConfig.isEnabled) return@updateData current
+            val config = current.keywordBlockerConfig
+            val groups = config.keywordGroups.map { group ->
+                if (group.id == groupId && group.isActive) {
+                    changed = true
+                    group.copy(isActive = false, temporarilyDisabledUntilMs = untilMs)
+                } else group
+            }
+            val updated = current.copy(keywordBlockerConfig = config.copy(keywordGroups = groups))
+            nextDeadline = earliestTemporaryDisable(updated)
+            updated
+        }
+        if (changed) TemporaryGroupDisableJob.schedule(context, nextDeadline)
+        return changed
+    }
+
+    suspend fun temporarilyDisableReelBlocker(durationMinutes: Long): Boolean {
+        val untilMs = temporaryDisableDeadline(durationMinutes)
+        var changed = false
+        var nextDeadline: Long? = null
+        settingsDataStore.updateData { current ->
+            if (current.settingsChangeDelayConfig.isEnabled ||
+                !current.reelBlockerConfig.isActive
+            ) return@updateData current
+            changed = true
+            val updated = current.copy(
+                reelBlockerConfig = current.reelBlockerConfig.copy(
+                    isActive = false,
+                    temporarilyDisabledUntilMs = untilMs
+                )
+            )
+            nextDeadline = earliestTemporaryDisable(updated)
+            updated
+        }
+        if (changed) TemporaryGroupDisableJob.schedule(context, nextDeadline)
+        return changed
+    }
+
+    suspend fun restoreDueTemporaryAppGroups() {
+        var nextDeadline: Long? = null
+        settingsDataStore.updateData { current ->
+            val now = System.currentTimeMillis()
+            val groups = current.blockedAppGroups.map { group ->
+                when {
+                    group.temporarilyDisabledUntilMs in 1..now ->
+                        group.copy(isActive = true, temporarilyDisabledUntilMs = 0L)
+                    group.temporarilyDisabledUntilMs > now -> {
+                        nextDeadline = minOf(nextDeadline ?: Long.MAX_VALUE, group.temporarilyDisabledUntilMs)
+                        group
+                    }
+                    else -> group
+                }
+            }
+            val keywordConfig = current.keywordBlockerConfig
+            val keywordGroups = keywordConfig.keywordGroups.map { group ->
+                if (group.temporarilyDisabledUntilMs in 1..now) {
+                    group.copy(isActive = true, temporarilyDisabledUntilMs = 0L)
+                } else group
+            }
+            val reelConfig = current.reelBlockerConfig.let { config ->
+                if (config.temporarilyDisabledUntilMs in 1..now) {
+                    config.copy(isActive = true, temporarilyDisabledUntilMs = 0L)
+                } else config
+            }
+            val updated = current.copy(
+                blockedAppGroups = groups,
+                keywordBlockerConfig = keywordConfig.copy(keywordGroups = keywordGroups),
+                reelBlockerConfig = reelConfig
+            )
+            nextDeadline = earliestTemporaryDisable(updated)
+            updated
+        }
+        neth.iecal.curbox.services.TemporaryGroupDisableJob.schedule(context, nextDeadline)
+    }
+
+    private fun temporaryDisableDeadline(durationMinutes: Long): Long =
+        if (durationMinutes == TemporaryDisableDialog.UNTIL_MANUALLY_ENABLED) {
+            TemporaryDisableDialog.UNTIL_MANUALLY_ENABLED
+        } else {
+            System.currentTimeMillis() + durationMinutes.coerceIn(1L, 43_200L) * 60_000L
+        }
+
+    private fun earliestTemporaryDisable(settings: Settings): Long? {
+        val deadlines = buildList {
+            addAll(settings.blockedAppGroups.map { it.temporarilyDisabledUntilMs })
+            addAll(
+                settings.keywordBlockerConfig.keywordGroups.map {
+                    it.temporarilyDisabledUntilMs
+                }
+            )
+            add(settings.reelBlockerConfig.temporarilyDisabledUntilMs)
+        }
+        val now = System.currentTimeMillis()
+        return deadlines.filter { it > now }.minOrNull()
     }
 
     suspend fun cancelPendingSettingsChange(fieldName: String) {

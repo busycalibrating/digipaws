@@ -12,6 +12,7 @@ data class KeywordGroup(
     val selectedKeywords: List<String> = listOf(),
     val blockingType: AppBlockingType = AppBlockingType.Usage,
     val isActive: Boolean = false,
+    val temporarilyDisabledUntilMs: Long = 0L,
     val setting: String = "",
     val warningScreenConfig: AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig()
 )

@@ -14,6 +14,9 @@ import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.ReelBlockingType
 import neth.iecal.curbox.databinding.ReelBlockerFragmentBinding
 import neth.iecal.curbox.utils.ViewUtils
+import neth.iecal.curbox.utils.TemporaryDisableDialog
+import neth.iecal.curbox.utils.SettingsChangeDelayUtils
+import androidx.core.view.isVisible
 import android.widget.RadioButton
 
 class ReelBlockerFragment : Fragment() {
@@ -73,7 +76,20 @@ class ReelBlockerFragment : Fragment() {
     private fun setupListeners() {
         binding.switchEnableBlocker.setOnCheckedChangeListener { _, isChecked ->
             if (!isUpdatingUi) {
-                viewModel.setIsActive(isChecked)
+                val config = viewModel.reelBlockerConfig.value
+                if (!isChecked && config.isActive && viewModel.temporaryDisableAvailable.value) {
+                    isUpdatingUi = true
+                    binding.switchEnableBlocker.isChecked = true
+                    isUpdatingUi = false
+                    TemporaryDisableDialog.show(
+                        this,
+                        getString(R.string.temporary_disable_title, getString(R.string.reel_blocker_title))
+                    ) { minutes ->
+                        viewModel.temporarilyDisable(minutes)
+                    }
+                } else {
+                    viewModel.setIsActive(isChecked)
+                }
             }
         }
 
@@ -109,6 +125,21 @@ class ReelBlockerFragment : Fragment() {
                 // Avoid infinite loops by checking if state actually changed before triggering listeners
                 if (binding.switchEnableBlocker.isChecked != config.isActive) {
                     binding.switchEnableBlocker.isChecked = config.isActive
+                }
+                val remaining = config.temporarilyDisabledUntilMs - System.currentTimeMillis()
+                val untilManuallyEnabled =
+                    config.temporarilyDisabledUntilMs ==
+                        TemporaryDisableDialog.UNTIL_MANUALLY_ENABLED
+                binding.textTemporaryDisableStatus.isVisible =
+                    untilManuallyEnabled || remaining > 0L
+                if (untilManuallyEnabled) {
+                    binding.textTemporaryDisableStatus.text =
+                        getString(R.string.temporary_disable_until_manually_enabled)
+                } else if (remaining > 0L) {
+                    binding.textTemporaryDisableStatus.text = getString(
+                        R.string.temporary_disable_until,
+                        SettingsChangeDelayUtils.formatRemaining(requireContext(), remaining)
+                    )
                 }
 
                 val checkedId = when (config.blockingType) {

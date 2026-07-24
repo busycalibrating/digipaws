@@ -4,7 +4,8 @@ data class ReelBlocker(
     val warningScreenConfig: AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig(),
     val blockingType: ReelBlockingType = ReelBlockingType.TIMED,
     val settings: String = "",
-    val isActive: Boolean = false
+    val isActive: Boolean = false,
+    val temporarilyDisabledUntilMs: Long = 0L
 )
 
 

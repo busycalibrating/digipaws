@@ -98,15 +98,29 @@ class SettingsChangeDelayFragment : Fragment() {
         }
 
         switchDelay.setOnClickListener {
-            requestUpdate(switchDelay.isChecked, delayMinutes, requireTamperProtectionOff)
+            requestUpdate(
+                switchDelay.isChecked,
+                delayMinutes,
+                requireTamperProtectionOff
+            )
         }
         chipsDelay.setOnCheckedStateChangeListener { _, checkedIds ->
             if (isRendering) return@setOnCheckedStateChangeListener
             val minutes = checkedIds.firstOrNull()?.let { chipMinutes[it] } ?: return@setOnCheckedStateChangeListener
-            if (minutes != delayMinutes) requestUpdate(isEnabled, minutes, requireTamperProtectionOff)
+            if (minutes != delayMinutes) {
+                requestUpdate(
+                    isEnabled,
+                    minutes,
+                    requireTamperProtectionOff
+                )
+            }
         }
         switchTamperLock.setOnClickListener {
-            requestUpdate(isEnabled, delayMinutes, switchTamperLock.isChecked)
+            requestUpdate(
+                isEnabled,
+                delayMinutes,
+                switchTamperLock.isChecked
+            )
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -141,9 +155,17 @@ class SettingsChangeDelayFragment : Fragment() {
      * right away; anything weaker is shown as requested while enforcement keeps using the
      * current live value until the pending deadline.
      */
-    private fun requestUpdate(enable: Boolean, minutes: Int, tamperLock: Boolean) {
+    private fun requestUpdate(
+        enable: Boolean,
+        minutes: Int,
+        tamperLock: Boolean
+    ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            dataStore.updateSettingsChangeDelay(enable, minutes, tamperLock)
+            dataStore.updateSettingsChangeDelay(
+                enable,
+                minutes,
+                tamperLock
+            )
         }
     }
 

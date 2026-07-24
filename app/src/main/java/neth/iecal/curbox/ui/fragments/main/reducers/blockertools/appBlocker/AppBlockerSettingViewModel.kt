@@ -60,10 +60,19 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
 
     private val _groups = MutableStateFlow<List<AppGroup>>(emptyList())
     val groups: StateFlow<List<AppGroup>> = _groups
+    private val _temporaryDisableAvailable = MutableStateFlow(true)
+    val temporaryDisableAvailable: StateFlow<Boolean> = _temporaryDisableAvailable
     init {
         viewModelScope.launch {
             dataStoreManager.settingsForEditing.collectLatest { settings ->
                 _groups.value = settings.blockedAppGroups
+            }
+        }
+        viewModelScope.launch {
+            // This escape hatch must not become usable while enabling it is still pending.
+            dataStoreManager.settings.collectLatest { settings ->
+                _temporaryDisableAvailable.value =
+                    !settings.settingsChangeDelayConfig.isEnabled
             }
         }
     }
@@ -114,8 +123,19 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
             val currentSettings = dataStoreManager.settingsForEditing.first()
             val updatedGroups = currentSettings.blockedAppGroups.toMutableList()
             if (index in updatedGroups.indices) {
-                updatedGroups[index] = updatedGroups[index].copy(isActive = isActive)
+                updatedGroups[index] = updatedGroups[index].copy(
+                    isActive = isActive,
+                    temporarilyDisabledUntilMs = 0L
+                )
                 updateGroups(updatedGroups)
+            }
+        }
+    }
+
+    fun temporarilyDisableGroup(groupId: String, durationMinutes: Long) {
+        viewModelScope.launch {
+            if (dataStoreManager.temporarilyDisableAppGroup(groupId, durationMinutes)) {
+                requestAppBlockerRefresh()
             }
         }
     }

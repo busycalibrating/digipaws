@@ -21,7 +21,10 @@ object SettingsChangeDelayUtils {
         val appContext = context.applicationContext
         sweepScope.launch {
             try {
-                DataStoreManager(appContext).applyDuePendingChanges()
+                DataStoreManager(appContext).apply {
+                    applyDuePendingChanges()
+                    restoreDueTemporaryAppGroups()
+                }
             } catch (_: Exception) {
             }
         }

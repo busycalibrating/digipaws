@@ -28,6 +28,8 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
 
     private val _keywordBlockerConfig = MutableStateFlow(KeywordBlocker())
     val keywordBlockerConfig: StateFlow<KeywordBlocker> = _keywordBlockerConfig
+    private val _temporaryDisableAvailable = MutableStateFlow(true)
+    val temporaryDisableAvailable: StateFlow<Boolean> = _temporaryDisableAvailable
 
     var currentUsageConfig = AppUsageConfig()
     var currentTimeConfig = AppTimeConfig()
@@ -65,6 +67,7 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch {
             dataStoreManager.settings.collectLatest { settings ->
                 _keywordBlockerConfig.value = settings.keywordBlockerConfig
+                _temporaryDisableAvailable.value = !settings.settingsChangeDelayConfig.isEnabled
             }
         }
     }
@@ -121,9 +124,20 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
             val groups = config.keywordGroups.toMutableList()
             val index = groups.indexOfFirst { it.id == groupId }
             if (index != -1) {
-                groups[index] = groups[index].copy(isActive = isActive)
+                groups[index] = groups[index].copy(
+                    isActive = isActive,
+                    temporarilyDisabledUntilMs = 0L
+                )
             }
             config.copy(keywordGroups = groups)
+        }
+    }
+
+    fun temporarilyDisableGroup(groupId: String, durationMinutes: Long) {
+        viewModelScope.launch {
+            if (dataStoreManager.temporarilyDisableKeywordGroup(groupId, durationMinutes)) {
+                requestKeywordBlockerRefresh()
+            }
         }
     }
 }

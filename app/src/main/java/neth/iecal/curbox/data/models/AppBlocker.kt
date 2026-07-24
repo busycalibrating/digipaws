@@ -7,6 +7,8 @@ data class AppGroup(
     val selectedPackages: List<String> = listOf(),
     val blockingType: AppBlockingType = AppBlockingType.Usage, // "USAGE" or "TIME"
     val isActive: Boolean = false,
+    /** Non-zero only while the group is using the opt-in temporary-disable escape hatch. */
+    val temporarilyDisabledUntilMs: Long = 0L,
     val setting:String = "",
     val warningScreenConfig : AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig()
 )

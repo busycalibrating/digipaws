@@ -27,6 +27,7 @@ import neth.iecal.curbox.data.models.AppBlockingType
 import neth.iecal.curbox.data.models.AppGroup
 import neth.iecal.curbox.ui.activity.FragmentActivity
 import neth.iecal.curbox.utils.TimeTools
+import neth.iecal.curbox.utils.TemporaryDisableDialog
 
 class AppBlockerGroupsFragment : Fragment() {
 
@@ -116,15 +117,31 @@ class AppBlockerGroupsFragment : Fragment() {
 
             holder.tvRemaining.visibility = View.GONE
             holder.tvRemaining.tag = group.id
-            viewLifecycleOwner.lifecycleScope.launch {
-                val remaining = viewModel.getRemainingUsageMillis(group)
-                if (holder.tvRemaining.tag != group.id) return@launch
-                if (remaining == null) {
-                    holder.tvRemaining.visibility = View.GONE
-                } else {
-                    holder.tvRemaining.text = if (remaining <= 0L) "No time left today"
-                        else "${TimeTools.formatTimeForWidget(remaining)} left today"
-                    holder.tvRemaining.visibility = View.VISIBLE
+            val temporaryRemaining = group.temporarilyDisabledUntilMs - System.currentTimeMillis()
+            if (group.temporarilyDisabledUntilMs == TemporaryDisableDialog.UNTIL_MANUALLY_ENABLED) {
+                holder.tvRemaining.text =
+                    getString(R.string.temporary_disable_until_manually_enabled)
+                holder.tvRemaining.visibility = View.VISIBLE
+            } else if (temporaryRemaining > 0L) {
+                holder.tvRemaining.text = getString(
+                    R.string.temporary_disable_until,
+                    neth.iecal.curbox.utils.SettingsChangeDelayUtils.formatRemaining(
+                        requireContext(),
+                        temporaryRemaining
+                    )
+                )
+                holder.tvRemaining.visibility = View.VISIBLE
+            } else {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val remaining = viewModel.getRemainingUsageMillis(group)
+                    if (holder.tvRemaining.tag != group.id) return@launch
+                    if (remaining == null) {
+                        holder.tvRemaining.visibility = View.GONE
+                    } else {
+                        holder.tvRemaining.text = if (remaining <= 0L) "No time left today"
+                            else "${TimeTools.formatTimeForWidget(remaining)} left today"
+                        holder.tvRemaining.visibility = View.VISIBLE
+                    }
                 }
             }
 
@@ -133,7 +150,25 @@ class AppBlockerGroupsFragment : Fragment() {
 
             holder.switchActive.setOnCheckedChangeListener { _, isChecked ->
                 val pos = holder.adapterPosition
-                if (pos != RecyclerView.NO_POSITION) viewModel.updateGroupActiveState(pos, isChecked)
+                if (pos == RecyclerView.NO_POSITION) return@setOnCheckedChangeListener
+                if (!isChecked &&
+                    group.isActive &&
+                    viewModel.temporaryDisableAvailable.value
+                ) {
+                    holder.switchActive.setOnCheckedChangeListener(null)
+                    holder.switchActive.isChecked = true
+                    holder.switchActive.post {
+                        if (pos in 0 until itemCount) notifyItemChanged(pos)
+                    }
+                    TemporaryDisableDialog.show(
+                        this@AppBlockerGroupsFragment,
+                        getString(R.string.temporary_disable_title, group.name)
+                    ) { minutes ->
+                        viewModel.temporarilyDisableGroup(group.id, minutes)
+                    }
+                } else {
+                    viewModel.updateGroupActiveState(pos, isChecked)
+                }
             }
 
             holder.itemView.setOnClickListener {
@@ -145,4 +180,5 @@ class AppBlockerGroupsFragment : Fragment() {
             }
         }
     }
+
 }
