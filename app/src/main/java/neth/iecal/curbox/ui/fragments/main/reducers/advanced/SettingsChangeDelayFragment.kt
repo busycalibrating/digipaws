@@ -111,7 +111,7 @@ class SettingsChangeDelayFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                dataStore.settings.collect { settings ->
+                dataStore.settingsForEditing.collect { settings ->
                     val config = settings.settingsChangeDelayConfig
                     isEnabled = config.isEnabled
                     delayMinutes = config.delayMinutes
@@ -138,8 +138,8 @@ class SettingsChangeDelayFragment : Fragment() {
 
     /**
      * Asks the gate to change the delay itself. Enabling or picking a longer wait applies
-     * right away; anything weaker gets parked and the collected settings snap the UI back,
-     * so no local state is touched here.
+     * right away; anything weaker is shown as requested while enforcement keeps using the
+     * current live value until the pending deadline.
      */
     private fun requestUpdate(enable: Boolean, minutes: Int, tamperLock: Boolean) {
         viewLifecycleOwner.lifecycleScope.launch {

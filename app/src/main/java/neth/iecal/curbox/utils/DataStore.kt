@@ -9,6 +9,8 @@ import androidx.datastore.core.MultiProcessDataStoreFactory
 import androidx.datastore.core.Serializer
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.AppGroup
 import neth.iecal.curbox.data.models.GatedSettingsField
@@ -73,6 +75,12 @@ class DataStoreManager(private val context: Context) {
     private val settingsDataStore = getSettingsDataStore(context, gson)
 
     val settings = settingsDataStore.data
+
+    /**
+     * The values the user has requested, including changes still waiting for their deadline.
+     * Settings editors should use this flow; blockers must keep using [settings].
+     */
+    val settingsForEditing = settings.map(::overlayPendingChanges)
 
     suspend fun updateAppGroups(newGroups: List<AppGroup>) {
         updateGated(GatedSettingsField.APP_GROUPS) { newGroups }
@@ -139,6 +147,8 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun updateAntiUninstallConfig(transform: (neth.iecal.curbox.data.models.AntiUninstallConfig) -> neth.iecal.curbox.data.models.AntiUninstallConfig) {
         settingsDataStore.updateData { it.copy(antiUninstallConfig = transform(it.antiUninstallConfig)) }
+        // Turning tamper protection off may release changes whose time delay already elapsed.
+        applyDuePendingChanges()
     }
 
     suspend fun updateServiceProtectionConfig(transform: (neth.iecal.curbox.data.models.ServiceProtectionConfig) -> neth.iecal.curbox.data.models.ServiceProtectionConfig) {
@@ -157,6 +167,7 @@ class DataStoreManager(private val context: Context) {
                 pendingChanges = config.pendingChanges.filterNot { p -> p.field == fieldName }
             ))
         }
+        schedulePendingChanges()
     }
 
     /**
@@ -187,6 +198,7 @@ class DataStoreManager(private val context: Context) {
                 ))
             }
         }
+        schedulePendingChanges()
         return appliedAny
     }
 
@@ -200,14 +212,20 @@ class DataStoreManager(private val context: Context) {
         var deferredUntilMs = 0L
         var hadPendingForField = false
         var tamperGated = false
+        var unchangedPending = false
         settingsDataStore.updateData { current ->
             deferredUntilMs = 0L
             hadPendingForField = false
             tamperGated = false
             val newValueJson = gson.toJson(computeNewValue(current))
             val proposed = withFieldValue(current, field, newValueJson) ?: return@updateData current
-            hadPendingForField = current.settingsChangeDelayConfig.pendingChanges.any { it.field == field.name }
             val delayConfig = current.settingsChangeDelayConfig
+            val existingPending = delayConfig.pendingChanges.find { it.field == field.name }
+            hadPendingForField = existingPending != null
+            if (existingPending?.newValueJson == newValueJson) {
+                unchangedPending = true
+                return@updateData current
+            }
             val timeGateActive = delayConfig.isEnabled && delayConfig.delayMinutes > 0
             tamperGated = delayConfig.requireTamperProtectionOff && current.antiUninstallConfig.isEnabled
             if ((!timeGateActive && !tamperGated) ||
@@ -234,7 +252,10 @@ class DataStoreManager(private val context: Context) {
                 ))
             }
         }
-        if (deferredUntilMs > 0L) {
+        schedulePendingChanges()
+        if (unchangedPending) {
+            return
+        } else if (deferredUntilMs > 0L) {
             notifyChangeDeferred(field, deferredUntilMs, hadPendingForField, tamperGated)
         } else if (hadPendingForField) {
             notifyPendingChangeDropped(field)
@@ -244,6 +265,22 @@ class DataStoreManager(private val context: Context) {
     private fun applyPendingValue(settings: Settings, change: PendingSettingsChange): Settings? {
         val field = runCatching { GatedSettingsField.valueOf(change.field) }.getOrNull() ?: return null
         return withFieldValue(settings, field, change.newValueJson)
+    }
+
+    private fun overlayPendingChanges(settings: Settings): Settings {
+        var displayed = settings
+        settings.settingsChangeDelayConfig.pendingChanges.forEach { change ->
+            applyPendingValue(displayed, change)?.let { displayed = it }
+        }
+        return displayed
+    }
+
+    private suspend fun schedulePendingChanges() {
+        val pending = settingsDataStore.data.first().settingsChangeDelayConfig.pendingChanges
+        neth.iecal.curbox.services.PendingSettingsChangeJob.schedule(
+            context.applicationContext,
+            pending
+        )
     }
 
     private fun withFieldValue(settings: Settings, field: GatedSettingsField, valueJson: String): Settings? {

@@ -62,7 +62,7 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
     val groups: StateFlow<List<AppGroup>> = _groups
     init {
         viewModelScope.launch {
-            dataStoreManager.settings.collectLatest { settings ->
+            dataStoreManager.settingsForEditing.collectLatest { settings ->
                 _groups.value = settings.blockedAppGroups
             }
         }
@@ -82,7 +82,7 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
     
     fun addGroup(group: AppGroup) {
         viewModelScope.launch {
-            val currentSettings = dataStoreManager.settings.first()
+            val currentSettings = dataStoreManager.settingsForEditing.first()
             val updatedGroups = currentSettings.blockedAppGroups.toMutableList().apply { add(group) }
             updateGroups(updatedGroups)
         }
@@ -90,7 +90,7 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
 
     fun updateGroupById(updatedGroup: AppGroup) {
         viewModelScope.launch {
-            val currentSettings = dataStoreManager.settings.first()
+            val currentSettings = dataStoreManager.settingsForEditing.first()
             val updatedGroups = currentSettings.blockedAppGroups.toMutableList()
             val index = updatedGroups.indexOfFirst { it.id == updatedGroup.id }
             if (index != -1) {
@@ -102,7 +102,7 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
 
     fun deleteGroup(groupId: String) {
         viewModelScope.launch {
-            val currentSettings = dataStoreManager.settings.first()
+            val currentSettings = dataStoreManager.settingsForEditing.first()
             val updatedGroups = currentSettings.blockedAppGroups.toMutableList()
             updatedGroups.removeAll { it.id == groupId }
             updateGroups(updatedGroups)
@@ -111,7 +111,7 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
 
     fun updateGroupActiveState(index: Int, isActive: Boolean) {
         viewModelScope.launch {
-            val currentSettings = dataStoreManager.settings.first()
+            val currentSettings = dataStoreManager.settingsForEditing.first()
             val updatedGroups = currentSettings.blockedAppGroups.toMutableList()
             if (index in updatedGroups.indices) {
                 updatedGroups[index] = updatedGroups[index].copy(isActive = isActive)
