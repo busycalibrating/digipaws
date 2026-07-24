@@ -140,21 +140,21 @@ class AppBlocker() : BaseBlocker() {
         }
 
         timeBlockedAppsList[packageName]?.let { entries ->
-            // Block if the current time is outside any one group's allowed schedule
-            var earliestEnd: Long? = null
-            for (entry in entries) {
-                if (isGroupInCooldown(entry.groupId, now)) continue
-                val endAllowedRealTime = getEndTimeInRealTimeMillis(entry.config)
-                if (endAllowedRealTime == null) {
-                    Log.d("AppBlocker", "Blocking $packageName (Timed - out of schedule)")
-                    notificationManager.stopTimer()
-                    showWarningScreen(packageName, entry.groupId, entry.warningConfig)
-                    return
-                }
-                if (earliestEnd == null || endAllowedRealTime < earliestEnd) earliestEnd = endAllowedRealTime
+            // Multiple schedules for the same app form a union. An inactive schedule must not
+            // override another group whose window is currently active.
+            val eligibleEntries = entries.filterNot { isGroupInCooldown(it.groupId, now) }
+            val activeWindows = eligibleEntries.mapNotNull { entry ->
+                getEndTimeInRealTimeMillis(entry.config)?.let { entry to it }
             }
-            earliestEnd?.let {
-                Log.d("AppBlocker", "App $packageName allowed until $it")
+            if (eligibleEntries.isNotEmpty() && activeWindows.isEmpty()) {
+                val entry = eligibleEntries.first()
+                Log.d("AppBlocker", "Blocking $packageName (Timed - outside all schedules)")
+                notificationManager.stopTimer()
+                showWarningScreen(packageName, entry.groupId, entry.warningConfig)
+                return
+            }
+            activeWindows.minOfOrNull { it.second }?.let {
+                Log.d("AppBlocker", "App $packageName schedule changes at $it")
                 setUpForcedRefreshChecker("time:$packageName", it)
             }
         }
@@ -166,11 +166,9 @@ class AppBlocker() : BaseBlocker() {
             for (entry in entries) {
                 if (isGroupInCooldown(entry.groupId, now)) continue
                 val linkedWindow = entry.linkedSchedule?.activeWindow(now)
-                if (entry.hasScheduleLink && linkedWindow == null) {
-                    notificationManager.stopTimer()
-                    showWarningScreen(packageName, entry.groupId, entry.warningConfig)
-                    return
-                }
+                // A linked usage rule is dormant outside its own window. The package-level
+                // schedule union above decides whether another time group currently allows it.
+                if (entry.hasScheduleLink && linkedWindow == null) continue
                 // Combined usage of every app in the group, so the limit applies to the group as a whole
                 val totalUsage = todaysStats
                     .filter { it.packageName in entry.groupPackages }
@@ -275,6 +273,15 @@ class AppBlocker() : BaseBlocker() {
                                 )
                                 groupPackages.forEach { pkg ->
                                     newBlockedAppsList.getOrPut(pkg) { mutableListOf() }.add(entry)
+                                }
+                                if (linkedSchedule != null) {
+                                    val timedEntry = TimeBlockEntry(
+                                        group.id, linkedSchedule, group.warningScreenConfig
+                                    )
+                                    groupPackages.forEach { pkg ->
+                                        newTimeBlockedAppsList.getOrPut(pkg) { mutableListOf() }
+                                            .add(timedEntry)
+                                    }
                                 }
                             }
                             AppBlockingType.Timed -> {

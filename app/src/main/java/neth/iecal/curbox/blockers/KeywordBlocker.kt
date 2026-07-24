@@ -186,15 +186,35 @@ class KeywordBlocker : BaseBlocker() {
         if (matched.isEmpty()) return
         val now = System.currentTimeMillis()
 
-        // Block if any matched group demands it; the first group in list order wins its warning screen.
-        // A group in cooldown is skipped so the others can still decide.
-        for (group in matched) {
+        val eligible = matched.filter { group ->
             val cooldownEnd = cooldownGroupsList[group.id]
             if (cooldownEnd != null) {
-                if (cooldownEnd > now) continue
+                if (cooldownEnd > now) return@filter false
                 else removeCooldownFrom(group.id)
             }
-            if (isBlocked(group)) {
+            true
+        }
+
+        // Timed groups and linked usage groups for the same target form a union of windows.
+        // When one window is active, other inactive schedules cannot override it.
+        val scheduled = eligible.filter {
+            it.blockingType == AppBlockingType.Timed || it.linkedTimeGroupId != null
+        }
+        val activeScheduled = scheduled.filter { group ->
+            if (group.blockingType == AppBlockingType.Timed) !isTimedBlockActive(group)
+            else linkedSchedules[group.id]?.activeWindow(now) != null
+        }
+
+        if (scheduled.isNotEmpty() && activeScheduled.isEmpty()) {
+            val group = scheduled.first()
+            if (claimBlock(entry, group.id)) handleBlocking(group)
+            return
+        }
+
+        for (group in eligible) {
+            val shouldEvaluateUsage = group.blockingType == AppBlockingType.Usage &&
+                (group.linkedTimeGroupId == null || group in activeScheduled)
+            if (shouldEvaluateUsage && isUsageLimitExceeded(group)) {
                 if (!claimBlock(entry, group.id)) return
                 handleBlocking(group)
                 return
@@ -203,7 +223,8 @@ class KeywordBlocker : BaseBlocker() {
 
         // None blocked → schedule the soonest re-check across the matched groups
         var soonest = 0L
-        for (group in matched) {
+        for (group in eligible) {
+            if (group.linkedTimeGroupId != null && group !in activeScheduled) continue
             val recheck = computeNextRecheck(group)
             if (recheck > now && (soonest == 0L || recheck < soonest)) soonest = recheck
         }
