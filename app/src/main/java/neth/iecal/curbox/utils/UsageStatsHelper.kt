@@ -7,6 +7,7 @@ import neth.iecal.curbox.ui.fragments.main.usage.AllAppsUsageFragment
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlin.math.roundToLong
 
 class UsageStatsHelper(context: Context) {
 
@@ -47,6 +48,40 @@ class UsageStatsHelper(context: Context) {
     }
 
     suspend fun getEarliestTimestamp(): Long = dao.earliestTimestamp() ?: System.currentTimeMillis()
+
+    /**
+     * Uses the same hourly buckets shown by AppUsageBreakdown and returns only the portion that
+     * overlaps [startMs, endMs]. Sessions are already split on hour boundaries by AppUsageTracker.
+     */
+    suspend fun getForegroundUsageBetween(
+        packageNames: Set<String>,
+        startMs: Long,
+        endMs: Long
+    ): Long {
+        if (packageNames.isEmpty() || endMs <= startMs) return 0L
+        val zone = ZoneId.systemDefault()
+        val dates = datesBetween(startMs, endMs)
+        var total = 0.0
+        dao.getForDates(dates).asSequence()
+            .filter { it.packageName in packageNames }
+            .forEach { row ->
+                val date = runCatching {
+                    LocalDate.parse(row.date, TimeTools.dayKeyFormatter())
+                }.getOrNull() ?: return@forEach
+                val hourly = parseHourly(row.hourlyUsage)
+                for (hour in 0 until 24) {
+                    val bucketStart = date.atTime(hour, 0).atZone(zone).toInstant().toEpochMilli()
+                    val bucketEnd = date.atTime(hour, 0).plusHours(1)
+                        .atZone(zone).toInstant().toEpochMilli()
+                    val overlap = (minOf(endMs, bucketEnd) - maxOf(startMs, bucketStart))
+                        .coerceAtLeast(0L)
+                    if (overlap > 0L) {
+                        total += hourly[hour] * (overlap.toDouble() / (bucketEnd - bucketStart))
+                    }
+                }
+            }
+        return total.roundToLong()
+    }
 
     private fun datesBetween(start: Long, end: Long): List<String> {
         val zone = ZoneId.systemDefault()

@@ -22,6 +22,7 @@ import neth.iecal.curbox.data.models.AppTimeConfig
 import neth.iecal.curbox.data.models.AppUsageConfig
 import neth.iecal.curbox.utils.DataStoreManager
 import neth.iecal.curbox.utils.UsageStatsHelper
+import neth.iecal.curbox.utils.activeWindow
 import java.util.Calendar
 
 class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(application) {
@@ -45,10 +46,28 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
 
         val limitMillis = limitForToday(config) * 60_000L
         val packages = group.selectedPackages.map { it.trim() }.toSet()
-        val used = withContext(Dispatchers.IO) {
+        val totalUsed = withContext(Dispatchers.IO) {
             usageStats.getForegroundStatsByRelativeDay(0)
                 .filter { it.packageName in packages }
                 .sumOf { it.totalTime }
+        }
+        val linkedWindow = group.linkedTimeGroupId
+            ?.let { linkedId -> _groups.value.find { it.id == linkedId } }
+            ?.takeIf { it.isActive && it.blockingType == AppBlockingType.Timed }
+            ?.let { runCatching { Gson().fromJson(it.setting, AppTimeConfig::class.java) }.getOrNull() }
+            ?.activeWindow()
+        val used = if (group.linkedTimeGroupId == null) {
+            totalUsed
+        } else if (linkedWindow == null) {
+            0L
+        } else {
+            withContext(Dispatchers.IO) {
+                usageStats.getForegroundUsageBetween(
+                    packages,
+                    linkedWindow.startMs,
+                    minOf(System.currentTimeMillis(), linkedWindow.endMs)
+                )
+            }
         }
         return (limitMillis - used).coerceAtLeast(0L)
     }

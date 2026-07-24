@@ -173,8 +173,12 @@ class AppBlocker() : BaseBlocker() {
                 val totalUsage = todaysStats
                     .filter { it.packageName in entry.groupPackages }
                     .sumOf { it.totalTime }
-                val currentUsage = linkedWindow?.let {
-                    usageSinceWindowStart(entry.groupId, it.startMs, totalUsage)
+                val currentUsage = linkedWindow?.let { window ->
+                    runBlocking {
+                        usageStats.getForegroundUsageBetween(
+                            entry.groupPackages.toSet(), window.startMs, minOf(now, window.endMs)
+                        )
+                    }
                 } ?: totalUsage
                 val usageLimitMillis = getUsageLimitForToday(entry.config) * 60_000L
                 val remainingUsage = usageLimitMillis - currentUsage
@@ -366,20 +370,6 @@ class AppBlocker() : BaseBlocker() {
             val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
             config.dailyLimits[dayOfWeek]
         }
-    }
-
-    private fun usageSinceWindowStart(groupId: String, windowStartMs: Long, totalUsage: Long): Long {
-        val windowKey = "usage_window_$groupId"
-        val baselineKey = "usage_baseline_$groupId"
-        val savedWindow = prefs.getLong(windowKey, Long.MIN_VALUE)
-        if (savedWindow != windowStartMs) {
-            prefs.edit {
-                putLong(windowKey, windowStartMs)
-                putLong(baselineKey, totalUsage)
-            }
-            return 0L
-        }
-        return (totalUsage - prefs.getLong(baselineKey, totalUsage)).coerceAtLeast(0L)
     }
 
     private fun loadPersistedData() {

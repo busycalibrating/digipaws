@@ -306,26 +306,7 @@ class KeywordBlocker : BaseBlocker() {
 
         if (limit <= 0) return true
 
-        val totalUsage = groupUsage(group)
-        val linkedWindow = linkedSchedules[group.id]?.activeWindow()
-        val usage = linkedWindow?.let {
-            usageSinceWindowStart(group.id, it.startMs, totalUsage)
-        } ?: totalUsage
-        return usage >= limit
-    }
-
-    private fun usageSinceWindowStart(groupId: String, windowStartMs: Long, totalUsage: Long): Long {
-        val windowKey = "usage_window_$groupId"
-        val baselineKey = "usage_baseline_$groupId"
-        val savedWindow = prefs.getLong(windowKey, Long.MIN_VALUE)
-        if (savedWindow != windowStartMs) {
-            prefs.edit {
-                putLong(windowKey, windowStartMs)
-                putLong(baselineKey, totalUsage)
-            }
-            return 0L
-        }
-        return (totalUsage - prefs.getLong(baselineKey, totalUsage)).coerceAtLeast(0L)
+        return groupUsage(group) >= limit
     }
 
     // Combined usage of every keyword in the group across all browsers, so the
@@ -354,11 +335,7 @@ class KeywordBlocker : BaseBlocker() {
                     config.dailyLimits[Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1]
                 }) * 60_000L
                 if (limit > 0 && (linkedSchedules[group.id] == null || linkedWindow != null)) {
-                    val totalUsage = groupUsage(group)
-                    val used = linkedWindow?.let {
-                        usageSinceWindowStart(group.id, it.startMs, totalUsage)
-                    } ?: totalUsage
-                    val remaining = limit - used
+                    val remaining = limit - groupUsage(group)
                     if (remaining > 0) nextRecheck = now + remaining + 1000
                 }
                 linkedWindow?.let {

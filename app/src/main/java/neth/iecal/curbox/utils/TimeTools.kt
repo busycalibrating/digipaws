@@ -13,6 +13,7 @@ class TimeTools {
         private val DAY_KEY_FORMATTER = DateTimeFormatter.ofPattern("dd MMMM yyyy", Locale.getDefault())
 
         fun dayKey(date: LocalDate): String = date.format(DAY_KEY_FORMATTER)
+        fun dayKeyFormatter(): DateTimeFormatter = DAY_KEY_FORMATTER
 
         fun convertToMinutesFromMidnight(hour: Int, minute: Int): Int {
             return (hour * 60) + minute
