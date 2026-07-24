@@ -10,6 +10,11 @@ data class AppGroup(
     /** Non-zero only while the group is using the opt-in temporary-disable escape hatch. */
     val temporarilyDisabledUntilMs: Long = 0L,
     val setting:String = "",
+    /**
+     * For usage groups, optionally points at a timed group. The usage allowance is then scoped
+     * to that timed group's current allowed interval instead of the whole day.
+     */
+    val linkedTimeGroupId: String? = null,
     val warningScreenConfig : AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig()
 )
 

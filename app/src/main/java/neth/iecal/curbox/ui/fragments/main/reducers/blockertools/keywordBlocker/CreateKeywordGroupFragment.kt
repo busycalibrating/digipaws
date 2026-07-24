@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.PopupMenu
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
@@ -39,6 +40,7 @@ class CreateKeywordGroupFragment : Fragment() {
     private val keywordAdapter by lazy { KeywordAdapter() }
     private var isEditing = false
     private var existingGroupId: String? = null
+    private var linkedTimeGroupId: String? = null
 
     private val importLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { importKeywordsFromFile(it) }
@@ -56,6 +58,7 @@ class CreateKeywordGroupFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setupBlockingTypeSelection()
+        updateConnectionControls()
         
         binding.rvKeywords.adapter = keywordAdapter
         
@@ -77,6 +80,7 @@ class CreateKeywordGroupFragment : Fragment() {
                     binding.tvTitle.text = getString(R.string.keyword_group_edit_title)
                     binding.etGroupName.setText(group.name)
                     selectedKeywords = group.selectedKeywords.toMutableList()
+                    linkedTimeGroupId = group.linkedTimeGroupId
                     updateKeywordsList()
                     
                     if (group.blockingType == AppBlockingType.Usage) {
@@ -88,6 +92,7 @@ class CreateKeywordGroupFragment : Fragment() {
                     }
 
                     viewModel.warningScrnConfig = group.warningScreenConfig
+                    updateConnectionControls()
                 }
             }
         }
@@ -112,6 +117,8 @@ class CreateKeywordGroupFragment : Fragment() {
     private fun selectBlockingType(selected: View) {
         binding.rbUsageBased.isChecked = selected == binding.rbUsageBased
         binding.rbTimeBased.isChecked = selected == binding.rbTimeBased
+        if (selected != binding.rbUsageBased) linkedTimeGroupId = null
+        updateConnectionControls()
     }
 
     private fun setupListeners() {
@@ -131,6 +138,7 @@ class CreateKeywordGroupFragment : Fragment() {
                 KeywordTimeBasedSettingsFragment().show(parentFragmentManager, KeywordTimeBasedSettingsFragment.FRAGMENT_ID)
             }
         }
+        binding.btnLinkTimeGroup.setOnClickListener { showTimeGroupPicker() }
 
         binding.btnConfigureWarningScreen.setOnClickListener {
             val configFragment = neth.iecal.curbox.ui.fragments.main.reducers.blockertools.shared.WarningConfigFragment.newInstance(
@@ -156,6 +164,46 @@ class CreateKeywordGroupFragment : Fragment() {
         }
 
         binding.fabSaveGroup.setOnClickListener { saveGroup() }
+    }
+
+    private fun showTimeGroupPicker() {
+        val groups = viewModel.keywordBlockerConfig.value.keywordGroups
+        val candidates = groups.filter {
+            it.id != existingGroupId && it.blockingType == AppBlockingType.Timed
+        }
+        val labels = listOf(getString(R.string.no_time_group)) + candidates.map { it.name }
+        val checked = candidates.indexOfFirst { it.id == linkedTimeGroupId } + 1
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.link_time_group)
+            .setSingleChoiceItems(labels.toTypedArray(), checked) { dialog, which ->
+                linkedTimeGroupId = if (which == 0) null else candidates[which - 1].id
+                updateConnectionControls()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun updateConnectionControls() {
+        val usageSelected = binding.rbUsageBased.isChecked
+        binding.btnLinkTimeGroup.visibility = if (usageSelected) View.VISIBLE else View.GONE
+        val groups = viewModel.keywordBlockerConfig.value.keywordGroups
+        val linkedName = groups.find { it.id == linkedTimeGroupId }?.name
+        binding.btnLinkTimeGroup.text = linkedName?.let {
+            getString(R.string.linked_time_group, it)
+        } ?: getString(R.string.link_time_group)
+
+        val timedWarningManaged = binding.rbTimeBased.isChecked &&
+            existingGroupId != null &&
+            groups.any {
+                it.blockingType == AppBlockingType.Usage && it.linkedTimeGroupId == existingGroupId
+            }
+        binding.btnConfigureWarningScreen.isEnabled = !timedWarningManaged
+        binding.btnConfigureWarningScreen.text = if (timedWarningManaged) {
+            getString(R.string.linked_warning_managed)
+        } else {
+            getString(R.string.configure_warning_screen_1)
+        }
     }
 
     private fun showMoreOptions(view: View) {
@@ -290,14 +338,17 @@ class CreateKeywordGroupFragment : Fragment() {
         }
 
         val blockingType = if (binding.rbUsageBased.isChecked) AppBlockingType.Usage else AppBlockingType.Timed
+        val existing = viewModel.keywordBlockerConfig.value.keywordGroups.find { it.id == existingGroupId }
 
         val group = KeywordGroup(
             id = existingGroupId ?: UUID.randomUUID().toString(),
             name = name,
             selectedKeywords = selectedKeywords.toList(),
             blockingType = blockingType,
-            isActive = true,
+            isActive = existing?.isActive ?: true,
+            temporarilyDisabledUntilMs = existing?.temporarilyDisabledUntilMs ?: 0L,
             setting = if (blockingType == AppBlockingType.Usage) Gson().toJson(viewModel.currentUsageConfig) else Gson().toJson(viewModel.currentTimeConfig),
+            linkedTimeGroupId = linkedTimeGroupId.takeIf { blockingType == AppBlockingType.Usage },
             warningScreenConfig = viewModel.warningScrnConfig
         )
 

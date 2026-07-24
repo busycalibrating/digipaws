@@ -88,6 +88,7 @@ object RestrictionComparator {
         if (!n.isActive) return false
         if (!n.selectedPackages.containsAll(o.selectedPackages)) return false
         if (n.blockingType != o.blockingType) return false
+        if (n.linkedTimeGroupId != o.linkedTimeGroupId) return false
         if (!warningConfig(o.warningScreenConfig, n.warningScreenConfig)) return false
         return blockingSetting(o.blockingType, o.setting, n.setting)
     }
@@ -106,6 +107,7 @@ object RestrictionComparator {
         if (!n.isActive) return false
         if (!n.selectedKeywords.containsAll(o.selectedKeywords)) return false
         if (n.blockingType != o.blockingType) return false
+        if (n.linkedTimeGroupId != o.linkedTimeGroupId) return false
         if (!warningConfig(o.warningScreenConfig, n.warningScreenConfig)) return false
         return blockingSetting(o.blockingType, o.setting, n.setting)
     }

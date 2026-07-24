@@ -114,6 +114,9 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
             val currentSettings = dataStoreManager.settingsForEditing.first()
             val updatedGroups = currentSettings.blockedAppGroups.toMutableList()
             updatedGroups.removeAll { it.id == groupId }
+            updatedGroups.replaceAll {
+                if (it.linkedTimeGroupId == groupId) it.copy(linkedTimeGroupId = null) else it
+            }
             updateGroups(updatedGroups)
         }
     }

@@ -207,6 +207,22 @@
                 app:iconTint="?attr/colorOnSurfaceVariant" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_link_time_group"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginBottom="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/link_time_group"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:visibility="gone"
+                app:backgroundTint="?attr/colorSurfaceContainer"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_timer_aesthetic"
+                app:iconSize="24dp"
+                app:iconTint="?attr/colorOnSurfaceVariant" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_configure_warning_screen"
                 android:layout_width="match_parent"
                 android:layout_height="60dp"

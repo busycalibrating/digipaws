@@ -115,6 +115,9 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
         updateConfig { config ->
             val groups = config.keywordGroups.toMutableList()
             groups.removeAll { it.id == groupId }
+            groups.replaceAll {
+                if (it.linkedTimeGroupId == groupId) it.copy(linkedTimeGroupId = null) else it
+            }
             config.copy(keywordGroups = groups)
         }
     }

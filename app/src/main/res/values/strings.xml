@@ -113,6 +113,10 @@
     <string name="time_based">Time Based</string>
     <string name="configure_settings">Configure Allowed Schedule</string>
     <string name="configure_warning_screen_1">Configure Warning Screen</string>
+    <string name="link_time_group">Limit to a time group</string>
+    <string name="no_time_group">No time group (all day)</string>
+    <string name="linked_time_group">Time group: %1$s</string>
+    <string name="linked_warning_managed">Warning screen is managed by the linked usage group</string>
     <string name="done">Done</string>
     <string name="set_limits_for_each_day">Set limits for each day</string>
     <string name="hours">Hours</string>

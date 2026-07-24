@@ -14,5 +14,7 @@ data class KeywordGroup(
     val isActive: Boolean = false,
     val temporarilyDisabledUntilMs: Long = 0L,
     val setting: String = "",
+    /** Optional timed group that defines when this usage allowance is available. */
+    val linkedTimeGroupId: String? = null,
     val warningScreenConfig: AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig()
 )

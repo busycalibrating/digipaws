@@ -39,6 +39,7 @@ import neth.iecal.curbox.ui.activity.WarningActivity
 import neth.iecal.curbox.utils.KeywordMatcher
 import neth.iecal.curbox.utils.TimerNotification
 import neth.iecal.curbox.utils.TimeTools
+import neth.iecal.curbox.utils.activeWindow
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -58,6 +59,7 @@ class KeywordBlocker : BaseBlocker() {
     private lateinit var prefs: SharedPreferences
 
     private var activeGroups = listOf<KeywordGroup>()
+    private var linkedSchedules = emptyMap<String, AppTimeConfig>()
     // Maps group ID → (compiled regexes, lowercase literal keywords)
     private var groupPatternMap = mutableMapOf<String, Pair<List<Regex>, List<String>>>()
 
@@ -245,8 +247,13 @@ class KeywordBlocker : BaseBlocker() {
     }
 
     private fun isBlocked(group: KeywordGroup): Boolean =
-        if (group.blockingType == AppBlockingType.Timed) isTimedBlockActive(group)
-        else isUsageLimitExceeded(group)
+        if (group.blockingType == AppBlockingType.Timed) {
+            isTimedBlockActive(group)
+        } else {
+            val schedule = linkedSchedules[group.id]
+            if (group.linkedTimeGroupId != null && schedule?.activeWindow() == null) true
+            else isUsageLimitExceeded(group)
+        }
 
     // Intervals describe the ALLOWED time. Keywords are blocked whenever the
     // current time falls outside every allowed interval (matching the app blocker).
@@ -278,7 +285,26 @@ class KeywordBlocker : BaseBlocker() {
 
         if (limit <= 0) return true
 
-        return groupUsage(group) >= limit
+        val totalUsage = groupUsage(group)
+        val linkedWindow = linkedSchedules[group.id]?.activeWindow()
+        val usage = linkedWindow?.let {
+            usageSinceWindowStart(group.id, it.startMs, totalUsage)
+        } ?: totalUsage
+        return usage >= limit
+    }
+
+    private fun usageSinceWindowStart(groupId: String, windowStartMs: Long, totalUsage: Long): Long {
+        val windowKey = "usage_window_$groupId"
+        val baselineKey = "usage_baseline_$groupId"
+        val savedWindow = prefs.getLong(windowKey, Long.MIN_VALUE)
+        if (savedWindow != windowStartMs) {
+            prefs.edit {
+                putLong(windowKey, windowStartMs)
+                putLong(baselineKey, totalUsage)
+            }
+            return 0L
+        }
+        return (totalUsage - prefs.getLong(baselineKey, totalUsage)).coerceAtLeast(0L)
     }
 
     // Combined usage of every keyword in the group across all browsers, so the
@@ -302,12 +328,20 @@ class KeywordBlocker : BaseBlocker() {
         if (group.blockingType == AppBlockingType.Usage) {
             val config = Gson().fromJson(group.setting, AppUsageConfig::class.java)
             if (config != null) {
+                val linkedWindow = linkedSchedules[group.id]?.activeWindow(now)
                 val limit = (if (config.isDailyUniform) config.uniformLimit else {
                     config.dailyLimits[Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1]
                 }) * 60_000L
-                if (limit > 0) {
-                    val remaining = limit - groupUsage(group)
+                if (limit > 0 && (linkedSchedules[group.id] == null || linkedWindow != null)) {
+                    val totalUsage = groupUsage(group)
+                    val used = linkedWindow?.let {
+                        usageSinceWindowStart(group.id, it.startMs, totalUsage)
+                    } ?: totalUsage
+                    val remaining = limit - used
                     if (remaining > 0) nextRecheck = now + remaining + 1000
+                }
+                linkedWindow?.let {
+                    if (nextRecheck == 0L || it.endMs < nextRecheck) nextRecheck = it.endMs
                 }
             }
         }
@@ -372,9 +406,29 @@ class KeywordBlocker : BaseBlocker() {
                 isUnsupportedBrowserBlockingOn = settings.keywordBlockerConfig.blockAllExceptSupported
                 browserBlocker.isTurnedOn = isTurnedOn
 
+                val allEnabledGroups = settings.keywordBlockerConfig.keywordGroups.filter { it.isActive }
+                val groupsById = allEnabledGroups.associateBy { it.id }
+                val linkedTimedGroupIds = allEnabledGroups
+                    .filter { it.blockingType == AppBlockingType.Usage }
+                    .mapNotNull { it.linkedTimeGroupId }
+                    .toSet()
                 activeGroups = if (isTurnedOn) {
-                    settings.keywordBlockerConfig.keywordGroups.filter { it.isActive }
+                    allEnabledGroups.filterNot {
+                        it.blockingType == AppBlockingType.Timed && it.id in linkedTimedGroupIds
+                    }
                 } else emptyList()
+                linkedSchedules = if (isTurnedOn) {
+                    activeGroups
+                        .filter { it.blockingType == AppBlockingType.Usage }
+                        .mapNotNull { usageGroup ->
+                            val timed = usageGroup.linkedTimeGroupId?.let(groupsById::get)
+                                ?.takeIf { it.blockingType == AppBlockingType.Timed }
+                                ?: return@mapNotNull null
+                            runCatching {
+                                usageGroup.id to Gson().fromJson(timed.setting, AppTimeConfig::class.java)
+                            }.getOrNull()
+                        }.toMap()
+                } else emptyMap()
 
                 groupPatternMap = activeGroups.associate { group ->
                     group.id to compileKeywords(group.selectedKeywords)
