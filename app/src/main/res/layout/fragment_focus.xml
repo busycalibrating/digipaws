@@ -55,6 +55,16 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_write_focus_nfc"
+            style="@style/Widget.Material3.Button.IconButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/focus_nfc_write_title"
+            app:icon="@drawable/baseline_nfc_24"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/btn_help" />
+
         <ImageButton
             android:id="@+id/btnGoToStats"
             android:layout_width="48dp"

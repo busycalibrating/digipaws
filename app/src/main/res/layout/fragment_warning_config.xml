@@ -194,6 +194,66 @@
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/nfc_setup_container"
+            style="@style/Widget.Material3.CardView.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/label_nfc_auth"
+                    style="@style/TextAppearance.Material3.TitleMedium" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:weightSum="2">
+
+                    <Button
+                        android:id="@+id/btn_write_nfc"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:layout_height="wrap_content"
+                        android:text="@string/btn_generate_new" />
+
+                    <Button
+                        android:id="@+id/btn_register_existing_nfc"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="4dp"
+                        android:layout_height="wrap_content"
+                        style="?attr/materialButtonOutlinedStyle"
+                        android:text="@string/btn_scan_existing" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/TextAppearance.Material3.TitleSmall"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/label_configured_nfc" />
+
+                <LinearLayout
+                    android:id="@+id/nfc_list_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
             android:id="@+id/typing_setup_container"
             style="@style/Widget.Material3.CardView.Outlined"
             android:layout_width="match_parent"

@@ -330,6 +330,12 @@
     <string name="notification_title_remaining_usage">Remaining usage before lockdown</string>
     <string name="notification_title_focus_mode_on">Focus Mode is on</string>
 
+    <string name="nfc_focus_started">Focus started: %1$s (%2$d min)</string>
+    <string name="nfc_focus_stopped">Focus stopped</string>
+    <string name="nfc_focus_no_group">No focus group found to start</string>
+    <string name="nfc_focus_not_exitable">This focus session can\'t be ended early</string>
+    <string name="nfc_tag_unrecognized">Unrecognized Curbox NFC tag</string>
+
     <string name="onboarding_non_session_title">Non-session based installation detected</string>
     <string name="onboarding_restricted_settings_desc">Android 13+ restricts Accessibility services for apps installed outside of app stores (like F-Droid or Play Store). To enable permissions, you\'ll need to manually allow \'Restricted settings\' for Curbox. Alternatively, install via the F-Droid app(not website) to avoid this.</string>
     <string name="onboarding_show_tutorial">Show tutorial to enable permissions</string>
@@ -396,6 +402,8 @@
     <string name="btn_generate_new">Generate New</string>
     <string name="btn_scan_existing">Scan Existing</string>
     <string name="label_configured_qr">Configured QR/Barcodes:</string>
+    <string name="label_nfc_auth">NFC Authentication</string>
+    <string name="label_configured_nfc">Configured NFC tags:</string>
     <string name="label_typing_auth">Typing Authentication</string>
     <string name="label_typing_desc">Enter the sentence the user must type exactly to bypass the block:</string>
     <string name="label_intent_auth">Intent unlock length</string>
@@ -1471,8 +1479,8 @@
     <string name="warning_saved_to_gallery">Saved to Gallery!</string>
     <string name="warning_save_image_failed">Failed to save image</string>
     <string name="warning_mediastore_failed">Failed to create MediaStore entry</string>
-    <string name="warning_qr_timing_title">QR/Barcode Timing</string>
-    <string name="warning_qr_timing_message">Configure the time behavior for this code before continuing.</string>
+    <string name="warning_qr_timing_title">Unlock Timing</string>
+    <string name="warning_qr_timing_message">Configure the time behavior for this unlock method before continuing.</string>
     <string name="warning_qr_saved">QR Code Saved Successfully!</string>
     <string name="warning_scan_cancelled">Scan cancelled</string>
     <string name="warning_cancelled">Cancelled</string>
@@ -1481,6 +1489,29 @@
     <string name="warning_proceeds_left">You have %1$d of %2$d opens left</string>
     <string name="warning_typing_quote">\"%1$s\"</string>
     <string name="warning_scan_qr_code">Scan QR Code</string>
+    <string name="warning_scan_nfc_tag">Scan NFC Tag</string>
+    <string name="warning_invalid_nfc">This NFC tag is not registered</string>
+    <string name="nfc_tap_title">Tap your NFC tag</string>
+    <string name="nfc_tap_message">Hold your NFC tag against the back of your phone.</string>
+    <string name="nfc_unavailable">NFC is off or unavailable on this device</string>
+    <string name="nfc_tag_saved">NFC tag registered</string>
+    <string name="nfc_write_failed">Could not write to tag. Use a writable NFC tag.</string>
+    <string name="nfc_write_success">Tag written and registered</string>
+    <string name="nfc_already_registered">That tag is already registered</string>
+    <string name="focus_nfc_write_title">Write Focus NFC Tag</string>
+    <string name="focus_nfc_write_button">Write Tag</string>
+    <string name="focus_nfc_no_groups">Create a focus group first</string>
+    <string name="focus_nfc_pick_group">Focus group</string>
+    <string name="focus_nfc_pick_action">When tapped</string>
+    <string name="focus_nfc_unnamed_group">Unnamed group</string>
+    <string name="focus_nfc_action_toggle">Toggle focus</string>
+    <string name="focus_nfc_action_start">Start focus</string>
+    <string name="focus_nfc_action_stop">Stop focus</string>
+    <string name="focus_nfc_duration_input_hint">Duration</string>
+    <string name="focus_nfc_load_button">Load from tag</string>
+    <string name="focus_nfc_load_title">Tap a tag to load</string>
+    <string name="focus_nfc_loaded">Loaded values from tag</string>
+    <string name="focus_nfc_load_invalid">That tag is not a Curbox focus tag</string>
 
     <!-- Group edit titles -->
     <string name="app_group_edit_title">Edit App Group</string>

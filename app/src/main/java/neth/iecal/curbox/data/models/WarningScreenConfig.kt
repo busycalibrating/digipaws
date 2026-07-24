@@ -14,6 +14,8 @@ data class AppBlockerWarningScreenConfig(
     val proceedsTimeWindowMn: Int = 60,
     val isQrUnlockRequirementEnabled: Boolean = false,
     val qrKeys: Map<String,Long> = mapOf(), // qr code content -> Duration of unlock (-1 if dynamic timing)
+    val isNfcUnlockRequirementEnabled: Boolean = false,
+    val nfcKeys: Map<String,Long> = mapOf(), // nfc tag key (written UUID or UID) -> Duration of unlock (-1 if dynamic timing)
     val isTypingRequirementEnabled: Boolean = false,
     val typingSentence: String = "",
     val isIntentRequirementEnabled: Boolean = false,

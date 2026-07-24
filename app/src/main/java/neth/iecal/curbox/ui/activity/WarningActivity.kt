@@ -19,6 +19,7 @@ import com.google.gson.Gson
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import neth.iecal.curbox.Constants
+import neth.iecal.curbox.nfc.NfcUnlockUtils
 import neth.iecal.curbox.R
 import neth.iecal.curbox.blockers.AppBlocker
 import neth.iecal.curbox.blockers.KeywordBlocker
@@ -43,6 +44,9 @@ class WarningActivity : AppCompatActivity() {
     private var vibrator: Vibrator? = null
 
     private var isQrScanned = false
+    private var isNfcScanned = false
+    private var nfcReaderActive = false
+    private var nfcTapDialog: AlertDialog? = null
     private var scannedValidDuration = -1L
 
     private lateinit var binding: DialogWarningOverlayBinding
@@ -147,7 +151,7 @@ class WarningActivity : AppCompatActivity() {
 
                     override fun onFinish() {
                         binding.btnProceed.let { button ->
-                            if (!warningScreenConfig.isQrUnlockRequirementEnabled && warningScreenConfig.isDynamicIntervalSettingAllowed) {
+                            if (!warningScreenConfig.isQrUnlockRequirementEnabled && !warningScreenConfig.isNfcUnlockRequirementEnabled && warningScreenConfig.isDynamicIntervalSettingAllowed) {
                                 binding.minsPicker.visibility = View.VISIBLE
                             }
 
@@ -219,6 +223,9 @@ class WarningActivity : AppCompatActivity() {
                             } else if (warningScreenConfig.isQrUnlockRequirementEnabled && !isQrScanned) {
                                 button.text = getString(R.string.warning_scan_qr_code)
                                 button.isEnabled = true
+                            } else if (warningScreenConfig.isNfcUnlockRequirementEnabled && !isNfcScanned) {
+                                button.text = getString(R.string.warning_scan_nfc_tag)
+                                button.isEnabled = true
                             } else {
                                 button.setText(R.string.proceed)
                                 button.isEnabled = true
@@ -269,6 +276,11 @@ class WarningActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            if (warningScreenConfig.isNfcUnlockRequirementEnabled && !isNfcScanned) {
+                startNfcUnlockScan(warningScreenConfig)
+                return@setOnClickListener
+            }
+
             if (warningScreenConfig.proceedLimitEnabled && targetId.isNotEmpty()) {
                 val limitPrefs = getSharedPreferences("proceed_limits", Context.MODE_PRIVATE)
                 val historyString = limitPrefs.getString("proceeds_$targetId", "") ?: ""
@@ -313,7 +325,7 @@ class WarningActivity : AppCompatActivity() {
             if (mode == Constants.WARNING_SCREEN_MODE_VIEW_BLOCKER) {
                 intent.getStringExtra("result_id")
                     ?.let { it1 ->
-                        val finalTime = if (warningScreenConfig.isQrUnlockRequirementEnabled && scannedValidDuration != -1L) {
+                        val finalTime = if ((warningScreenConfig.isQrUnlockRequirementEnabled || warningScreenConfig.isNfcUnlockRequirementEnabled) && scannedValidDuration != -1L) {
                             (scannedValidDuration / 60000).toInt()
                         } else {
                             binding.minsPicker.getValue()
@@ -329,12 +341,13 @@ class WarningActivity : AppCompatActivity() {
             if (mode == Constants.WARNING_SCREEN_MODE_APP_BLOCKER) {
                 intent.getStringExtra("result_id")
                     ?.let { it1 ->
-                        val finalTime = if (warningScreenConfig.isOnOpenConfig) {
-                            1440
-                        } else if (warningScreenConfig.isQrUnlockRequirementEnabled && scannedValidDuration != -1L) {
-                            (scannedValidDuration / 60000).toInt()
-                        } else {
-                            binding.minsPicker.getValue()
+                        val hasUnlockChallenge = warningScreenConfig.isQrUnlockRequirementEnabled ||
+                            warningScreenConfig.isNfcUnlockRequirementEnabled
+                        val finalTime = when {
+                            hasUnlockChallenge && scannedValidDuration != -1L -> (scannedValidDuration / 60000).toInt()
+                            hasUnlockChallenge -> binding.minsPicker.getValue()
+                            warningScreenConfig.isOnOpenConfig -> 1440
+                            else -> binding.minsPicker.getValue()
                         }
                         sendRefreshRequest(
                             it1,
@@ -352,7 +365,7 @@ class WarningActivity : AppCompatActivity() {
             if (mode == Constants.WARNING_SCREEN_MODE_KEYWORD_BLOCKER) {
                 intent.getStringExtra("result_id")
                     ?.let { it1 ->
-                        val finalTime = if (warningScreenConfig.isQrUnlockRequirementEnabled && scannedValidDuration != -1L) {
+                        val finalTime = if ((warningScreenConfig.isQrUnlockRequirementEnabled || warningScreenConfig.isNfcUnlockRequirementEnabled) && scannedValidDuration != -1L) {
                             (scannedValidDuration / 60000).toInt()
                         } else {
                             binding.minsPicker.getValue()
@@ -370,8 +383,58 @@ class WarningActivity : AppCompatActivity() {
         }
     }
 
+    private fun startNfcUnlockScan(warningScreenConfig: AppBlockerWarningScreenConfig) {
+        if (!NfcUnlockUtils.isNfcReady(this)) {
+            Toast.makeText(this, R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val enabled = NfcUnlockUtils.enableReader(this) { tag ->
+            NfcUnlockUtils.feedback(this)
+            val match = NfcUnlockUtils.keysFromTag(tag)
+                .firstOrNull { warningScreenConfig.nfcKeys.containsKey(it) }
+            if (match != null) {
+                isNfcScanned = true
+                scannedValidDuration = warningScreenConfig.nfcKeys[match] ?: -1L
+                binding.btnProceed.isEnabled = true
+                binding.btnProceed.setText(R.string.proceed)
+                binding.minsPicker.visibility = if (scannedValidDuration == -1L) View.VISIBLE else View.GONE
+                stopNfcUnlockScan()
+            } else {
+                Toast.makeText(this, R.string.warning_invalid_nfc, Toast.LENGTH_LONG).show()
+            }
+        }
+        if (!enabled) {
+            Toast.makeText(this, R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+        nfcReaderActive = true
+
+        nfcTapDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.nfc_tap_title)
+            .setMessage(R.string.nfc_tap_message)
+            .setNegativeButton(R.string.cancel) { _, _ -> stopNfcUnlockScan() }
+            .setOnDismissListener { stopNfcUnlockScan() }
+            .show()
+    }
+
+    private fun stopNfcUnlockScan() {
+        if (nfcReaderActive) {
+            NfcUnlockUtils.disableReader(this)
+            nfcReaderActive = false
+        }
+        nfcTapDialog?.dismiss()
+        nfcTapDialog = null
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopNfcUnlockScan()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        stopNfcUnlockScan()
         proceedTimer?.cancel()
         vibrator?.cancel()
         dialog?.dismiss()

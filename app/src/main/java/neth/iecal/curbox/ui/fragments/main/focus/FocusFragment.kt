@@ -16,6 +16,10 @@ import androidx.recyclerview.widget.RecyclerView
 import java.util.Locale
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import android.widget.Toast
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import neth.iecal.curbox.nfc.NfcFocusHandler
+import neth.iecal.curbox.nfc.NfcUnlockUtils
 import neth.iecal.curbox.utils.ViewUtils
 import neth.iecal.curbox.R
 import neth.iecal.curbox.databinding.FragmentFocusBinding
@@ -32,6 +36,7 @@ class FocusFragment : Fragment() {
     private var isProgrammaticScroll = false
     private var itemWidthPx = 0
     private val snapHelper = LinearSnapHelper()
+    private var nfcTapDialog: androidx.appcompat.app.AlertDialog? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -161,6 +166,181 @@ class FocusFragment : Fragment() {
         binding.btnHelp.setOnClickListener {
             ViewUtils.showHelpPopup(it, "Focus mode helps you stay away from distractions for a set period of time.", "https://curbox.app/docs/focus/focus-mode/")
         }
+
+        binding.btnWriteFocusNfc.setOnClickListener {
+            showWriteFocusNfcDialog()
+        }
+    }
+
+    private val focusNfcActions = listOf("toggle", "start", "stop")
+
+    private fun showWriteFocusNfcDialog() {
+        val groups = viewModel.groups.value
+        if (groups.isEmpty()) {
+            Toast.makeText(requireContext(), R.string.focus_nfc_no_groups, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val ctx = requireContext()
+        val view = layoutInflater.inflate(R.layout.dialog_focus_nfc_write, null)
+        val groupInput = view.findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.group_input)
+        val actionInput = view.findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.action_input)
+        val durationLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.duration_layout)
+        val durationInput = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.duration_input)
+
+        val groupNames = groups.map { it.groupName.ifBlank { getString(R.string.focus_nfc_unnamed_group) } }
+        val actionNames = listOf(
+            getString(R.string.focus_nfc_action_toggle),
+            getString(R.string.focus_nfc_action_start),
+            getString(R.string.focus_nfc_action_stop)
+        )
+        groupInput.setSimpleItems(groupNames.toTypedArray())
+        actionInput.setSimpleItems(actionNames.toTypedArray())
+
+        var groupIdx = 0
+        var actionIdx = 0
+        groupInput.setText(groupNames[0], false)
+        actionInput.setText(actionNames[0], false)
+        durationInput.setText(viewModel.selectedMins.coerceAtLeast(1).toString())
+
+        fun refreshDurationVisibility() {
+            durationLayout.visibility = if (focusNfcActions[actionIdx] == "stop") View.GONE else View.VISIBLE
+        }
+        refreshDurationVisibility()
+
+        groupInput.setOnItemClickListener { _, _, position, _ -> groupIdx = position }
+        actionInput.setOnItemClickListener { _, _, position, _ ->
+            actionIdx = position
+            refreshDurationVisibility()
+        }
+
+        fun applyFromUri(uri: android.net.Uri) {
+            val request = NfcFocusHandler.parse(uri.toString()) ?: return
+            focusNfcActions.indexOf(request.action).takeIf { it >= 0 }?.let {
+                actionIdx = it
+                actionInput.setText(actionNames[it], false)
+            }
+            request.groupId?.let { gid ->
+                groups.indexOfFirst { it.groupId == gid }.takeIf { it >= 0 }?.let {
+                    groupIdx = it
+                    groupInput.setText(groupNames[it], false)
+                }
+            }
+            request.minutes?.coerceAtLeast(1)?.let {
+                durationInput.setText(it.toString())
+            }
+            refreshDurationVisibility()
+        }
+
+        val dialog = MaterialAlertDialogBuilder(ctx)
+            .setTitle(R.string.focus_nfc_write_title)
+            .setView(view)
+            .setPositiveButton(R.string.focus_nfc_write_button, null)
+            .setNegativeButton(R.string.cancel, null)
+            .setNeutralButton(R.string.focus_nfc_load_button, null)
+            .create()
+
+        // Freeze background resizing when the keyboard pops up, so the navbar doesn't jump around
+        val hostWindow = activity?.window
+        val prevSoftInput = hostWindow?.attributes?.softInputMode
+        hostWindow?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+        dialog.setOnDismissListener {
+            prevSoftInput?.let { hostWindow.setSoftInputMode(it) }
+        }
+
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                startFocusNfcLoad { uri -> applyFromUri(uri) }
+            }
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (activity?.let { NfcUnlockUtils.isNfcReady(it) } != true) {
+                    Toast.makeText(requireContext(), R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+                val group = groups[groupIdx]
+                val action = focusNfcActions[actionIdx]
+                val mins = durationInput.text?.toString()?.toIntOrNull()?.coerceAtLeast(1)
+                    ?: viewModel.selectedMins.coerceAtLeast(1)
+                val uri = buildString {
+                    append("curbox://focus/").append(action)
+                    append("?group=").append(android.net.Uri.encode(group.groupId))
+                    if (action != "stop") append("&mins=").append(mins)
+                }
+                dialog.dismiss()
+                startFocusNfcWrite(uri)
+            }
+        }
+        dialog.show()
+    }
+
+    /** The dedicated "tap your tag now" popup, shared by the write and load flows. */
+    private fun showNfcTapDialog(titleRes: Int): androidx.appcompat.app.AlertDialog {
+        val view = layoutInflater.inflate(R.layout.dialog_nfc_tap, null)
+        view.findViewById<android.widget.TextView>(R.id.nfc_tap_title).setText(titleRes)
+        return MaterialAlertDialogBuilder(requireContext())
+            .setView(view)
+            .setNegativeButton(R.string.cancel, null)
+            .setOnDismissListener { stopFocusNfcWrite() }
+            .show()
+    }
+
+    /** Enables reader mode, reads a curbox://focus URI from the tapped tag, and hands it to [onLoaded]. */
+    private fun startFocusNfcLoad(onLoaded: (android.net.Uri) -> Unit) {
+        val activity = activity ?: return
+        if (!NfcUnlockUtils.isNfcReady(activity)) {
+            Toast.makeText(requireContext(), R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val enabled = NfcUnlockUtils.enableReader(activity) { tag ->
+            NfcUnlockUtils.feedback(requireContext())
+            val uri = NfcUnlockUtils.readUri(tag)
+            if (uri != null && uri.scheme == "curbox" && uri.host == "focus") {
+                onLoaded(uri)
+                Toast.makeText(requireContext(), R.string.focus_nfc_loaded, Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(requireContext(), R.string.focus_nfc_load_invalid, Toast.LENGTH_LONG).show()
+            }
+            stopFocusNfcWrite()
+        }
+        if (!enabled) {
+            Toast.makeText(requireContext(), R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        nfcTapDialog = showNfcTapDialog(R.string.focus_nfc_load_title)
+    }
+
+    private fun startFocusNfcWrite(uri: String) {
+        val activity = activity ?: return
+        if (!NfcUnlockUtils.isNfcReady(activity)) {
+            Toast.makeText(requireContext(), R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val enabled = NfcUnlockUtils.enableReader(activity) { tag ->
+            NfcUnlockUtils.feedback(requireContext())
+            val ok = NfcUnlockUtils.writeUri(tag, uri)
+            if (ok) NfcFocusHandler.markTagWritten(requireContext())
+            Toast.makeText(
+                requireContext(),
+                if (ok) R.string.nfc_write_success else R.string.nfc_write_failed,
+                Toast.LENGTH_LONG
+            ).show()
+            stopFocusNfcWrite()
+        }
+        if (!enabled) {
+            Toast.makeText(requireContext(), R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        nfcTapDialog = showNfcTapDialog(R.string.nfc_tap_title)
+    }
+
+    private fun stopFocusNfcWrite() {
+        activity?.let { NfcUnlockUtils.disableReader(it) }
+        nfcTapDialog?.dismiss()
+        nfcTapDialog = null
     }
 
 
@@ -232,8 +412,14 @@ class FocusFragment : Fragment() {
         if (!smooth) updateTime(minutes)
     }
 
+    override fun onPause() {
+        super.onPause()
+        stopFocusNfcWrite()
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
+        stopFocusNfcWrite()
         _binding = null
     }
 }

@@ -23,6 +23,7 @@ import com.google.gson.Gson
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
 import neth.iecal.curbox.data.models.AppBlockingType
+import neth.iecal.curbox.nfc.NfcUnlockUtils
 import neth.iecal.curbox.databinding.FragmentWarningConfigBinding
 import java.util.UUID
 
@@ -34,6 +35,8 @@ class WarningConfigFragment : Fragment() {
     private var initialConfig: AppBlockerWarningScreenConfig? = null
     private var currentQrMap = mutableMapOf<String, Long>()
     private var pendingQrDuration = -1L
+    private var currentNfcMap = mutableMapOf<String, Long>()
+    private var nfcTapDialog: androidx.appcompat.app.AlertDialog? = null
 
     data class UnlockOption(
         val title: String,
@@ -52,7 +55,8 @@ class WarningConfigFragment : Fragment() {
     private val effortOptions = listOf(
         UnlockOption("Unlock requires QR/Barcode scanning", "Scan any code (like a product box) to unlock.", true),
         UnlockOption("Unlock requires typing a sentence", "Precisely type a long sentence to prove focus."),
-        UnlockOption("Unlock requires stating an intent", "Briefly describe your goal before accessing.")
+        UnlockOption("Unlock requires stating an intent", "Briefly describe your goal before accessing."),
+        UnlockOption("Unlock requires scanning an NFC tag", "Tap a physical NFC tag to unlock.")
     )
 
     private val noEffortOptions = listOf(
@@ -126,6 +130,8 @@ class WarningConfigFragment : Fragment() {
         
         currentQrMap = config.qrKeys.toMutableMap()
         updateQrList()
+        currentNfcMap = config.nfcKeys.toMutableMap()
+        updateNfcList()
 
         val challengeAdapter = UnlockOptionAdapter(requireContext(), challengeOptions)
         binding.unlockChallengeDropdown.setAdapter(challengeAdapter)
@@ -136,6 +142,7 @@ class WarningConfigFragment : Fragment() {
                 config.isQrUnlockRequirementEnabled -> 1 to 0
                 config.isTypingRequirementEnabled -> 1 to 1
                 config.isIntentRequirementEnabled -> 1 to 2
+                config.isNfcUnlockRequirementEnabled -> 1 to 3
                 config.isDynamicIntervalSettingAllowed -> 2 to 0
                 else -> 2 to 1 // Fixed time
             }
@@ -157,6 +164,7 @@ class WarningConfigFragment : Fragment() {
             binding.timingContainer.isVisible = false
             binding.proceedDelayContainer.isVisible = false
             binding.qrSetupContainer.isVisible = false
+            binding.nfcSetupContainer.isVisible = false
             binding.typingSetupContainer.isVisible = false
         }
         
@@ -355,7 +363,15 @@ class WarningConfigFragment : Fragment() {
                 barcodeLauncher.launch(options)
             }
         }
-        
+
+        binding.btnWriteNfc.setOnClickListener {
+            showQrConfigDialog { duration -> startNfcTap(write = true, duration = duration) }
+        }
+
+        binding.btnRegisterExistingNfc.setOnClickListener {
+            showQrConfigDialog { duration -> startNfcTap(write = false, duration = duration) }
+        }
+
         binding.saveconfigs.setOnClickListener {
             val challengeStr = binding.unlockChallengeDropdown.text.toString()
             val secondaryStr = binding.secondaryBehaviorDropdown.text.toString()
@@ -366,6 +382,7 @@ class WarningConfigFragment : Fragment() {
             var isQrUnlockRequirementEnabled = false
             var isTypingRequirementEnabled = false
             var isIntentRequirementEnabled = false
+            var isNfcUnlockRequirementEnabled = false
             var isDynamicIntervalSettingAllowed = false
 
             when (cIdx) {
@@ -376,6 +393,7 @@ class WarningConfigFragment : Fragment() {
                         0 -> isQrUnlockRequirementEnabled = true
                         1 -> isTypingRequirementEnabled = true
                         2 -> isIntentRequirementEnabled = true
+                        3 -> isNfcUnlockRequirementEnabled = true
                     }
                 }
                 2 -> {
@@ -392,6 +410,8 @@ class WarningConfigFragment : Fragment() {
                 isWarningDialogHidden = false,
                 isQrUnlockRequirementEnabled = isQrUnlockRequirementEnabled,
                 qrKeys = if (isQrUnlockRequirementEnabled) currentQrMap else mapOf(),
+                isNfcUnlockRequirementEnabled = isNfcUnlockRequirementEnabled,
+                nfcKeys = if (isNfcUnlockRequirementEnabled) currentNfcMap else mapOf(),
                 isTypingRequirementEnabled = isTypingRequirementEnabled,
                 typingSentence = binding.typingSentenceEdit.text.toString(),
                 isIntentRequirementEnabled = isIntentRequirementEnabled,
@@ -468,15 +488,17 @@ class WarningConfigFragment : Fragment() {
         val isOnOpen = arguments?.getBoolean(ARG_IS_ON_OPEN) == true
 
         binding.apply {
-            // Timing container visible if "Requires no effort" + "Fixed time" OR "Require effort" + (Typing or Intent)
-            timingContainer.visibility = if (!isOnOpen && ((challengeIndex == 2 && secondaryIndex == 1) || (challengeIndex == 1 && secondaryIndex != 0 && secondaryIndex != -1))) View.VISIBLE else View.GONE
-            
+            // Timing container visible if "Requires no effort" + "Fixed time" OR "Require effort" + (Typing or Intent).
+            // QR (0) and NFC (3) carry their own per-key timing, so the shared timing slider stays hidden for them.
+            timingContainer.visibility = if (!isOnOpen && ((challengeIndex == 2 && secondaryIndex == 1) || (challengeIndex == 1 && secondaryIndex != 0 && secondaryIndex != 3 && secondaryIndex != -1))) View.VISIBLE else View.GONE
+
             // Proceed delay visible for anything except "Never Unlock" or when nothing selected
             proceedDelayContainer.visibility = if (challengeIndex != 0 && challengeIndex != -1) View.VISIBLE else View.GONE
-            
+
             qrSetupContainer.visibility = if (challengeIndex == 1 && secondaryIndex == 0) View.VISIBLE else View.GONE
             typingSetupContainer.visibility = if (challengeIndex == 1 && secondaryIndex == 1) View.VISIBLE else View.GONE
             intentSetupContainer.visibility = if (challengeIndex == 1 && secondaryIndex == 2) View.VISIBLE else View.GONE
+            nfcSetupContainer.visibility = if (challengeIndex == 1 && secondaryIndex == 3) View.VISIBLE else View.GONE
         }
     }
     
@@ -550,40 +572,103 @@ class WarningConfigFragment : Fragment() {
     }
 
     private fun updateQrList() {
-        binding.qrListContainer.removeAllViews()
-        if (!currentQrMap.isEmpty()) {
-            currentQrMap.forEach { (uuid, duration) ->
-                val itemView = LinearLayout(requireContext()).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    )
-                    setPadding(0, 16, 0, 16)
-                    weightSum = 1f
-                }
-                
-                val infoText = TextView(requireContext()).apply {
-                    val durationText = if (duration == -1L) "Dynamic time" else "${duration / 60000} mins"
-                    text = "QR/Barcode - $durationText"
-                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                    setPadding(4, 4, 4, 4)
-                }
-                
-                val removeBtn = com.google.android.material.button.MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-                    text = "Remove"
-                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                    setOnClickListener {
-                        currentQrMap.remove(uuid)
-                        updateQrList()
-                    }
-                }
-                
-                itemView.addView(infoText)
-                itemView.addView(removeBtn)
-                binding.qrListContainer.addView(itemView)
+        renderKeyList(binding.qrListContainer, currentQrMap, "QR/Barcode") { updateQrList() }
+    }
+
+    private fun renderKeyList(
+        container: LinearLayout,
+        map: MutableMap<String, Long>,
+        label: String,
+        refresh: () -> Unit
+    ) {
+        container.removeAllViews()
+        map.forEach { (key, duration) ->
+            val itemView = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                setPadding(0, 16, 0, 16)
+                weightSum = 1f
             }
+
+            val infoText = TextView(requireContext()).apply {
+                val durationText = if (duration == -1L) "Dynamic time" else "${duration / 60000} mins"
+                text = "$label - $durationText"
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setPadding(4, 4, 4, 4)
+            }
+
+            val removeBtn = com.google.android.material.button.MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+                text = "Remove"
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                setOnClickListener {
+                    map.remove(key)
+                    refresh()
+                }
+            }
+
+            itemView.addView(infoText)
+            itemView.addView(removeBtn)
+            container.addView(itemView)
         }
+    }
+
+    private fun startNfcTap(write: Boolean, duration: Long) {
+        val activity = activity ?: return
+        if (!NfcUnlockUtils.isNfcReady(activity)) {
+            Toast.makeText(requireContext(), R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val enabled = NfcUnlockUtils.enableReader(activity) { tag ->
+            NfcUnlockUtils.feedback(requireContext())
+            if (write) {
+                val uuid = UUID.randomUUID().toString()
+                if (NfcUnlockUtils.writeText(tag, uuid)) {
+                    currentNfcMap[uuid] = duration
+                    updateNfcList()
+                    Toast.makeText(requireContext(), R.string.nfc_write_success, Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(requireContext(), R.string.nfc_write_failed, Toast.LENGTH_LONG).show()
+                }
+            } else {
+                val key = NfcUnlockUtils.keysFromTag(tag).firstOrNull()
+                if (key == null) {
+                    Toast.makeText(requireContext(), R.string.nfc_write_failed, Toast.LENGTH_LONG).show()
+                } else if (currentNfcMap.containsKey(key)) {
+                    Toast.makeText(requireContext(), R.string.nfc_already_registered, Toast.LENGTH_SHORT).show()
+                } else {
+                    currentNfcMap[key] = duration
+                    updateNfcList()
+                    Toast.makeText(requireContext(), R.string.nfc_tag_saved, Toast.LENGTH_SHORT).show()
+                }
+            }
+            stopNfcTap()
+        }
+
+        if (!enabled) {
+            Toast.makeText(requireContext(), R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        nfcTapDialog = MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.nfc_tap_title)
+            .setMessage(R.string.nfc_tap_message)
+            .setNegativeButton(R.string.cancel) { _, _ -> stopNfcTap() }
+            .setOnDismissListener { activity.let { NfcUnlockUtils.disableReader(it) } }
+            .show()
+    }
+
+    private fun stopNfcTap() {
+        activity?.let { NfcUnlockUtils.disableReader(it) }
+        nfcTapDialog?.dismiss()
+        nfcTapDialog = null
+    }
+
+    private fun updateNfcList() {
+        renderKeyList(binding.nfcListContainer, currentNfcMap, "NFC tag") { updateNfcList() }
     }
 
     private fun updateProceedWindowSliderBounds(unitIdx: Int) {
@@ -611,8 +696,14 @@ class WarningConfigFragment : Fragment() {
         binding.proceedWindowTitle.text = getString(R.string.warning_time_window, value, unitOptions[unitIdx])
     }
 
+    override fun onPause() {
+        super.onPause()
+        stopNfcTap()
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
+        stopNfcTap()
         _binding = null
     }
 

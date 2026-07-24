@@ -253,18 +253,10 @@ object RestrictionComparator {
                 n.allowedProceeds <= o.allowedProceeds && n.proceedsTimeWindowMn >= o.proceedsTimeWindowMn
             else -> true
         }
-        val qrOk = when {
-            o.isQrUnlockRequirementEnabled && !n.isQrUnlockRequirementEnabled -> false
-            // A new QR key is a new way to unlock, so keys may only be kept or removed,
-            // and a kept key may not unlock for longer than before
-            o.isQrUnlockRequirementEnabled && n.isQrUnlockRequirementEnabled ->
-                n.qrKeys.all { (key, duration) ->
-                    val oldDuration = o.qrKeys[key] ?: return@all false
-                    if (oldDuration == -1L || duration == -1L) duration == oldDuration
-                    else duration <= oldDuration
-                }
-            else -> true
-        }
+        // QR and NFC share the same rule: a key/tag is a new way to unlock, so keys may only be
+        // kept or removed, and a kept key may not unlock for longer than before.
+        val qrOk = unlockKeysOk(o.isQrUnlockRequirementEnabled, n.isQrUnlockRequirementEnabled, o.qrKeys, n.qrKeys)
+        val nfcOk = unlockKeysOk(o.isNfcUnlockRequirementEnabled, n.isNfcUnlockRequirementEnabled, o.nfcKeys, n.nfcKeys)
         val typingOk = !o.isTypingRequirementEnabled || n.isTypingRequirementEnabled
         val intentOk = !o.isIntentRequirementEnabled || n.isIntentRequirementEnabled
         val intentMinLengthOk = when {
@@ -273,8 +265,28 @@ object RestrictionComparator {
         }
 
         return cooldownOk && dynamicIntervalOk && proceedDisabledOk && dialogHiddenOk &&
-            proceedDelayOk && vibrateOk && proceedLimitOk && qrOk && typingOk && intentOk &&
+            proceedDelayOk && vibrateOk && proceedLimitOk && qrOk && nfcOk && typingOk && intentOk &&
             intentMinLengthOk
+    }
+
+    /**
+     * Shared "unlock keys may only get stricter" rule for QR and NFC. Disabling the requirement or
+     * adding a new key/tag weakens the block; a kept key may not unlock for longer than before, and
+     * dynamic timing (-1) is only same-or-stricter when it is unchanged.
+     */
+    private fun unlockKeysOk(
+        oldEnabled: Boolean,
+        newEnabled: Boolean,
+        oldKeys: Map<String, Long>,
+        newKeys: Map<String, Long>
+    ): Boolean = when {
+        oldEnabled && !newEnabled -> false
+        oldEnabled && newEnabled -> newKeys.all { (key, duration) ->
+            val oldDuration = oldKeys[key] ?: return@all false
+            if (oldDuration == -1L || duration == -1L) duration == oldDuration
+            else duration <= oldDuration
+        }
+        else -> true
     }
 
     private inline fun <reified T> parse(json: String): T? =
