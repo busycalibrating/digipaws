@@ -17,6 +17,8 @@ import neth.iecal.curbox.data.models.KeywordGroup
 import neth.iecal.curbox.utils.DataStoreManager
 import neth.iecal.curbox.utils.KeywordMatcher
 import neth.iecal.curbox.utils.TimeTools
+import neth.iecal.curbox.utils.WebsiteUsageWindow
+import neth.iecal.curbox.utils.activeWindow
 import neth.iecal.curbox.data.models.AppBlockingType
 import neth.iecal.curbox.data.models.AppUsageConfig
 import neth.iecal.curbox.data.models.AppTimeConfig
@@ -48,12 +50,38 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
 
         val limitMillis = limitForToday(config) * 60_000L
         val patterns = KeywordMatcher.compileKeywords(group.selectedKeywords)
-        val date = TimeTools.getCurrentDate()
+        val linkedWindow = group.linkedTimeGroupId
+            ?.let { linkedId ->
+                keywordBlockerConfig.value.keywordGroups.find { it.id == linkedId }
+            }
+            ?.takeIf { it.isActive && it.blockingType == AppBlockingType.Timed }
+            ?.let {
+                runCatching {
+                    Gson().fromJson(it.setting, AppTimeConfig::class.java)
+                }.getOrNull()
+            }
+            ?.activeWindow()
+        if (group.linkedTimeGroupId != null && linkedWindow == null) return 0L
         val used = withContext(Dispatchers.IO) {
-            AppDatabase.getInstance(getApplication()).websiteStatsDao()
-                .getStatsForDate(date)
-                .filter { KeywordMatcher.matchesPatterns(patterns, it.urlIdentifier) }
-                .sumOf { it.totalTime }
+            val dao = AppDatabase.getInstance(getApplication()).websiteStatsDao()
+            val rows = if (group.linkedTimeGroupId == null || linkedWindow == null) {
+                dao.getStatsForDate(TimeTools.getCurrentDate())
+            } else {
+                val startDate = java.time.Instant.ofEpochMilli(linkedWindow.startMs)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                val endDate = java.time.Instant.ofEpochMilli(linkedWindow.endMs)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                val dates = buildList {
+                    var date = startDate
+                    while (!date.isAfter(endDate)) {
+                        add(TimeTools.dayKey(date))
+                        date = date.plusDays(1)
+                    }
+                }
+                dao.getStatsForDates(dates)
+            }.filter { KeywordMatcher.matchesPatterns(patterns, it.urlIdentifier) }
+            if (group.linkedTimeGroupId == null || linkedWindow == null) rows.sumOf { it.totalTime }
+            else WebsiteUsageWindow.sum(rows, linkedWindow.startMs, linkedWindow.endMs)
         }
         return (limitMillis - used).coerceAtLeast(0L)
     }

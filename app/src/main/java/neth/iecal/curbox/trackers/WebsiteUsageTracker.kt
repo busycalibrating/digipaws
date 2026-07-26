@@ -19,6 +19,8 @@ import neth.iecal.curbox.hardcoded.URL_BAR_ID_LIST
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.utils.AccessibilityHelper
 import neth.iecal.curbox.utils.TimeTools
+import java.time.Instant
+import java.time.ZoneId
 import kotlin.text.endsWith
 import kotlin.text.substring
 
@@ -179,6 +181,27 @@ class WebsiteUsageTracker {
     }
 
     private data class SiteInfo(val domain: String, val urlIdentifier: String)
+    private data class HourSlice(val date: String, val hour: Int, val durationMs: Long)
+
+    private fun splitByLocalHour(startMs: Long, endMs: Long): List<HourSlice> {
+        if (endMs <= startMs) return emptyList()
+        val zone = ZoneId.systemDefault()
+        val slices = ArrayList<HourSlice>(2)
+        var cursor = startMs
+        while (cursor < endMs) {
+            val current = Instant.ofEpochMilli(cursor).atZone(zone)
+            val nextHour = current.withMinute(0).withSecond(0).withNano(0)
+                .plusHours(1).toInstant().toEpochMilli()
+            val sliceEnd = minOf(endMs, nextHour.coerceAtLeast(cursor + 1))
+            slices += HourSlice(
+                date = TimeTools.dayKey(current.toLocalDate()),
+                hour = current.hour,
+                durationMs = sliceEnd - cursor
+            )
+            cursor = sliceEnd
+        }
+        return slices
+    }
 
     private fun extractSiteInfo(urlText: String): SiteInfo {
         return try {
@@ -256,25 +279,31 @@ class WebsiteUsageTracker {
         // time arrives in sub second pieces that must be accumulated, not dropped.
         if (durationMs <= 0) return
 
-        val date = TimeTools.getCurrentDate()
         val wallNow = System.currentTimeMillis()
+        val wallStart = (wallNow - durationMs).coerceAtMost(wallNow)
         scope.launch {
             if (!trackingEnabled) return@launch
             try {
-                val entity = WebsiteStatsEntity(
-                    date = date,
-                    packageName = packageName,
-                    urlIdentifier = identifier,
-                    domain = domain,
-                    totalTime = 0L,
-                    lastVisited = wallNow
-                )
-                websiteStatsDao.insertIfAbsent(
-                    entity
-                )
-                Log.d("saving session", entity.toString())
-
-                websiteStatsDao.addTime(date, packageName, identifier, durationMs, wallNow)
+                splitByLocalHour(wallStart, wallNow).forEach { slice ->
+                    val entity = WebsiteStatsEntity(
+                        date = slice.date,
+                        packageName = packageName,
+                        urlIdentifier = identifier,
+                        domain = domain,
+                        totalTime = 0L,
+                        lastVisited = wallNow
+                    )
+                    websiteStatsDao.insertIfAbsent(entity)
+                    Log.d("saving session", entity.toString())
+                    websiteStatsDao.addTime(
+                        slice.date,
+                        packageName,
+                        identifier,
+                        slice.hour,
+                        slice.durationMs,
+                        wallNow
+                    )
+                }
             } catch (e: Exception) {
                 Log.e("WebsiteUsageTracker", "Failed to save website trace", e)
             }

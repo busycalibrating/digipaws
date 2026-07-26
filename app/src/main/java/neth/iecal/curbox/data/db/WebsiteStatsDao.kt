@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -23,6 +24,9 @@ interface WebsiteStatsDao {
     @Query("SELECT * FROM website_stats WHERE date = :date AND packageName = :packageName")
     suspend fun getStatsForPackage(date: String, packageName: String): List<WebsiteStatsEntity>
 
+    @Query("SELECT * FROM website_stats WHERE date IN (:dates)")
+    suspend fun getStatsForDates(dates: List<String>): List<WebsiteStatsEntity>
+
     @Upsert
     suspend fun upsert(entity: WebsiteStatsEntity)
 
@@ -31,9 +35,46 @@ interface WebsiteStatsDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIfAbsent(entity: WebsiteStatsEntity)
 
-    // Atomic increment so concurrent commits never clobber each other's additions.
-    @Query("UPDATE website_stats SET totalTime = totalTime + :deltaMs, lastVisited = :lastVisited WHERE date = :date AND packageName = :packageName AND urlIdentifier = :urlIdentifier")
-    suspend fun addTime(date: String, packageName: String, urlIdentifier: String, deltaMs: Long, lastVisited: Long)
+    @Query("SELECT hourlyUsage FROM website_stats WHERE date = :date AND packageName = :packageName AND urlIdentifier = :urlIdentifier")
+    suspend fun getHourlyUsage(
+        date: String,
+        packageName: String,
+        urlIdentifier: String
+    ): ByteArray?
+
+    @Query("UPDATE website_stats SET totalTime = totalTime + :deltaMs, hourlyUsage = :hourlyUsage, lastVisited = :lastVisited WHERE date = :date AND packageName = :packageName AND urlIdentifier = :urlIdentifier")
+    suspend fun addTimeAndHourlyUsage(
+        date: String,
+        packageName: String,
+        urlIdentifier: String,
+        deltaMs: Long,
+        hourlyUsage: ByteArray,
+        lastVisited: Long
+    )
+
+    @Transaction
+    suspend fun addTime(
+        date: String,
+        packageName: String,
+        urlIdentifier: String,
+        hour: Int,
+        deltaMs: Long,
+        lastVisited: Long
+    ) {
+        val buckets = WebsiteHourlyUsageCodec.decode(getHourlyUsage(date, packageName, urlIdentifier))
+        buckets[hour.coerceIn(0, 23)] =
+            (buckets[hour.coerceIn(0, 23)].toLong() + deltaMs)
+                .coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt()
+        addTimeAndHourlyUsage(
+            date,
+            packageName,
+            urlIdentifier,
+            deltaMs,
+            WebsiteHourlyUsageCodec.encode(buckets),
+            lastVisited
+        )
+    }
 
     @Query("UPDATE website_stats SET lastVisited = :lastVisited WHERE date = :date AND packageName = :packageName AND urlIdentifier = :urlIdentifier")
     suspend fun touch(date: String, packageName: String, urlIdentifier: String, lastVisited: Long)

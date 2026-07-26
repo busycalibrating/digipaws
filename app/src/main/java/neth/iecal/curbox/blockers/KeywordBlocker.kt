@@ -37,7 +37,10 @@ import neth.iecal.curbox.ui.activity.WarningActivity
 import neth.iecal.curbox.utils.KeywordMatcher
 import neth.iecal.curbox.utils.TimerNotification
 import neth.iecal.curbox.utils.TimeTools
+import neth.iecal.curbox.utils.WebsiteUsageWindow
 import neth.iecal.curbox.utils.activeWindow
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -171,7 +174,16 @@ class KeywordBlocker : BaseBlocker() {
 
     private fun markSnapshotAsObserved(snapshot: WebsiteStatsEntity): Boolean =
         synchronized(observationGuard) {
-            if (lastObservedSnapshot == snapshot) {
+            val previous = lastObservedSnapshot
+            if (previous != null &&
+                previous.date == snapshot.date &&
+                previous.packageName == snapshot.packageName &&
+                previous.urlIdentifier == snapshot.urlIdentifier &&
+                previous.domain == snapshot.domain &&
+                previous.totalTime == snapshot.totalTime &&
+                previous.lastVisited == snapshot.lastVisited &&
+                previous.hourlyUsage.contentEquals(snapshot.hourlyUsage)
+            ) {
                 false
             } else {
                 lastObservedSnapshot = snapshot
@@ -304,18 +316,34 @@ class KeywordBlocker : BaseBlocker() {
 
         if (limit <= 0) return true
 
-        return groupUsage(group) >= limit
+        return groupUsage(group, linkedSchedules[group.id]?.activeWindow()) >= limit
     }
 
     // Combined usage of every keyword in the group across all browsers, so the
     // limit applies to the group as a whole rather than each browser separately.
-    private fun groupUsage(group: KeywordGroup): Long {
-        val date = TimeTools.getCurrentDate()
+    private fun groupUsage(
+        group: KeywordGroup,
+        window: neth.iecal.curbox.utils.ActiveTimeGroupWindow? = null
+    ): Long {
         return runBlocking(Dispatchers.IO) {
-            AppDatabase.getInstance(service).websiteStatsDao()
-                .getStatsForDate(date)
-                .filter { matchesGroup(group, it.urlIdentifier) }
-                .sumOf { it.totalTime }
+            val dao = AppDatabase.getInstance(service).websiteStatsDao()
+            val rows = if (window == null) {
+                dao.getStatsForDate(TimeTools.getCurrentDate())
+            } else {
+                val zone = ZoneId.systemDefault()
+                val startDate = Instant.ofEpochMilli(window.startMs).atZone(zone).toLocalDate()
+                val endDate = Instant.ofEpochMilli(window.endMs).atZone(zone).toLocalDate()
+                val dates = buildList {
+                    var date = startDate
+                    while (!date.isAfter(endDate)) {
+                        add(TimeTools.dayKey(date))
+                        date = date.plusDays(1)
+                    }
+                }
+                dao.getStatsForDates(dates)
+            }.filter { matchesGroup(group, it.urlIdentifier) }
+            if (window == null) rows.sumOf { it.totalTime }
+            else WebsiteUsageWindow.sum(rows, window.startMs, window.endMs)
         }
     }
 
@@ -333,7 +361,7 @@ class KeywordBlocker : BaseBlocker() {
                     config.dailyLimits[Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1]
                 }) * 60_000L
                 if (limit > 0 && (linkedSchedules[group.id] == null || linkedWindow != null)) {
-                    val remaining = limit - groupUsage(group)
+                    val remaining = limit - groupUsage(group, linkedWindow)
                     if (remaining > 0) nextRecheck = now + remaining + 1000
                 }
                 linkedWindow?.let {
