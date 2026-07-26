@@ -133,7 +133,7 @@ class KeywordBlocker : BaseBlocker() {
 
     fun checkIfUnsupportedBrowser(event: AccessibilityEvent?) {
         val ev = event ?: return
-        val packageName = ev.packageName?.toString() ?: return
+        if (ev.packageName == null) return
         if ((ev.eventType and TARGET_EVENTS_MASK) == 0) return
         if (isUnsupportedBrowserBlockingOn && ::browserBlocker.isInitialized && browserBlocker.isAppBrowser(ev)) {
             if (!service.isDelayOver(1000)) return
