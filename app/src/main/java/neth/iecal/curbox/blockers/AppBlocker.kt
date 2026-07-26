@@ -442,6 +442,8 @@ class AppBlocker() : BaseBlocker() {
         )
         val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
         val previousDay = (dayOfWeek + 6) % 7
+        val millisIntoMinute =
+            calendar.get(Calendar.SECOND) * 1_000L + calendar.get(Calendar.MILLISECOND)
 
         Log.d("day of week", dayOfWeek.toString())
         val intervals = if (config.isEveryday) config.everydayIntervals else config.dailyIntervals[dayOfWeek] ?: emptyList()
@@ -458,12 +460,14 @@ class AppBlocker() : BaseBlocker() {
             if (startMinutes <= endMinutes) {
                 if (currentMinutes in startMinutes until endMinutes) {
                     val remainingMins = endMinutes - currentMinutes
-                    return System.currentTimeMillis() + (remainingMins * 60_000L)
+                    return System.currentTimeMillis() +
+                        (remainingMins * 60_000L) - millisIntoMinute
                 }
             } else {
                 if (currentMinutes >= startMinutes) {
                     val remainingMins = (1440 - currentMinutes) + endMinutes
-                    return System.currentTimeMillis() + (remainingMins * 60_000L)
+                    return System.currentTimeMillis() +
+                        (remainingMins * 60_000L) - millisIntoMinute
                 }
             }
         }
@@ -477,7 +481,8 @@ class AppBlocker() : BaseBlocker() {
                 interval.endMinute
             )
             if (startMinutes > endMinutes && currentMinutes < endMinutes) {
-                return System.currentTimeMillis() + ((endMinutes - currentMinutes) * 60_000L)
+                return System.currentTimeMillis() +
+                    ((endMinutes - currentMinutes) * 60_000L) - millisIntoMinute
             }
         }
         return null
