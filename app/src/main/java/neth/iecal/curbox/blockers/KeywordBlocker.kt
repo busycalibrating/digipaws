@@ -67,7 +67,6 @@ class KeywordBlocker : BaseBlocker() {
     private val detectionCache = LruCache<String, List<KeywordGroup>>(200)
     private var isTurnedOn = false
     private var isUnsupportedBrowserBlockingOn = false
-    private var lastpkg = ""
     private var cooldownGroupsList = ConcurrentHashMap<String, Long>()
     private lateinit var notificationManager: TimerNotification
     private var notifiedCooldownGroupId: String? = null
@@ -135,8 +134,7 @@ class KeywordBlocker : BaseBlocker() {
     fun checkIfUnsupportedBrowser(event: AccessibilityEvent?) {
         val ev = event ?: return
         val packageName = ev.packageName?.toString() ?: return
-        if (lastpkg == packageName || (ev.eventType and TARGET_EVENTS_MASK) == 0) return
-        lastpkg = packageName
+        if ((ev.eventType and TARGET_EVENTS_MASK) == 0) return
         if (isUnsupportedBrowserBlockingOn && ::browserBlocker.isInitialized && browserBlocker.isAppBrowser(ev)) {
             if (!service.isDelayOver(1000)) return
             Handler(Looper.getMainLooper()).post {
@@ -487,6 +485,16 @@ class KeywordBlocker : BaseBlocker() {
                 if (isTurnedOn) {
                     startObservingDatabase()
                     showNextCooldownNotification()
+                    Handler(Looper.getMainLooper()).post {
+                        val currentPackage =
+                            service.rootInActiveWindow?.packageName?.toString() ?: return@post
+                        val event = AccessibilityEvent.obtain(
+                            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                        )
+                        event.packageName = currentPackage
+                        checkIfUnsupportedBrowser(event)
+                        event.recycle()
+                    }
                 } else {
                     observationJob?.cancel()
                     observationJob = null
