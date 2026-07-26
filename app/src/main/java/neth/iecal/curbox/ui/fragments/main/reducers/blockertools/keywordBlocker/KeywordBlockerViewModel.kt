@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +18,6 @@ import neth.iecal.curbox.utils.KeywordMatcher
 import neth.iecal.curbox.utils.TimeTools
 import neth.iecal.curbox.utils.WebsiteUsageWindow
 import neth.iecal.curbox.utils.activeWindow
-import neth.iecal.curbox.data.models.AppBlockingType
 import neth.iecal.curbox.data.models.AppUsageConfig
 import neth.iecal.curbox.data.models.AppTimeConfig
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
@@ -34,54 +32,35 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
     val temporaryDisableAvailable: StateFlow<Boolean> = _temporaryDisableAvailable
 
     var currentUsageConfig = AppUsageConfig()
-    var currentTimeConfig = AppTimeConfig()
+    var currentTimeConfig = AppTimeConfig.allDay()
     var warningScrnConfig = AppBlockerWarningScreenConfig()
 
     /**
-     * Time left today before this group hits its usage limit, in millis.
-     * Returns null for groups that are not usage based. Usage is the combined
-     * total of every keyword in the group across all browsers.
+     * Time left in the current schedule before this group hits its usage limit.
+     * Usage is combined across every keyword in the group and every browser.
      */
     suspend fun getRemainingUsageMillis(group: KeywordGroup): Long? {
-        if (group.blockingType != AppBlockingType.Usage) return null
-        val config = runCatching {
-            Gson().fromJson(group.setting, AppUsageConfig::class.java)
-        }.getOrNull() ?: return null
+        val config = group.config ?: return null
+        val window = config.schedule.activeWindow() ?: return null
 
-        val limitMillis = limitForToday(config) * 60_000L
+        val limitMillis = limitForToday(config.usage) * 60_000L
         val patterns = KeywordMatcher.compileKeywords(group.selectedKeywords)
-        val linkedWindow = group.linkedTimeGroupId
-            ?.let { linkedId ->
-                keywordBlockerConfig.value.keywordGroups.find { it.id == linkedId }
-            }
-            ?.takeIf { it.isActive && it.blockingType == AppBlockingType.Timed }
-            ?.let {
-                runCatching {
-                    Gson().fromJson(it.setting, AppTimeConfig::class.java)
-                }.getOrNull()
-            }
-            ?.activeWindow()
-        if (group.linkedTimeGroupId != null && linkedWindow == null) return 0L
         val used = withContext(Dispatchers.IO) {
             val dao = AppDatabase.getInstance(getApplication()).websiteStatsDao()
-            val rows = if (group.linkedTimeGroupId == null || linkedWindow == null) {
-                dao.getStatsForDate(TimeTools.getCurrentDate())
-            } else {
-                val startDate = java.time.Instant.ofEpochMilli(linkedWindow.startMs)
-                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                val endDate = java.time.Instant.ofEpochMilli(linkedWindow.endMs)
-                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                val dates = buildList {
-                    var date = startDate
-                    while (!date.isAfter(endDate)) {
-                        add(TimeTools.dayKey(date))
-                        date = date.plusDays(1)
-                    }
+            val startDate = java.time.Instant.ofEpochMilli(window.startMs)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            val endDate = java.time.Instant.ofEpochMilli(window.endMs)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            val dates = buildList {
+                var date = startDate
+                while (!date.isAfter(endDate)) {
+                    add(TimeTools.dayKey(date))
+                    date = date.plusDays(1)
                 }
-                dao.getStatsForDates(dates)
-            }.filter { KeywordMatcher.matchesPatterns(patterns, it.urlIdentifier) }
-            if (group.linkedTimeGroupId == null || linkedWindow == null) rows.sumOf { it.totalTime }
-            else WebsiteUsageWindow.sum(rows, linkedWindow.startMs, linkedWindow.endMs)
+            }
+            val rows = dao.getStatsForDates(dates)
+                .filter { KeywordMatcher.matchesPatterns(patterns, it.urlIdentifier) }
+            WebsiteUsageWindow.sum(rows, window.startMs, window.endMs)
         }
         return (limitMillis - used).coerceAtLeast(0L)
     }
@@ -143,9 +122,6 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
         updateConfig { config ->
             val groups = config.keywordGroups.toMutableList()
             groups.removeAll { it.id == groupId }
-            groups.replaceAll {
-                if (it.linkedTimeGroupId == groupId) it.copy(linkedTimeGroupId = null) else it
-            }
             config.copy(keywordGroups = groups)
         }
     }

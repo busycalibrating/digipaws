@@ -27,18 +27,19 @@ import neth.iecal.curbox.Constants
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.db.AppDatabase
 import neth.iecal.curbox.data.db.WebsiteStatsEntity
-import neth.iecal.curbox.data.models.AppBlockingType
-import neth.iecal.curbox.data.models.AppTimeConfig
 import neth.iecal.curbox.data.models.AppUsageConfig
 import neth.iecal.curbox.data.models.FocusBlockMode
 import neth.iecal.curbox.data.models.KeywordGroup
+import neth.iecal.curbox.data.models.upgradeLegacyKeywordGroupConfigs
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.ui.activity.WarningActivity
+import neth.iecal.curbox.utils.ActiveTimeGroupWindow
 import neth.iecal.curbox.utils.KeywordMatcher
 import neth.iecal.curbox.utils.TimerNotification
 import neth.iecal.curbox.utils.TimeTools
 import neth.iecal.curbox.utils.WebsiteUsageWindow
 import neth.iecal.curbox.utils.activeWindow
+import neth.iecal.curbox.utils.nextChangeAfter
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Calendar
@@ -60,7 +61,6 @@ class KeywordBlocker : BaseBlocker() {
     private lateinit var prefs: SharedPreferences
 
     private var activeGroups = listOf<KeywordGroup>()
-    private var linkedSchedules = emptyMap<String, AppTimeConfig>()
     // Maps group ID → (compiled regexes, lowercase literal keywords)
     private var groupPatternMap = mutableMapOf<String, Pair<List<Regex>, List<String>>>()
 
@@ -203,26 +203,9 @@ class KeywordBlocker : BaseBlocker() {
             true
         }
 
-        // Timed groups and linked usage groups for the same target form a union of windows.
-        // When one window is active, other inactive schedules cannot override it.
-        val scheduled = eligible.filter {
-            it.blockingType == AppBlockingType.Timed || it.linkedTimeGroupId != null
-        }
-        val activeScheduled = scheduled.filter { group ->
-            if (group.blockingType == AppBlockingType.Timed) !isTimedBlockActive(group)
-            else linkedSchedules[group.id]?.activeWindow(now) != null
-        }
-
-        if (scheduled.isNotEmpty() && activeScheduled.isEmpty()) {
-            val group = scheduled.first()
-            if (claimBlock(entry, group.id)) handleBlocking(group)
-            return
-        }
-
         for (group in eligible) {
-            val shouldEvaluateUsage = group.blockingType == AppBlockingType.Usage &&
-                (group.linkedTimeGroupId == null || group in activeScheduled)
-            if (shouldEvaluateUsage && isUsageLimitExceeded(group)) {
+            val window = group.config?.schedule?.activeWindow(now) ?: continue
+            if (isUsageLimitExceeded(group, window)) {
                 if (!claimBlock(entry, group.id)) return
                 handleBlocking(group)
                 return
@@ -232,7 +215,6 @@ class KeywordBlocker : BaseBlocker() {
         // None blocked → schedule the soonest re-check across the matched groups
         var soonest = 0L
         for (group in eligible) {
-            if (group.linkedTimeGroupId != null && group !in activeScheduled) continue
             val recheck = computeNextRecheck(group)
             if (recheck > now && (soonest == 0L || recheck < soonest)) soonest = recheck
         }
@@ -277,81 +259,36 @@ class KeywordBlocker : BaseBlocker() {
         }, 300)
     }
 
-    private fun isBlocked(group: KeywordGroup): Boolean =
-        if (group.blockingType == AppBlockingType.Timed) {
-            isTimedBlockActive(group)
-        } else {
-            val schedule = linkedSchedules[group.id]
-            if (group.linkedTimeGroupId != null && schedule?.activeWindow() == null) true
-            else isUsageLimitExceeded(group)
-        }
-
-    // Intervals describe the ALLOWED time. Keywords are blocked whenever the
-    // current time falls outside every allowed interval (matching the app blocker).
-    private fun isTimedBlockActive(group: KeywordGroup): Boolean {
-        val config = Gson().fromJson(group.setting, AppTimeConfig::class.java) ?: return false
-        val calendar = Calendar.getInstance()
-        val currentMinutes = TimeTools.convertToMinutesFromMidnight(
-            calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE)
-        )
-        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
-        val previousDay = (dayOfWeek + 6) % 7
-        val intervals = if (config.isEveryday) config.everydayIntervals
-                        else config.dailyIntervals[dayOfWeek] ?: emptyList()
-        val previousIntervals = if (config.isEveryday) config.everydayIntervals
-                                else config.dailyIntervals[previousDay] ?: emptyList()
-
-        for (interval in intervals) {
-            val start = TimeTools.convertToMinutesFromMidnight(interval.startHour, interval.startMinute)
-            val end = TimeTools.convertToMinutesFromMidnight(interval.endHour, interval.endMinute)
-            val withinAllowed = if (start <= end) currentMinutes in start until end
-                                else currentMinutes >= start
-            if (withinAllowed) return false
-        }
-        for (interval in previousIntervals) {
-            val start = TimeTools.convertToMinutesFromMidnight(interval.startHour, interval.startMinute)
-            val end = TimeTools.convertToMinutesFromMidnight(interval.endHour, interval.endMinute)
-            if (start > end && currentMinutes < end) return false
-        }
-        return true
-    }
-
-    private fun isUsageLimitExceeded(group: KeywordGroup): Boolean {
-        val config = Gson().fromJson(group.setting, AppUsageConfig::class.java) ?: return false
-        val limit = (if (config.isDailyUniform) config.uniformLimit else {
-            config.dailyLimits[Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1]
-        }) * 60_000L
-
-        if (limit <= 0) return true
-
-        return groupUsage(group, linkedSchedules[group.id]?.activeWindow()) >= limit
+    private fun isUsageLimitExceeded(
+        group: KeywordGroup,
+        window: ActiveTimeGroupWindow
+    ): Boolean {
+        val usage = group.config?.usage ?: return false
+        val limit = limitForToday(usage) * 60_000L
+        return limit <= 0 || groupUsage(group, window) >= limit
     }
 
     // Combined usage of every keyword in the group across all browsers, so the
     // limit applies to the group as a whole rather than each browser separately.
     private fun groupUsage(
         group: KeywordGroup,
-        window: neth.iecal.curbox.utils.ActiveTimeGroupWindow? = null
+        window: ActiveTimeGroupWindow
     ): Long {
         return runBlocking(Dispatchers.IO) {
             val dao = AppDatabase.getInstance(service).websiteStatsDao()
-            val rows = if (window == null) {
-                dao.getStatsForDate(TimeTools.getCurrentDate())
-            } else {
-                val zone = ZoneId.systemDefault()
-                val startDate = Instant.ofEpochMilli(window.startMs).atZone(zone).toLocalDate()
-                val endDate = Instant.ofEpochMilli(window.endMs).atZone(zone).toLocalDate()
-                val dates = buildList {
-                    var date = startDate
-                    while (!date.isAfter(endDate)) {
-                        add(TimeTools.dayKey(date))
-                        date = date.plusDays(1)
-                    }
+            val zone = ZoneId.systemDefault()
+            val startDate = Instant.ofEpochMilli(window.startMs).atZone(zone).toLocalDate()
+            val endDate = Instant.ofEpochMilli(window.endMs).atZone(zone).toLocalDate()
+            val dates = buildList {
+                var date = startDate
+                while (!date.isAfter(endDate)) {
+                    add(TimeTools.dayKey(date))
+                    date = date.plusDays(1)
                 }
-                dao.getStatsForDates(dates)
-            }.filter { matchesGroup(group, it.urlIdentifier) }
-            if (window == null) rows.sumOf { it.totalTime }
-            else WebsiteUsageWindow.sum(rows, window.startMs, window.endMs)
+            }
+            val rows = dao.getStatsForDates(dates)
+                .filter { matchesGroup(group, it.urlIdentifier) }
+            WebsiteUsageWindow.sum(rows, window.startMs, window.endMs)
         }
     }
 
@@ -359,69 +296,19 @@ class KeywordBlocker : BaseBlocker() {
     // responsible for persisting the soonest value across all matched groups.
     private fun computeNextRecheck(group: KeywordGroup): Long {
         val now = System.currentTimeMillis()
-        var nextRecheck = 0L
+        val config = group.config ?: return 0L
+        var nextRecheck = config.schedule.nextChangeAfter(now) ?: 0L
 
-        if (group.blockingType == AppBlockingType.Usage) {
-            val config = Gson().fromJson(group.setting, AppUsageConfig::class.java)
-            if (config != null) {
-                val linkedWindow = linkedSchedules[group.id]?.activeWindow(now)
-                val limit = (if (config.isDailyUniform) config.uniformLimit else {
-                    config.dailyLimits[Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1]
-                }) * 60_000L
-                if (limit > 0 && (linkedSchedules[group.id] == null || linkedWindow != null)) {
-                    val remaining = limit - groupUsage(group, linkedWindow)
-                    if (remaining > 0) nextRecheck = now + remaining + 1000
-                }
-                linkedWindow?.let {
-                    if (nextRecheck == 0L || it.endMs < nextRecheck) nextRecheck = it.endMs
-                }
-            }
-        }
-
-        if (group.blockingType == AppBlockingType.Timed) {
-            val config = Gson().fromJson(group.setting, AppTimeConfig::class.java)
-            if (config != null) {
-                val calendar = Calendar.getInstance()
-                val currentMinutes = TimeTools.convertToMinutesFromMidnight(
-                    calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE)
-                )
-                val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
-                val previousDay = (dayOfWeek + 6) % 7
-                val intervals = if (config.isEveryday) config.everydayIntervals
-                                else config.dailyIntervals[dayOfWeek] ?: emptyList()
-                val previousIntervals = if (config.isEveryday) config.everydayIntervals
-                                        else config.dailyIntervals[previousDay] ?: emptyList()
-
-                // We are inside an allowed window; re-check when it ends so the block kicks in.
-                var minMinutesUntilEnd = Int.MAX_VALUE
-                for (interval in intervals) {
-                    val start = TimeTools.convertToMinutesFromMidnight(interval.startHour, interval.startMinute)
-                    val end = TimeTools.convertToMinutesFromMidnight(interval.endHour, interval.endMinute)
-                    val withinAllowed = if (start <= end) currentMinutes in start until end
-                                        else currentMinutes >= start
-                    if (withinAllowed) {
-                        val minutesUntilEnd = if (start <= end) end - currentMinutes
-                                              else (1440 - currentMinutes) + end
-                        minMinutesUntilEnd = minOf(minMinutesUntilEnd, minutesUntilEnd)
+        val window = config.schedule.activeWindow(now)
+        if (window != null) {
+            val limit = limitForToday(config.usage) * 60_000L
+            if (limit > 0) {
+                val remaining = limit - groupUsage(group, window)
+                if (remaining > 0) {
+                    val usageLimitAt = now + remaining + 1_000L
+                    if (nextRecheck == 0L || usageLimitAt < nextRecheck) {
+                        nextRecheck = usageLimitAt
                     }
-                }
-                for (interval in previousIntervals) {
-                    val start = TimeTools.convertToMinutesFromMidnight(
-                        interval.startHour,
-                        interval.startMinute
-                    )
-                    val end = TimeTools.convertToMinutesFromMidnight(
-                        interval.endHour,
-                        interval.endMinute
-                    )
-                    if (start > end && currentMinutes < end) {
-                        minMinutesUntilEnd = minOf(minMinutesUntilEnd, end - currentMinutes)
-                    }
-                }
-                if (minMinutesUntilEnd != Int.MAX_VALUE) {
-                    val recheckAt = now + (minMinutesUntilEnd * 60_000L) -
-                        (calendar.get(Calendar.SECOND) * 1000L) - calendar.get(Calendar.MILLISECOND)
-                    if (nextRecheck == 0L || recheckAt < nextRecheck) nextRecheck = recheckAt
                 }
             }
         }
@@ -433,6 +320,13 @@ class KeywordBlocker : BaseBlocker() {
 
         return nextRecheck
     }
+
+    private fun limitForToday(config: AppUsageConfig): Long =
+        if (config.isDailyUniform) {
+            config.uniformLimit
+        } else {
+            config.dailyLimits[Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1]
+        }
 
     private var configJob: Job? = null
 
@@ -450,33 +344,17 @@ class KeywordBlocker : BaseBlocker() {
         configJob?.cancel()
         configJob = CoroutineScope(Dispatchers.IO).launch {
             service.dataStoreManager.settings.collectLatest { settings ->
-                isTurnedOn = settings.keywordBlockerConfig.isActive
-                isUnsupportedBrowserBlockingOn = settings.keywordBlockerConfig.blockAllExceptSupported
+                val keywordConfig =
+                    settings.keywordBlockerConfig.upgradeLegacyKeywordGroupConfigs()
+                isTurnedOn = keywordConfig.isActive
+                isUnsupportedBrowserBlockingOn = keywordConfig.blockAllExceptSupported
                 browserBlocker.isTurnedOn = isTurnedOn
 
-                val allEnabledGroups = settings.keywordBlockerConfig.keywordGroups.filter { it.isActive }
-                val groupsById = allEnabledGroups.associateBy { it.id }
-                val linkedTimedGroupIds = allEnabledGroups
-                    .filter { it.blockingType == AppBlockingType.Usage }
-                    .mapNotNull { it.linkedTimeGroupId }
-                    .toSet()
                 activeGroups = if (isTurnedOn) {
-                    allEnabledGroups.filterNot {
-                        it.blockingType == AppBlockingType.Timed && it.id in linkedTimedGroupIds
-                    }
-                } else emptyList()
-                linkedSchedules = if (isTurnedOn) {
-                    activeGroups
-                        .filter { it.blockingType == AppBlockingType.Usage }
-                        .mapNotNull { usageGroup ->
-                            val timed = usageGroup.linkedTimeGroupId?.let(groupsById::get)
-                                ?.takeIf { it.blockingType == AppBlockingType.Timed }
-                                ?: return@mapNotNull null
-                            runCatching {
-                                usageGroup.id to Gson().fromJson(timed.setting, AppTimeConfig::class.java)
-                            }.getOrNull()
-                        }.toMap()
-                } else emptyMap()
+                    keywordConfig.keywordGroups.filter { it.isActive }
+                } else {
+                    emptyList()
+                }
 
                 groupPatternMap = activeGroups.associate { group ->
                     group.id to compileKeywords(group.selectedKeywords)

@@ -20,7 +20,6 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import neth.iecal.curbox.R
-import neth.iecal.curbox.data.models.AppBlockingType
 import neth.iecal.curbox.data.models.KeywordGroup
 import neth.iecal.curbox.databinding.FragmentKeywordBlockerBinding
 import neth.iecal.curbox.ui.activity.FragmentActivity
@@ -129,8 +128,8 @@ class KeywordBlockerFragment : Fragment() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val group = getItem(position)
             holder.tvName.text = group.name
-            val typeText = getString(if (group.blockingType == AppBlockingType.Usage) R.string.group_type_usage_based else R.string.group_type_time_based)
-            holder.tvDetails.text = getString(R.string.group_details_keywords, group.selectedKeywords.size, typeText)
+            holder.tvDetails.text =
+                getString(R.string.group_details_keywords_only, group.selectedKeywords.size)
 
             holder.tvRemaining.visibility = View.GONE
             holder.tvRemaining.tag = group.id
@@ -154,8 +153,14 @@ class KeywordBlockerFragment : Fragment() {
                     if (remaining == null) {
                         holder.tvRemaining.visibility = View.GONE
                     } else {
-                        holder.tvRemaining.text = if (remaining <= 0L) "No time left today"
-                            else "${TimeTools.formatTimeForWidget(remaining)} left today"
+                        holder.tvRemaining.text = if (remaining <= 0L) {
+                            getString(R.string.group_no_usage_left)
+                        } else {
+                            getString(
+                                R.string.group_usage_left,
+                                TimeTools.formatTimeForWidget(remaining)
+                            )
+                        }
                         holder.tvRemaining.visibility = View.VISIBLE
                     }
                 }

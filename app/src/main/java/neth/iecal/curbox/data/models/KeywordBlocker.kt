@@ -10,11 +10,15 @@ data class KeywordGroup(
     val id: String = "",
     val name: String = "name",
     val selectedKeywords: List<String> = listOf(),
-    val blockingType: AppBlockingType = AppBlockingType.Usage,
+    val config: ScheduledUsageConfig? = null,
     val isActive: Boolean = false,
     val temporarilyDisabledUntilMs: Long = 0L,
+    val warningScreenConfig: AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig(),
+    // Kept only so settings written by older versions can be migrated.
+    @Deprecated("Use config")
+    val blockingType: AppBlockingType = AppBlockingType.Usage,
+    @Deprecated("Use config")
     val setting: String = "",
-    /** Optional timed group that defines when this usage allowance is available. */
+    @Deprecated("Use config")
     val linkedTimeGroupId: String? = null,
-    val warningScreenConfig: AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig()
 )

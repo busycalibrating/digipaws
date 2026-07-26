@@ -27,7 +27,7 @@ fun List<AppGroup>.upgradeLegacyAppGroupConfigs(gson: Gson = Gson()): List<AppGr
             AppBlockingType.Timed -> AppGroupConfig(
                 schedule = (
                     gson.fromJsonOrNull<AppTimeConfig>(group.setting) ?: AppTimeConfig()
-                ).inverse(),
+                ).inverseForLegacyTimedGroup(),
                 usage = AppUsageConfig(uniformLimit = 0)
             )
             AppBlockingType.OnOpen -> AppGroupConfig(
@@ -67,10 +67,10 @@ private fun upgradeUsageGroup(
     )
 }
 
-private inline fun <reified T> Gson.fromJsonOrNull(json: String): T? =
+internal inline fun <reified T> Gson.fromJsonOrNull(json: String): T? =
     runCatching { fromJson<T>(json, T::class.java) }.getOrNull()
 
-private fun AppTimeConfig.inverse(): AppTimeConfig {
+internal fun AppTimeConfig.inverseForLegacyTimedGroup(): AppTimeConfig {
     val allowedMinutes = Array(7) { BooleanArray(24 * 60) }
 
     fun intervalsFor(day: Int): List<TimeInterval> =

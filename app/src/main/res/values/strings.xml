@@ -1378,6 +1378,7 @@
     <string name="group_type_usage_based">Usage Based</string>
     <string name="group_details_apps">%1$d Apps • %2$s</string>
     <string name="group_details_keywords">%1$d Keywords • %2$s</string>
+    <string name="group_details_keywords_only">%1$d Keywords</string>
     <string name="group_details_apps_only">%1$d Apps</string>
     <string name="group_no_usage_left">No time left in this schedule</string>
     <string name="group_usage_left">%1$s left in this schedule</string>

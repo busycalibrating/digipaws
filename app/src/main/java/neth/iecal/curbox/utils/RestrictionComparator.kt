@@ -107,10 +107,11 @@ object RestrictionComparator {
     private fun keywordGroup(o: KeywordGroup, n: KeywordGroup): Boolean {
         if (!n.isActive) return false
         if (!n.selectedKeywords.containsAll(o.selectedKeywords)) return false
-        if (n.blockingType != o.blockingType) return false
-        if (n.linkedTimeGroupId != o.linkedTimeGroupId) return false
         if (!warningConfig(o.warningScreenConfig, n.warningScreenConfig)) return false
-        return blockingSetting(o.blockingType, o.setting, n.setting)
+        val oldConfig = o.config ?: return false
+        val newConfig = n.config ?: return false
+        return appTimeCoverageSameOrWider(oldConfig.schedule, newConfig.schedule) &&
+            usageLimitSameOrLower(oldConfig.usage, newConfig.usage)
     }
 
     fun reelBlocker(old: ReelBlocker, new: ReelBlocker): Boolean {

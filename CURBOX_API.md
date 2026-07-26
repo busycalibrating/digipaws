@@ -179,7 +179,7 @@ Use the group lists to find the `id` you pass back as `target` in `execute`.
 | --- | --- |
 | `FOCUS_GROUPS` | `id`, `name`, `apps`, `websites`, `blockMode`, `exitable`, `autoTurnOnDnd` |
 | `APP_BLOCKER_GROUPS` | `id`, `name`, `isActive`, `apps` |
-| `KEYWORD_GROUPS` | `id`, `name`, `isActive`, `blockingType`, `keywords` |
+| `KEYWORD_GROUPS` | `id`, `name`, `isActive`, `keywords` |
 | `GRAYSCALE_GROUPS` | `id`, `name`, `isActive`, `apps` |
 | `AUTO_DND_GROUPS` | `id`, `name`, `autoTurnOnDnd` |
 | `UI_HIDER_SCRIPTS` | `id`, `label`, `packageName`, `isEnabled` |
@@ -230,5 +230,4 @@ The `:apitester` module is a runnable app that drives every call in this doc, in
 ./gradlew :app:installAndGrantAccessibilityFdroidDebug :apitester:installDebug
 adb shell am start -n neth.iecal.curbox.apitester/.MainActivity
 ```
-
 

@@ -228,7 +228,6 @@ object CurboxApiCommands {
                     "id" to g.id,
                     "name" to g.name,
                     "isActive" to g.isActive,
-                    "blockingType" to g.blockingType.name,
                     "keywords" to g.selectedKeywords.size
                 )
             }

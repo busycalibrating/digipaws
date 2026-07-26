@@ -22,10 +22,12 @@ enum class AppBlockingType{
     Usage, Timed, OnOpen
 }
 
-data class AppGroupConfig(
+data class ScheduledUsageConfig(
     val schedule: AppTimeConfig = AppTimeConfig.allDay(),
     val usage: AppUsageConfig = AppUsageConfig()
 )
+
+typealias AppGroupConfig = ScheduledUsageConfig
 
 data class AppTimeConfig(
     var isEveryday: Boolean = true,
