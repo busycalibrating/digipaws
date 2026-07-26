@@ -1,17 +1,15 @@
 package neth.iecal.curbox.blockers
 
-import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Context.RECEIVER_EXPORTED
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
@@ -209,17 +207,17 @@ class AppBlocker() : BaseBlocker() {
         lastPackage = packageName
     }
 
-    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     fun setupReceivers() {
         val filter = IntentFilter().apply {
             addAction(INTENT_ACTION_REFRESH_APP_BLOCKER)
             addAction(INTENT_ACTION_REFRESH_APP_BLOCKER_COOLDOWN)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            service.registerReceiver(refreshReceiver, filter, RECEIVER_EXPORTED)
-        } else {
-            service.registerReceiver(refreshReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            service,
+            refreshReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     fun onDestroy() {
