@@ -264,6 +264,8 @@ class KeywordBlocker : BaseBlocker() {
         service.pressHome()
         Thread.sleep(1000)
 
+        if (group.warningScreenConfig.isWarningDialogHidden) return
+
         Handler(Looper.getMainLooper()).postDelayed({
             val intent = Intent(service, WarningActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
