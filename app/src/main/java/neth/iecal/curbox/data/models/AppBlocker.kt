@@ -1,32 +1,44 @@
 package neth.iecal.curbox.data.models
 
-
 data class AppGroup(
     val id: String = "",
     val name: String = "name",
     val selectedPackages: List<String> = listOf(),
-    val blockingType: AppBlockingType = AppBlockingType.Usage, // "USAGE" or "TIME"
+    val config: AppGroupConfig? = null,
     val isActive: Boolean = false,
     /** Non-zero only while the group is using the opt-in temporary-disable escape hatch. */
     val temporarilyDisabledUntilMs: Long = 0L,
+    val warningScreenConfig : AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig(),
+    // Kept only so settings written by older versions can be migrated.
+    @Deprecated("Use config")
+    val blockingType: AppBlockingType = AppBlockingType.Usage, // "USAGE" or "TIME"
+    @Deprecated("Use config")
     val setting:String = "",
-    /**
-     * For usage groups, optionally points at a timed group. The usage allowance is then scoped
-     * to that timed group's current allowed interval instead of the whole day.
-     */
+    @Deprecated("Use config")
     val linkedTimeGroupId: String? = null,
-    val warningScreenConfig : AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig()
 )
 
 enum class AppBlockingType{
     Usage, Timed, OnOpen
 }
 
+data class AppGroupConfig(
+    val schedule: AppTimeConfig = AppTimeConfig.allDay(),
+    val usage: AppUsageConfig = AppUsageConfig()
+)
+
 data class AppTimeConfig(
     var isEveryday: Boolean = true,
     var everydayIntervals: MutableList<TimeInterval> = mutableListOf(TimeInterval()),
     var dailyIntervals: MutableMap<Int, MutableList<TimeInterval>> = mutableMapOf()
-)
+) {
+    companion object {
+        fun allDay() = AppTimeConfig(
+            isEveryday = true,
+            everydayIntervals = mutableListOf(TimeInterval(0, 0, 24, 0))
+        )
+    }
+}
 
 
 data class AppUsageConfig(

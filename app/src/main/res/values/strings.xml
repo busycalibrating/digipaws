@@ -103,12 +103,18 @@
     <string name="view_and_share_application_crash_logs">View and share application crash logs to help improve Curbox.</string>
     <string name="view_crash_logs">View Crash Logs</string>
     <string name="group_name">Name</string>
+    <string name="group_name_required">Please enter a group name</string>
     <string name="desc_10_apps_usage_based">10 Apps • Usage Based</string>
     <string name="no_app_groups_yet_create_one">No App Groups yet. Create one!</string>
     <string name="create_group">Create Group</string>
     <string name="apps_to_block">APPS TO BLOCK</string>
     <string name="select_apps_0">Select Apps (0)</string>
     <string name="blocking_configuration">BLOCKING CONFIGURATION</string>
+    <string name="group_limits">GROUP LIMITS</string>
+    <string name="configure_group_schedule">Set Active Hours</string>
+    <string name="configure_group_usage">Set Available Usage</string>
+    <string name="select_start_time">Select Start Time</string>
+    <string name="select_end_time">Select End Time</string>
     <string name="usage_based">Usage Based</string>
     <string name="time_based">Time Based</string>
     <string name="configure_settings">Configure Allowed Schedule</string>
@@ -398,7 +404,7 @@
     <string name="btn_undo">UNDO</string>
     <string name="label_loading">Loading </string>
     <string name="warning_config_title">Warning Screen Configuration</string>
-    <string name="warning_config_desc">Set what happens if you try to access this outside its schedule.</string>
+    <string name="warning_config_desc">Set what happens when your limit is met.</string>
     <string name="label_fixed_unlock_duration">Fixed Unlock Duration: 5 mins</string>
     <string name="label_wait_before_unlocking">Wait before unlocking: 15s</string>
     <string name="label_wait_desc">Forces you to think before bypassing the block.</string>
@@ -1373,6 +1379,8 @@
     <string name="group_details_apps">%1$d Apps • %2$s</string>
     <string name="group_details_keywords">%1$d Keywords • %2$s</string>
     <string name="group_details_apps_only">%1$d Apps</string>
+    <string name="group_no_usage_left">No time left in this schedule</string>
+    <string name="group_usage_left">%1$s left in this schedule</string>
 
     <!-- Sync account -->
     <string name="account_sync_title">Sync across my devices</string>

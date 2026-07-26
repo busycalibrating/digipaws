@@ -178,7 +178,7 @@ Use the group lists to find the `id` you pass back as `target` in `execute`.
 | Kind | Each item |
 | --- | --- |
 | `FOCUS_GROUPS` | `id`, `name`, `apps`, `websites`, `blockMode`, `exitable`, `autoTurnOnDnd` |
-| `APP_BLOCKER_GROUPS` | `id`, `name`, `isActive`, `blockingType`, `apps` |
+| `APP_BLOCKER_GROUPS` | `id`, `name`, `isActive`, `apps` |
 | `KEYWORD_GROUPS` | `id`, `name`, `isActive`, `blockingType`, `keywords` |
 | `GRAYSCALE_GROUPS` | `id`, `name`, `isActive`, `apps` |
 | `AUTO_DND_GROUPS` | `id`, `name`, `autoTurnOnDnd` |

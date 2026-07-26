@@ -87,10 +87,11 @@ object RestrictionComparator {
     private fun appGroup(o: AppGroup, n: AppGroup): Boolean {
         if (!n.isActive) return false
         if (!n.selectedPackages.containsAll(o.selectedPackages)) return false
-        if (n.blockingType != o.blockingType) return false
-        if (n.linkedTimeGroupId != o.linkedTimeGroupId) return false
         if (!warningConfig(o.warningScreenConfig, n.warningScreenConfig)) return false
-        return blockingSetting(o.blockingType, o.setting, n.setting)
+        val oldConfig = o.config ?: return false
+        val newConfig = n.config ?: return false
+        return appTimeCoverageSameOrWider(oldConfig.schedule, newConfig.schedule) &&
+            usageLimitSameOrLower(oldConfig.usage, newConfig.usage)
     }
 
     fun keywordBlocker(old: KeywordBlocker, new: KeywordBlocker): Boolean {
@@ -181,9 +182,7 @@ object RestrictionComparator {
             AppBlockingType.Usage -> {
                 val o = parse<AppUsageConfig>(oldJson) ?: return false
                 val n = parse<AppUsageConfig>(newJson) ?: return false
-                val oldLimits = if (o.isDailyUniform) List(7) { o.uniformLimit } else o.dailyLimits.toList()
-                val newLimits = if (n.isDailyUniform) List(7) { n.uniformLimit } else n.dailyLimits.toList()
-                newLimits.indices.all { newLimits[it] <= oldLimits[it] }
+                usageLimitSameOrLower(o, n)
             }
             AppBlockingType.Timed -> {
                 val o = parse<AppTimeConfig>(oldJson) ?: return false
@@ -204,6 +203,14 @@ object RestrictionComparator {
             oldFor = { day -> if (old.isEveryday) old.everydayIntervals else old.dailyIntervals[day] ?: mutableListOf() },
             newFor = { day -> if (new.isEveryday) new.everydayIntervals else new.dailyIntervals[day] ?: mutableListOf() }
         )
+    }
+
+    private fun usageLimitSameOrLower(old: AppUsageConfig, new: AppUsageConfig): Boolean {
+        val oldLimits =
+            if (old.isDailyUniform) List(7) { old.uniformLimit } else old.dailyLimits.toList()
+        val newLimits =
+            if (new.isDailyUniform) List(7) { new.uniformLimit } else new.dailyLimits.toList()
+        return newLimits.indices.all { newLimits[it] <= oldLimits[it] }
     }
 
     private fun timeCoverageSameOrWider(

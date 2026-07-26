@@ -16,5 +16,5 @@ build/
 local.properties
 /test-code*
 .idea/
-CLAUDE.md
+agents.md
 AGENT.md

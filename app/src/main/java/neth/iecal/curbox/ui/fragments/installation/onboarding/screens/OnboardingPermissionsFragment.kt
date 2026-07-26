@@ -25,12 +25,12 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.gson.Gson
 import neth.iecal.curbox.R
 import neth.iecal.curbox.databinding.FragmentOnboardingPermissionsBinding
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
-import neth.iecal.curbox.data.models.AppBlockingType
 import neth.iecal.curbox.data.models.AppGroup
+import neth.iecal.curbox.data.models.AppGroupConfig
+import neth.iecal.curbox.data.models.AppTimeConfig
 import neth.iecal.curbox.data.models.AppUsageConfig
 import neth.iecal.curbox.services.AppBlockerService
 import neth.iecal.curbox.ui.activity.FragmentActivity
@@ -115,9 +115,11 @@ class OnboardingPermissionsFragment : Fragment() {
                     id = UUID.randomUUID().toString(),
                     name = getString(R.string.onboarding_app_limit_group_name, targetApp),
                     selectedPackages = listOf(pkg),
-                    blockingType = AppBlockingType.Usage,
+                    config = AppGroupConfig(
+                        schedule = AppTimeConfig.allDay(),
+                        usage = usageConfig
+                    ),
                     isActive = true,
-                    setting = Gson().toJson(usageConfig),
                     warningScreenConfig = AppBlockerWarningScreenConfig()
                 )
                 appBlockerViewModel.addGroup(newGroup)

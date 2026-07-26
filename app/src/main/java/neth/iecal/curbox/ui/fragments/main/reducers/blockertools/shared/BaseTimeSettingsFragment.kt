@@ -148,9 +148,11 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
 
     private fun showTimePicker(interval: TimeInterval, isStart: Boolean, list: MutableList<TimeInterval>, onComplete: () -> Unit) {
         val clockFormat = if (DateFormat.is24HourFormat(requireContext())) TimeFormat.CLOCK_24H else TimeFormat.CLOCK_12H
-        val hour = if (isStart) interval.startHour else interval.endHour
+        val hour = (if (isStart) interval.startHour else interval.endHour) % 24
         val minute = if (isStart) interval.startMinute else interval.endMinute
-        val title = if (isStart) "Select Start Time" else "Select End Time"
+        val title = getString(
+            if (isStart) R.string.select_start_time else R.string.select_end_time
+        )
         val picker = MaterialTimePicker.Builder()
             .setTimeFormat(clockFormat)
             .setHour(hour)
@@ -163,7 +165,8 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
                 interval.startHour = picker.hour
                 interval.startMinute = picker.minute
             } else {
-                interval.endHour = picker.hour
+                interval.endHour =
+                    if (picker.hour == 0 && picker.minute == 0) 24 else picker.hour
                 interval.endMinute = picker.minute
             }
             if (list.fixOvernightInterval(interval)) {

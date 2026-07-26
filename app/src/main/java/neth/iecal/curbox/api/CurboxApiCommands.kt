@@ -219,7 +219,6 @@ object CurboxApiCommands {
                     "id" to g.id,
                     "name" to g.name,
                     "isActive" to g.isActive,
-                    "blockingType" to g.blockingType.name,
                     "apps" to g.selectedPackages.size
                 )
             }

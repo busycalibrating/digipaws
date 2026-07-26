@@ -23,7 +23,6 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import neth.iecal.curbox.R
-import neth.iecal.curbox.data.models.AppBlockingType
 import neth.iecal.curbox.data.models.AppGroup
 import neth.iecal.curbox.ui.activity.FragmentActivity
 import neth.iecal.curbox.utils.TimeTools
@@ -112,8 +111,8 @@ class AppBlockerGroupsFragment : Fragment() {
             val group = getItem(position)
             holder.tvName.text = group.name
 
-            val typeText = getString(if (group.blockingType == AppBlockingType.Timed) R.string.group_type_time_based else R.string.group_type_usage_based)
-            holder.tvDetails.text = getString(R.string.group_details_apps, group.selectedPackages.size, typeText)
+            holder.tvDetails.text =
+                getString(R.string.group_details_apps_only, group.selectedPackages.size)
 
             holder.tvRemaining.visibility = View.GONE
             holder.tvRemaining.tag = group.id
@@ -138,8 +137,14 @@ class AppBlockerGroupsFragment : Fragment() {
                     if (remaining == null) {
                         holder.tvRemaining.visibility = View.GONE
                     } else {
-                        holder.tvRemaining.text = if (remaining <= 0L) "No time left today"
-                            else "${TimeTools.formatTimeForWidget(remaining)} left today"
+                        holder.tvRemaining.text = if (remaining <= 0L) {
+                            getString(R.string.group_no_usage_left)
+                        } else {
+                            getString(
+                                R.string.group_usage_left,
+                                TimeTools.formatTimeForWidget(remaining)
+                            )
+                        }
                         holder.tvRemaining.visibility = View.VISIBLE
                     }
                 }

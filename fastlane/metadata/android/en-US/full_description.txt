@@ -17,8 +17,7 @@ Granular UI Hiding lets you remove the trap inside an app without losing the app
 • <b>Focus Mode</b>: pause apps and websites for a set time so you can study or work in peace
 • <b>Scheduled DND</b>: turn on Do Not Disturb automatically at the hours you set
 • <b>App Specific Grayscale</b>: drain the color out of Instagram while your Camera stays full color, so dull apps lose their pull
-• <b>Usage Based Limits</b>: block an app or site after a set amount of use, like WhatsApp after 1 hour
-• <b>Time Based Access</b>: allow an app only during set hours, like WhatsApp from 7 AM to 9 PM
+• <b>Scheduled Usage Limits</b>: set when a group is active and how much use is available during that time
 • <b>Mindful Messages</b>: gentle nudges that run as overlay when you use an app
 
 
@@ -33,7 +32,7 @@ Granular UI Hiding lets you remove the trap inside an app without losing the app
 
 <b>Choose how hard it is to give in</b>
 
-When you try to open something outside its schedule, you decide what it takes to get back in.
+When you use all the time available in a schedule, you decide what it takes to get back in.
 
 • <b>Strict Blockade</b>: no access at all
 • <b>Timed Unlocks</b>: each unlock lasts a short set time, like 5 minutes

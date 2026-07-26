@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import androidx.datastore.core.DataMigration
 import androidx.datastore.core.MultiProcessDataStoreFactory
 import androidx.datastore.core.Serializer
 import com.google.gson.Gson
@@ -19,6 +20,7 @@ import neth.iecal.curbox.data.models.PendingSettingsChange
 import neth.iecal.curbox.data.models.Settings
 import neth.iecal.curbox.data.models.SettingsChangeDelayConfig
 import neth.iecal.curbox.data.models.SettingsChangeDelayPrefs
+import neth.iecal.curbox.data.models.upgradeLegacyAppGroupConfigs
 import neth.iecal.curbox.hardcoded.normalized
 import neth.iecal.curbox.services.TemporaryGroupDisableJob
 import java.io.File
@@ -47,6 +49,43 @@ class GsonSerializer<T>(
     }
 }
 
+private class AppGroupConfigMigration(
+    private val gson: Gson
+) : DataMigration<Settings> {
+    override suspend fun shouldMigrate(currentData: Settings): Boolean {
+        if (currentData.blockedAppGroups.any { it.config == null }) return true
+        return currentData.settingsChangeDelayConfig.pendingChanges.any {
+            it.field == GatedSettingsField.APP_GROUPS.name && pendingGroupsNeedMigration(it)
+        }
+    }
+
+    override suspend fun migrate(currentData: Settings): Settings {
+        val upgradedPending = currentData.settingsChangeDelayConfig.pendingChanges.map { pending ->
+            if (pending.field != GatedSettingsField.APP_GROUPS.name) {
+                pending
+            } else {
+                val groups = parseGroups(pending.newValueJson) ?: return@map pending
+                pending.copy(newValueJson = gson.toJson(groups.upgradeLegacyAppGroupConfigs(gson)))
+            }
+        }
+        return currentData.copy(
+            blockedAppGroups = currentData.blockedAppGroups.upgradeLegacyAppGroupConfigs(gson),
+            settingsChangeDelayConfig = currentData.settingsChangeDelayConfig.copy(
+                pendingChanges = upgradedPending
+            )
+        )
+    }
+
+    override suspend fun cleanUp() = Unit
+
+    private fun pendingGroupsNeedMigration(change: PendingSettingsChange): Boolean =
+        parseGroups(change.newValueJson)?.any { it.config == null } == true
+
+    private fun parseGroups(json: String): List<AppGroup>? = runCatching {
+        gson.fromJson<List<AppGroup>>(json, object : TypeToken<List<AppGroup>>() {}.type)
+    }.getOrNull()
+}
+
 class DataStoreManager(private val context: Context) {
     private val gson = Gson()
 
@@ -67,6 +106,7 @@ class DataStoreManager(private val context: Context) {
                         type = Settings::class.java,
                         defaultValue = Settings()
                     ),
+                    migrations = listOf(AppGroupConfigMigration(gson)),
                     produceFile = { File(context.applicationContext.filesDir, "datastore/settings.json") }
                 ).also { INSTANCE = it }
             }
@@ -423,7 +463,10 @@ class DataStoreManager(private val context: Context) {
         return runCatching {
             when (field) {
                 GatedSettingsField.APP_GROUPS -> settings.copy(
-                    blockedAppGroups = gson.fromJson(valueJson, object : TypeToken<List<AppGroup>>() {}.type)
+                    blockedAppGroups = gson.fromJson<List<AppGroup>>(
+                        valueJson,
+                        object : TypeToken<List<AppGroup>>() {}.type
+                    ).upgradeLegacyAppGroupConfigs(gson)
                 )
                 GatedSettingsField.AUTO_DND_GROUPS -> settings.copy(
                     autoDndGroups = gson.fromJson(valueJson, object : TypeToken<List<neth.iecal.curbox.data.models.AutoDndGroup>>() {}.type)

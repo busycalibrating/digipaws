@@ -5,7 +5,6 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,9 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import neth.iecal.curbox.blockers.AppBlocker
-import neth.iecal.curbox.blockers.FocusModeBlocker
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
-import neth.iecal.curbox.data.models.AppBlockingType
 import neth.iecal.curbox.data.models.AppGroup
 import neth.iecal.curbox.data.models.AppTimeConfig
 import neth.iecal.curbox.data.models.AppUsageConfig
@@ -27,47 +24,29 @@ import java.util.Calendar
 
 class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(application) {
     var currentUsageConfig: AppUsageConfig = AppUsageConfig()
-    var currentTimeConfig: AppTimeConfig = AppTimeConfig()
+    var currentTimeConfig: AppTimeConfig = AppTimeConfig.allDay()
     var warningScrnConfig: AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig()
 
     private val dataStoreManager = DataStoreManager(application)
     private val usageStats = UsageStatsHelper(application)
 
     /**
-     * Time left today before this group hits its usage limit, in millis.
-     * Returns null for groups that are not usage based. Usage is the combined
+     * Time left in the current schedule before this group hits its usage limit, in millis.
+     * Returns null while the group's schedule is not active. Usage is the combined
      * total of every app in the group, matching how the blocker compares it.
      */
     suspend fun getRemainingUsageMillis(group: AppGroup): Long? {
-        if (group.blockingType != AppBlockingType.Usage) return null
-        val config = runCatching {
-            Gson().fromJson(group.setting, AppUsageConfig::class.java)
-        }.getOrNull() ?: return null
+        val config = group.config ?: return null
+        val window = config.schedule.activeWindow() ?: return null
 
-        val limitMillis = limitForToday(config) * 60_000L
+        val limitMillis = limitForToday(config.usage) * 60_000L
         val packages = group.selectedPackages.map { it.trim() }.toSet()
-        val totalUsed = withContext(Dispatchers.IO) {
-            usageStats.getForegroundStatsByRelativeDay(0)
-                .filter { it.packageName in packages }
-                .sumOf { it.totalTime }
-        }
-        val linkedWindow = group.linkedTimeGroupId
-            ?.let { linkedId -> _groups.value.find { it.id == linkedId } }
-            ?.takeIf { it.isActive && it.blockingType == AppBlockingType.Timed }
-            ?.let { runCatching { Gson().fromJson(it.setting, AppTimeConfig::class.java) }.getOrNull() }
-            ?.activeWindow()
-        val used = if (group.linkedTimeGroupId == null) {
-            totalUsed
-        } else if (linkedWindow == null) {
-            0L
-        } else {
-            withContext(Dispatchers.IO) {
-                usageStats.getForegroundUsageBetween(
-                    packages,
-                    linkedWindow.startMs,
-                    minOf(System.currentTimeMillis(), linkedWindow.endMs)
-                )
-            }
+        val used = withContext(Dispatchers.IO) {
+            usageStats.getForegroundUsageBetween(
+                packages,
+                window.startMs,
+                minOf(System.currentTimeMillis(), window.endMs)
+            )
         }
         return (limitMillis - used).coerceAtLeast(0L)
     }
@@ -133,9 +112,6 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
             val currentSettings = dataStoreManager.settingsForEditing.first()
             val updatedGroups = currentSettings.blockedAppGroups.toMutableList()
             updatedGroups.removeAll { it.id == groupId }
-            updatedGroups.replaceAll {
-                if (it.linkedTimeGroupId == groupId) it.copy(linkedTimeGroupId = null) else it
-            }
             updateGroups(updatedGroups)
         }
     }

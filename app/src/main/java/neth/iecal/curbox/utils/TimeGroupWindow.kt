@@ -68,3 +68,28 @@ fun AppTimeConfig.activeWindow(nowMs: Long = System.currentTimeMillis()): Active
     }
     return null
 }
+
+/**
+ * Returns the next moment when this schedule becomes active or inactive.
+ */
+fun AppTimeConfig.nextChangeAfter(nowMs: Long = System.currentTimeMillis()): Long? {
+    activeWindow(nowMs)?.let { return it.endMs }
+
+    val now = Calendar.getInstance().apply { timeInMillis = nowMs }
+    val candidates = mutableListOf<Long>()
+    for (dayOffset in 0..7) {
+        val day = (now.get(Calendar.DAY_OF_WEEK) - 1 + dayOffset) % 7
+        val intervals = if (isEveryday) everydayIntervals else dailyIntervals[day].orEmpty()
+        intervals.forEach { interval ->
+            val start = (now.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_MONTH, dayOffset)
+                set(Calendar.HOUR_OF_DAY, interval.startHour.coerceAtMost(23))
+                set(Calendar.MINUTE, interval.startMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            if (start > nowMs) candidates += start
+        }
+    }
+    return candidates.minOrNull()
+}

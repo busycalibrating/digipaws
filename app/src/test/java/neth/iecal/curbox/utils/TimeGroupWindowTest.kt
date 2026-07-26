@@ -4,6 +4,7 @@ import neth.iecal.curbox.data.models.AppTimeConfig
 import neth.iecal.curbox.data.models.TimeInterval
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.Calendar
 
@@ -41,5 +42,22 @@ class TimeGroupWindowTest {
 
         assertNull(config.activeWindow(at(Calendar.TUESDAY, 1, 0)))
         assertNotNull(config.activeWindow(at(Calendar.WEDNESDAY, 1, 0)))
+    }
+
+    @Test
+    fun nextChangeIsStartWhenOutsideScheduleAndEndWhenInside() {
+        val config = AppTimeConfig(
+            isEveryday = true,
+            everydayIntervals = mutableListOf(TimeInterval(9, 0, 17, 0))
+        )
+
+        assertEquals(
+            at(Calendar.MONDAY, 9, 0),
+            config.nextChangeAfter(at(Calendar.MONDAY, 8, 0))
+        )
+        assertEquals(
+            at(Calendar.MONDAY, 17, 0),
+            config.nextChangeAfter(at(Calendar.MONDAY, 10, 0))
+        )
     }
 }

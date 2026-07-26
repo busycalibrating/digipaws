@@ -94,12 +94,11 @@ Curbox goes beyond simple app timers. It targets the specific triggers that lead
 - **Focus Mode:** Temporarily pause apps and websites to stay focused on your work.
 - **Scheduled DND:** Schedule Do Not Disturb to turn on automatically.
 - **App-Specific Grayscale:** Apply a grayscale filter only to specific apps (e.g., Instagram) while keeping others (e.g., Camera) in color.
-- **Usage-Based Limits:** Block apps or websites based on usage (e.g., block WhatsApp after 1 hour of use).
-- **Time-Based Access:** Allow apps only during specific hours (e.g., WhatsApp only between 7 AM and 9 PM).
+- **Scheduled Usage Limits:** Set when a group is active and how much total use is available during that time (e.g., allow 1 hour of WhatsApp use between 7 AM and 9 PM).
 - **Home Screen Widgets:** Quick access to your stats and controls right from your home screen.
 
 #### Unlock Mechanisms
-Define what happens when you try to open an app outside its allowed schedule:
+Define what happens when you try to open an app after its scheduled usage is finished:
 - **Strict Blockade:** Complete blockade with no access.
 - **Timed Unlocks:** Predefine a short duration (e.g., 5 mins) for each subsequent unlock.
 - **Dynamic Selection:** Choose the duration of your temporary unlock on each attempt.

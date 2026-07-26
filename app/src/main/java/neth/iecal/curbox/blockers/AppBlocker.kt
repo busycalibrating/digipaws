@@ -20,22 +20,22 @@ import kotlinx.coroutines.runBlocking
 import neth.iecal.curbox.Constants
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
-import neth.iecal.curbox.data.models.AppBlockingType
-import neth.iecal.curbox.data.models.AppTimeConfig
+import neth.iecal.curbox.data.models.AppGroupConfig
 import neth.iecal.curbox.data.models.AppUsageConfig
+import neth.iecal.curbox.data.models.upgradeLegacyAppGroupConfigs
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.ui.activity.WarningActivity
 import neth.iecal.curbox.utils.AppSuspendHelper
 import neth.iecal.curbox.utils.ShizukuRunner
-import neth.iecal.curbox.utils.TimeTools
 import neth.iecal.curbox.utils.TimerNotification
 import neth.iecal.curbox.utils.UsageStatsHelper
 import neth.iecal.curbox.utils.activeWindow
 import neth.iecal.curbox.utils.getCurrentKeyboardPackageName
+import neth.iecal.curbox.utils.nextChangeAfter
 import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
 
-class AppBlocker() : BaseBlocker() {
+class AppBlocker : BaseBlocker() {
 
     companion object {
         /**
@@ -54,48 +54,21 @@ class AppBlocker() : BaseBlocker() {
     }
 
     private lateinit var prefs: SharedPreferences
-        /**
+
+    /**
      * Stores which blocked groups have been allowed by the user and until when.
      * group-id -> end-time-in-real-time-millis
      */
     private var cooldownGroupsList = ConcurrentHashMap<String, Long>()
 
-    /**
-     * Holds a usage limited app's config along with every package in its group.
-     * Usage is compared against the combined total of all packages in [groupPackages].
-     * Each entry carries its own group's warning screen so the right screen shows when it triggers.
-     */
-    data class UsageBlockEntry(
+    private data class AppGroupEntry(
         val groupId: String,
-        val config: AppUsageConfig,
+        val config: AppGroupConfig,
         val groupPackages: List<String>,
-        val warningConfig: AppBlockerWarningScreenConfig,
-        val linkedSchedule: AppTimeConfig? = null,
-        val hasScheduleLink: Boolean = false
-    )
-
-    /**
-     * Holds a timed app's config along with its own group's warning screen.
-     */
-    data class TimeBlockEntry(
-        val groupId: String,
-        val config: AppTimeConfig,
         val warningConfig: AppBlockerWarningScreenConfig
     )
 
-    data class OnOpenBlockEntry(
-        val groupId: String,
-        val groupPackages: Set<String>,
-        val warningConfig: AppBlockerWarningScreenConfig
-    )
-
-    /**
-     * Stores block apps with their configs. A package may belong to multiple groups, so each map
-     * holds a list of entries. The app is blocked if any of its groups demands a block.
-     */
-    val blockedAppsList = ConcurrentHashMap<String, MutableList<UsageBlockEntry>>()
-    val timeBlockedAppsList = ConcurrentHashMap<String, MutableList<TimeBlockEntry>>()
-    private val onOpenAppsList = ConcurrentHashMap<String, MutableList<OnOpenBlockEntry>>()
+    private val blockedAppsList = ConcurrentHashMap<String, MutableList<AppGroupEntry>>()
     // Holds the warning config last shown per group, used for the cooldown intent's default duration.
     private val appBlockerWarningScrnConfgs = ConcurrentHashMap<String, AppBlockerWarningScreenConfig>()
 
@@ -124,66 +97,31 @@ class AppBlocker() : BaseBlocker() {
             return
         }
 
-        if (lastPackage != packageName) {
-            onOpenAppsList[lastPackage]?.forEach { entry ->
-                if (packageName !in entry.groupPackages) removeCooldownFrom(entry.groupId)
-            }
-        }
-
         val now = System.currentTimeMillis()
-        onOpenAppsList[packageName]?.firstOrNull { !isGroupInCooldown(it.groupId, now) }?.let { entry ->
-            notificationManager.stopTimer()
-            showWarningScreen(packageName, entry.groupId, entry.warningConfig)
-            return
-        }
-
-        timeBlockedAppsList[packageName]?.let { entries ->
-            // Multiple schedules for the same app form a union. An inactive schedule must not
-            // override another group whose window is currently active.
-            val eligibleEntries = entries.filterNot { isGroupInCooldown(it.groupId, now) }
-            val activeWindows = eligibleEntries.mapNotNull { entry ->
-                getEndTimeInRealTimeMillis(entry.config)?.let { entry to it }
-            }
-            if (eligibleEntries.isNotEmpty() && activeWindows.isEmpty()) {
-                val entry = eligibleEntries.first()
-                Log.d("AppBlocker", "Blocking $packageName (Timed - outside all schedules)")
-                notificationManager.stopTimer()
-                showWarningScreen(packageName, entry.groupId, entry.warningConfig)
-                return
-            }
-            activeWindows.minOfOrNull { it.second }?.let {
-                Log.d("AppBlocker", "App $packageName schedule changes at $it")
-                setUpForcedRefreshChecker("time:$packageName", it)
-            }
-        }
 
         blockedAppsList[packageName]?.let { entries ->
-            // Fetch today's usage once and reuse it for every group this app belongs to
-            val todaysStats = runBlocking { usageStats.getForegroundStatsByRelativeDay(0) }
             var minRemaining = Long.MAX_VALUE
             for (entry in entries) {
                 if (isGroupInCooldown(entry.groupId, now)) continue
-                val linkedWindow = entry.linkedSchedule?.activeWindow(now)
-                if (entry.hasScheduleLink && entry.linkedSchedule == null) {
-                    notificationManager.stopTimer()
-                    showWarningScreen(packageName, entry.groupId, entry.warningConfig)
-                    return
-                }
-                // A linked usage rule is dormant outside its own window. The package-level
-                // schedule union above decides whether another time group currently allows it.
-                if (entry.hasScheduleLink && linkedWindow == null) continue
-                // Combined usage of every app in the group, so the limit applies to the group as a whole
-                val totalUsage = todaysStats
-                    .filter { it.packageName in entry.groupPackages }
-                    .sumOf { it.totalTime }
-                val currentUsage = linkedWindow?.let { window ->
-                    runBlocking {
-                        usageStats.getForegroundUsageBetween(
-                            entry.groupPackages.toSet(), window.startMs, minOf(now, window.endMs)
+                val activeWindow = entry.config.schedule.activeWindow(now)
+                if (activeWindow == null) {
+                    entry.config.schedule.nextChangeAfter(now)?.let { nextChange ->
+                        setUpForcedRefreshChecker(
+                            "schedule:${entry.groupId}:$packageName",
+                            nextChange
                         )
                     }
-                } ?: totalUsage
-                val usageLimitMillis = getUsageLimitForToday(entry.config) * 60_000L
+                    continue
+                }
+
+                val currentUsage = runBlocking {
+                    usageStats.getForegroundUsageBetween(
+                        entry.groupPackages.toSet(),
+                        activeWindow.startMs,
+                        minOf(now, activeWindow.endMs)
+                    )
+                }
+                val usageLimitMillis = getUsageLimitForToday(entry.config.usage) * 60_000L
                 val remainingUsage = usageLimitMillis - currentUsage
 
                 if (remainingUsage <= 0) {
@@ -192,6 +130,10 @@ class AppBlocker() : BaseBlocker() {
                     return
                 }
                 if (remainingUsage < minRemaining) minRemaining = remainingUsage
+                setUpForcedRefreshChecker(
+                    "schedule:${entry.groupId}:$packageName",
+                    activeWindow.endMs
+                )
             }
 
             if (minRemaining != Long.MAX_VALUE) {
@@ -249,71 +191,21 @@ class AppBlocker() : BaseBlocker() {
             service.dataStoreManager.settings.collectLatest { settings ->
                 Log.d("AppBlocker", "Settings updated, groups count: ${settings.blockedAppGroups.size}")
 
-                val newBlockedAppsList = ConcurrentHashMap<String, MutableList<UsageBlockEntry>>()
-                val newTimeBlockedAppsList = ConcurrentHashMap<String, MutableList<TimeBlockEntry>>()
-                val newOnOpenAppsList = ConcurrentHashMap<String, MutableList<OnOpenBlockEntry>>()
-                val groupsById = settings.blockedAppGroups.associateBy { it.id }
-                val linkedTimedGroupIds = settings.blockedAppGroups
-                    .filter { it.isActive && it.blockingType == AppBlockingType.Usage }
-                    .mapNotNull { it.linkedTimeGroupId }
-                    .toSet()
-
-                settings.blockedAppGroups.forEach { group ->
+                val newBlockedAppsList = ConcurrentHashMap<String, MutableList<AppGroupEntry>>()
+                settings.blockedAppGroups.upgradeLegacyAppGroupConfigs().forEach { group ->
                     if (!group.isActive) return@forEach
 
                     try {
-                        Log.d("AppBlocker", "Loading group: ${group.name}, type: ${group.blockingType}, apps: ${group.selectedPackages}")
-                        when (group.blockingType) {
-                            AppBlockingType.Usage -> {
-                                val config = Gson().fromJson(group.setting, AppUsageConfig::class.java)
-                                val groupPackages = group.selectedPackages.map { it.trim() }
-                                val linkedSchedule = group.linkedTimeGroupId
-                                    ?.let(groupsById::get)
-                                    ?.takeIf { it.isActive && it.blockingType == AppBlockingType.Timed }
-                                    ?.let {
-                                        runCatching {
-                                            Gson().fromJson(it.setting, AppTimeConfig::class.java)
-                                        }.getOrNull()
-                                    }
-                                val entry = UsageBlockEntry(
-                                    group.id,
-                                    config,
-                                    groupPackages,
-                                    group.warningScreenConfig,
-                                    linkedSchedule,
-                                    group.linkedTimeGroupId != null
-                                )
-                                groupPackages.forEach { pkg ->
-                                    newBlockedAppsList.getOrPut(pkg) { mutableListOf() }.add(entry)
-                                }
-                                if (linkedSchedule != null) {
-                                    val timedEntry = TimeBlockEntry(
-                                        group.id, linkedSchedule, group.warningScreenConfig
-                                    )
-                                    groupPackages.forEach { pkg ->
-                                        newTimeBlockedAppsList.getOrPut(pkg) { mutableListOf() }
-                                            .add(timedEntry)
-                                    }
-                                }
-                            }
-                            AppBlockingType.Timed -> {
-                                // A linked schedule is enforced by its usage group so only the
-                                // usage group's warning/cooldown policy can be presented.
-                                if (group.id in linkedTimedGroupIds) return@forEach
-                                val config = Gson().fromJson(group.setting, AppTimeConfig::class.java)
-                                val entry = TimeBlockEntry(group.id, config, group.warningScreenConfig)
-                                group.selectedPackages.forEach {
-                                    val pkg = it.trim()
-                                    newTimeBlockedAppsList.getOrPut(pkg) { mutableListOf() }.add(entry)
-                                }
-                            }
-                            AppBlockingType.OnOpen -> {
-                                val groupPackages = group.selectedPackages.map { it.trim() }.toSet()
-                                val entry = OnOpenBlockEntry(group.id, groupPackages, group.warningScreenConfig)
-                                groupPackages.forEach { pkg ->
-                                    newOnOpenAppsList.getOrPut(pkg) { mutableListOf() }.add(entry)
-                                }
-                            }
+                        val config = group.config ?: return@forEach
+                        val groupPackages = group.selectedPackages.map(String::trim)
+                        val entry = AppGroupEntry(
+                            group.id,
+                            config,
+                            groupPackages,
+                            group.warningScreenConfig
+                        )
+                        groupPackages.forEach { pkg ->
+                            newBlockedAppsList.getOrPut(pkg) { mutableListOf() }.add(entry)
                         }
                     } catch (e: Exception) {
                         Log.e("AppBlocker", "Error loading group ${group.name}", e)
@@ -324,14 +216,7 @@ class AppBlocker() : BaseBlocker() {
                 blockedAppsList.clear()
                 blockedAppsList.putAll(newBlockedAppsList)
 
-                timeBlockedAppsList.clear()
-                timeBlockedAppsList.putAll(newTimeBlockedAppsList)
-
-                onOpenAppsList.clear()
-                onOpenAppsList.putAll(newOnOpenAppsList)
-
-                Log.d("AppBlocker", "Maps updated. OnOpen: ${onOpenAppsList.keys().toList()}, Usage: ${blockedAppsList.keys().toList()}, Timed: ${timeBlockedAppsList.keys().toList()}")
-                Log.d("AppBlocker", "Loaded: ${blockedAppsList.size} Usage, ${timeBlockedAppsList.size} Timed, ${onOpenAppsList.size} OnOpen apps")
+                Log.d("AppBlocker", "Loaded ${blockedAppsList.size} scheduled usage apps")
                 
                 // Force a check for the currently open app after settings change
                 handler.post {
@@ -433,60 +318,6 @@ class AppBlocker() : BaseBlocker() {
             title = service.getString(R.string.notification_remaining_usage_lockdown),
             onFinishCallback = { showNextCooldownNotification() }
         )
-    }
-
-    private fun getEndTimeInRealTimeMillis(config: AppTimeConfig): Long? {
-        val calendar = Calendar.getInstance()
-        val currentMinutes = TimeTools.convertToMinutesFromMidnight(
-            calendar.get(Calendar.HOUR_OF_DAY),
-            calendar.get(Calendar.MINUTE)
-        )
-        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
-        val previousDay = (dayOfWeek + 6) % 7
-        val millisIntoMinute =
-            calendar.get(Calendar.SECOND) * 1_000L + calendar.get(Calendar.MILLISECOND)
-
-        Log.d("day of week", dayOfWeek.toString())
-        val intervals = if (config.isEveryday) config.everydayIntervals else config.dailyIntervals[dayOfWeek] ?: emptyList()
-        val previousIntervals = if (config.isEveryday) {
-            config.everydayIntervals
-        } else {
-            config.dailyIntervals[previousDay] ?: emptyList()
-        }
-
-        intervals.forEach { interval ->
-            val startMinutes = TimeTools.convertToMinutesFromMidnight(interval.startHour, interval.startMinute)
-            val endMinutes = TimeTools.convertToMinutesFromMidnight(interval.endHour, interval.endMinute)
-
-            if (startMinutes <= endMinutes) {
-                if (currentMinutes in startMinutes until endMinutes) {
-                    val remainingMins = endMinutes - currentMinutes
-                    return System.currentTimeMillis() +
-                        (remainingMins * 60_000L) - millisIntoMinute
-                }
-            } else {
-                if (currentMinutes >= startMinutes) {
-                    val remainingMins = (1440 - currentMinutes) + endMinutes
-                    return System.currentTimeMillis() +
-                        (remainingMins * 60_000L) - millisIntoMinute
-                }
-            }
-        }
-        previousIntervals.forEach { interval ->
-            val startMinutes = TimeTools.convertToMinutesFromMidnight(
-                interval.startHour,
-                interval.startMinute
-            )
-            val endMinutes = TimeTools.convertToMinutesFromMidnight(
-                interval.endHour,
-                interval.endMinute
-            )
-            if (startMinutes > endMinutes && currentMinutes < endMinutes) {
-                return System.currentTimeMillis() +
-                    ((endMinutes - currentMinutes) * 60_000L) - millisIntoMinute
-            }
-        }
-        return null
     }
 
     private fun setUpForcedRefreshChecker(
