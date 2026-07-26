@@ -164,6 +164,11 @@ class AppBlocker() : BaseBlocker() {
             for (entry in entries) {
                 if (isGroupInCooldown(entry.groupId, now)) continue
                 val linkedWindow = entry.linkedSchedule?.activeWindow(now)
+                if (entry.hasScheduleLink && entry.linkedSchedule == null) {
+                    notificationManager.stopTimer()
+                    showWarningScreen(packageName, entry.groupId, entry.warningConfig)
+                    return
+                }
                 // A linked usage rule is dormant outside its own window. The package-level
                 // schedule union above decides whether another time group currently allows it.
                 if (entry.hasScheduleLink && linkedWindow == null) continue
@@ -264,7 +269,11 @@ class AppBlocker() : BaseBlocker() {
                                 val linkedSchedule = group.linkedTimeGroupId
                                     ?.let(groupsById::get)
                                     ?.takeIf { it.isActive && it.blockingType == AppBlockingType.Timed }
-                                    ?.let { Gson().fromJson(it.setting, AppTimeConfig::class.java) }
+                                    ?.let {
+                                        runCatching {
+                                            Gson().fromJson(it.setting, AppTimeConfig::class.java)
+                                        }.getOrNull()
+                                    }
                                 val entry = UsageBlockEntry(
                                     group.id,
                                     config,
