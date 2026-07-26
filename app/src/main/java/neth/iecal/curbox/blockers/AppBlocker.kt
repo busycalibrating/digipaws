@@ -204,6 +204,7 @@ class AppBlocker() : BaseBlocker() {
             } else {
                 showNextCooldownNotification()
             }
+            lastPackage = packageName
             return
         }
 
