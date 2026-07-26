@@ -21,18 +21,18 @@ fun AppTimeConfig.activeWindow(nowMs: Long = System.currentTimeMillis()): Active
     fun intervalsFor(day: Int): List<TimeInterval> =
         if (isEveryday) everydayIntervals else dailyIntervals[day] ?: emptyList()
 
+    val previousDay = (today + 6) % 7
     intervalsFor(today).forEach { interval ->
         val start = interval.startHour * 60 + interval.startMinute
         val end = interval.endHour * 60 + interval.endMinute
         val active = if (start <= end) currentMinute in start until end
-        else currentMinute >= start || currentMinute < end
+        else currentMinute >= start
         if (active) {
             val startCalendar = (now.clone() as Calendar).apply {
                 set(Calendar.HOUR_OF_DAY, interval.startHour.coerceAtMost(23))
                 set(Calendar.MINUTE, interval.startMinute)
                 set(Calendar.SECOND, 0)
                 set(Calendar.MILLISECOND, 0)
-                if (start > end && currentMinute < end) add(Calendar.DAY_OF_MONTH, -1)
             }
             val endCalendar = (startCalendar.clone() as Calendar).apply {
                 if (start > end) add(Calendar.DAY_OF_MONTH, 1)
@@ -42,6 +42,26 @@ fun AppTimeConfig.activeWindow(nowMs: Long = System.currentTimeMillis()): Active
                     set(Calendar.HOUR_OF_DAY, 0)
                     add(Calendar.DAY_OF_MONTH, 1)
                 }
+            }
+            return ActiveTimeGroupWindow(startCalendar.timeInMillis, endCalendar.timeInMillis)
+        }
+    }
+    intervalsFor(previousDay).forEach { interval ->
+        val start = interval.startHour * 60 + interval.startMinute
+        val end = interval.endHour * 60 + interval.endMinute
+        if (start > end && currentMinute < end) {
+            val startCalendar = (now.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_MONTH, -1)
+                set(Calendar.HOUR_OF_DAY, interval.startHour.coerceAtMost(23))
+                set(Calendar.MINUTE, interval.startMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val endCalendar = (now.clone() as Calendar).apply {
+                set(Calendar.HOUR_OF_DAY, interval.endHour)
+                set(Calendar.MINUTE, interval.endMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
             }
             return ActiveTimeGroupWindow(startCalendar.timeInMillis, endCalendar.timeInMillis)
         }

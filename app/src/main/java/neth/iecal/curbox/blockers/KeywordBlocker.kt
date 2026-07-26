@@ -295,15 +295,23 @@ class KeywordBlocker : BaseBlocker() {
             calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE)
         )
         val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
+        val previousDay = (dayOfWeek + 6) % 7
         val intervals = if (config.isEveryday) config.everydayIntervals
                         else config.dailyIntervals[dayOfWeek] ?: emptyList()
+        val previousIntervals = if (config.isEveryday) config.everydayIntervals
+                                else config.dailyIntervals[previousDay] ?: emptyList()
 
         for (interval in intervals) {
             val start = TimeTools.convertToMinutesFromMidnight(interval.startHour, interval.startMinute)
             val end = TimeTools.convertToMinutesFromMidnight(interval.endHour, interval.endMinute)
             val withinAllowed = if (start <= end) currentMinutes in start until end
-                                else currentMinutes >= start || currentMinutes < end
+                                else currentMinutes >= start
             if (withinAllowed) return false
+        }
+        for (interval in previousIntervals) {
+            val start = TimeTools.convertToMinutesFromMidnight(interval.startHour, interval.startMinute)
+            val end = TimeTools.convertToMinutesFromMidnight(interval.endHour, interval.endMinute)
+            if (start > end && currentMinutes < end) return false
         }
         return true
     }
@@ -378,8 +386,11 @@ class KeywordBlocker : BaseBlocker() {
                     calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE)
                 )
                 val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
+                val previousDay = (dayOfWeek + 6) % 7
                 val intervals = if (config.isEveryday) config.everydayIntervals
                                 else config.dailyIntervals[dayOfWeek] ?: emptyList()
+                val previousIntervals = if (config.isEveryday) config.everydayIntervals
+                                        else config.dailyIntervals[previousDay] ?: emptyList()
 
                 // We are inside an allowed window; re-check when it ends so the block kicks in.
                 var minMinutesUntilEnd = Int.MAX_VALUE
@@ -387,11 +398,24 @@ class KeywordBlocker : BaseBlocker() {
                     val start = TimeTools.convertToMinutesFromMidnight(interval.startHour, interval.startMinute)
                     val end = TimeTools.convertToMinutesFromMidnight(interval.endHour, interval.endMinute)
                     val withinAllowed = if (start <= end) currentMinutes in start until end
-                                        else currentMinutes >= start || currentMinutes < end
+                                        else currentMinutes >= start
                     if (withinAllowed) {
-                        val minutesUntilEnd = if (start <= end || currentMinutes < end) end - currentMinutes
+                        val minutesUntilEnd = if (start <= end) end - currentMinutes
                                               else (1440 - currentMinutes) + end
                         minMinutesUntilEnd = minOf(minMinutesUntilEnd, minutesUntilEnd)
+                    }
+                }
+                for (interval in previousIntervals) {
+                    val start = TimeTools.convertToMinutesFromMidnight(
+                        interval.startHour,
+                        interval.startMinute
+                    )
+                    val end = TimeTools.convertToMinutesFromMidnight(
+                        interval.endHour,
+                        interval.endMinute
+                    )
+                    if (start > end && currentMinutes < end) {
+                        minMinutesUntilEnd = minOf(minMinutesUntilEnd, end - currentMinutes)
                     }
                 }
                 if (minMinutesUntilEnd != Int.MAX_VALUE) {

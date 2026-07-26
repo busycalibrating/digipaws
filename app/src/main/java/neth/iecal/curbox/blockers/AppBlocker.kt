@@ -441,9 +441,15 @@ class AppBlocker() : BaseBlocker() {
             calendar.get(Calendar.MINUTE)
         )
         val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
+        val previousDay = (dayOfWeek + 6) % 7
 
         Log.d("day of week", dayOfWeek.toString())
         val intervals = if (config.isEveryday) config.everydayIntervals else config.dailyIntervals[dayOfWeek] ?: emptyList()
+        val previousIntervals = if (config.isEveryday) {
+            config.everydayIntervals
+        } else {
+            config.dailyIntervals[previousDay] ?: emptyList()
+        }
 
         intervals.forEach { interval ->
             val startMinutes = TimeTools.convertToMinutesFromMidnight(interval.startHour, interval.startMinute)
@@ -455,14 +461,23 @@ class AppBlocker() : BaseBlocker() {
                     return System.currentTimeMillis() + (remainingMins * 60_000L)
                 }
             } else {
-                if (currentMinutes >= startMinutes || currentMinutes < endMinutes) {
-                    val remainingMins = if (currentMinutes >= startMinutes) {
-                        (1440 - currentMinutes) + endMinutes
-                    } else {
-                        endMinutes - currentMinutes
-                    }
+                if (currentMinutes >= startMinutes) {
+                    val remainingMins = (1440 - currentMinutes) + endMinutes
                     return System.currentTimeMillis() + (remainingMins * 60_000L)
                 }
+            }
+        }
+        previousIntervals.forEach { interval ->
+            val startMinutes = TimeTools.convertToMinutesFromMidnight(
+                interval.startHour,
+                interval.startMinute
+            )
+            val endMinutes = TimeTools.convertToMinutesFromMidnight(
+                interval.endHour,
+                interval.endMinute
+            )
+            if (startMinutes > endMinutes && currentMinutes < endMinutes) {
+                return System.currentTimeMillis() + ((endMinutes - currentMinutes) * 60_000L)
             }
         }
         return null
