@@ -86,7 +86,7 @@ class AppBlocker : BaseBlocker() {
 
     private lateinit var notificationManager: TimerNotification
 
-    private val ignoredApps = mutableListOf<String>("com.android.systemui")
+    private val ignoredApps = mutableListOf("com.android.systemui")
 
     fun doAppBlockerCheck(event: AccessibilityEvent?) {
         if (event == null || (event.eventType and TARGET_EVENTS_MASK) == 0) return
