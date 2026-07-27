@@ -408,6 +408,15 @@
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switch_on_each_open"
+                        style="@style/TextAppearance.Material3.TitleSmall"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/warning_show_on_each_open"
+                        android:visibility="gone" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/proceed_limit_switch"
                         style="@style/TextAppearance.Material3.TitleSmall"
                         android:layout_width="match_parent"

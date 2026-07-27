@@ -67,7 +67,7 @@ class WarningActivity : AppCompatActivity() {
                 binding.btnProceed.isEnabled = true
                 binding.btnProceed.setText(R.string.proceed)
                 
-                if (scannedValidDuration == -1L) {
+                if (scannedValidDuration == -1L && !warningScreenConfig.isOnOpenConfig) {
                     binding.minsPicker.visibility = View.VISIBLE
                 } else {
                     binding.minsPicker.visibility = View.GONE
@@ -151,7 +151,11 @@ class WarningActivity : AppCompatActivity() {
 
                     override fun onFinish() {
                         binding.btnProceed.let { button ->
-                            if (!warningScreenConfig.isQrUnlockRequirementEnabled && !warningScreenConfig.isNfcUnlockRequirementEnabled && warningScreenConfig.isDynamicIntervalSettingAllowed) {
+                            if (!warningScreenConfig.isOnOpenConfig &&
+                                !warningScreenConfig.isQrUnlockRequirementEnabled &&
+                                !warningScreenConfig.isNfcUnlockRequirementEnabled &&
+                                warningScreenConfig.isDynamicIntervalSettingAllowed
+                            ) {
                                 binding.minsPicker.visibility = View.VISIBLE
                             }
 
@@ -344,9 +348,9 @@ class WarningActivity : AppCompatActivity() {
                         val hasUnlockChallenge = warningScreenConfig.isQrUnlockRequirementEnabled ||
                             warningScreenConfig.isNfcUnlockRequirementEnabled
                         val finalTime = when {
+                            warningScreenConfig.isOnOpenConfig -> 1440
                             hasUnlockChallenge && scannedValidDuration != -1L -> (scannedValidDuration / 60000).toInt()
                             hasUnlockChallenge -> binding.minsPicker.getValue()
-                            warningScreenConfig.isOnOpenConfig -> 1440
                             else -> binding.minsPicker.getValue()
                         }
                         sendRefreshRequest(
@@ -398,7 +402,14 @@ class WarningActivity : AppCompatActivity() {
                 scannedValidDuration = warningScreenConfig.nfcKeys[match] ?: -1L
                 binding.btnProceed.isEnabled = true
                 binding.btnProceed.setText(R.string.proceed)
-                binding.minsPicker.visibility = if (scannedValidDuration == -1L) View.VISIBLE else View.GONE
+                binding.minsPicker.visibility =
+                    if (scannedValidDuration == -1L &&
+                        !warningScreenConfig.isOnOpenConfig
+                    ) {
+                        View.VISIBLE
+                    } else {
+                        View.GONE
+                    }
                 stopNfcUnlockScan()
             } else {
                 Toast.makeText(this, R.string.warning_invalid_nfc, Toast.LENGTH_LONG).show()

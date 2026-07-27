@@ -36,6 +36,7 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
      * total of every app in the group, matching how the blocker compares it.
      */
     suspend fun getRemainingUsageMillis(group: AppGroup): Long? {
+        if (group.warningScreenConfig.isOnOpenConfig) return null
         val config = group.config ?: return null
         val window = config.schedule.activeWindow() ?: return null
 

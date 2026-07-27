@@ -22,7 +22,6 @@ import com.google.zxing.BarcodeFormat
 import com.google.gson.Gson
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
-import neth.iecal.curbox.data.models.AppBlockingType
 import neth.iecal.curbox.nfc.NfcUnlockUtils
 import neth.iecal.curbox.databinding.FragmentWarningConfigBinding
 import java.util.UUID
@@ -123,8 +122,11 @@ class WarningConfigFragment : Fragment() {
 
     private fun setupInitialState() {
         val config = initialConfig ?: AppBlockerWarningScreenConfig()
-        val isOnOpen = arguments?.getBoolean(ARG_IS_ON_OPEN) == true
-        config.isOnOpenConfig = isOnOpen
+        val supportsOnEachOpen =
+            arguments?.getBoolean(ARG_SUPPORTS_ON_EACH_OPEN) == true
+        val isOnOpen = supportsOnEachOpen && config.isOnOpenConfig
+        binding.switchOnEachOpen.isVisible = supportsOnEachOpen
+        binding.switchOnEachOpen.isChecked = isOnOpen
         
         val isNew = arguments?.getBoolean(ARG_IS_NEW) ?: (arguments?.getString(ARG_CONFIG) == null)
         
@@ -210,17 +212,17 @@ class WarningConfigFragment : Fragment() {
         binding.warningMsgEdit.setText(config.message)
         binding.switchVibrateBrightness.isChecked = config.vibrateAndIncBrightness
 
-        if (isOnOpen) {
-            binding.timingContainer.visibility = View.GONE
-        }
     }
 
     private fun updateSecondaryDropdown(challengeIdx: Int) {
-        val isOnOpen = arguments?.getBoolean(ARG_IS_ON_OPEN) == true
+        val isOnOpen = isOnEachOpenEnabled()
         
-        if (isOnOpen && challengeIdx == 2) {
+        if (isOnOpen && challengeIdx == NO_EFFORT_CHALLENGE_INDEX) {
             binding.secondaryBehaviorLayout.visibility = View.GONE
-            binding.secondaryBehaviorDropdown.setText(noEffortOptions[1].title, false)
+            binding.secondaryBehaviorDropdown.setText(
+                noEffortOptions[FIXED_TIME_OPTION_INDEX].title,
+                false
+            )
             return
         }
 
@@ -243,13 +245,18 @@ class WarningConfigFragment : Fragment() {
         binding.unlockChallengeDropdown.setOnItemClickListener { _, _, position, _ ->
             updateSecondaryDropdown(position)
             
-            val isOnOpen = arguments?.getBoolean(ARG_IS_ON_OPEN) == true
+            val isOnOpen = isOnEachOpenEnabled()
             // Clear secondary dropdown when parent changes
-            if (!(isOnOpen && position == 2)) {
+            if (!(isOnOpen && position == NO_EFFORT_CHALLENGE_INDEX)) {
                 binding.secondaryBehaviorDropdown.setText("", false)
             }
             
-            val secondaryIdx = if (isOnOpen && position == 2) 1 else -1
+            val secondaryIdx =
+                if (isOnOpen && position == NO_EFFORT_CHALLENGE_INDEX) {
+                    FIXED_TIME_OPTION_INDEX
+                } else {
+                    -1
+                }
             updateUiVisibility(position, secondaryIdx, animate = true)
         }
 
@@ -269,6 +276,24 @@ class WarningConfigFragment : Fragment() {
 
         binding.proceedLimitSwitch.setOnCheckedChangeListener { _, isChecked ->
             binding.proceedLimitContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
+
+        binding.switchOnEachOpen.setOnCheckedChangeListener { _, isChecked ->
+            val challengeIndex = selectedChallengeIndex()
+            if (isChecked && challengeIndex == NO_EFFORT_CHALLENGE_INDEX) {
+                binding.secondaryBehaviorDropdown.setText(
+                    noEffortOptions[FIXED_TIME_OPTION_INDEX].title,
+                    false
+                )
+            }
+            updateSecondaryDropdown(challengeIndex)
+            updateUiVisibility(
+                challengeIndex,
+                selectedSecondaryIndex(challengeIndex),
+                animate = true
+            )
+            updateQrList()
+            updateNfcList()
         }
 
         binding.allowedProceedsSlider.addOnChangeListener { _, value, _ ->
@@ -435,7 +460,7 @@ class WarningConfigFragment : Fragment() {
                         else -> sliderVal
                     }
                 },
-                isOnOpenConfig = arguments?.getBoolean(ARG_IS_ON_OPEN) == true
+                isOnOpenConfig = isOnEachOpenEnabled()
             )
             
             val requestKey = arguments?.getString(ARG_REQUEST_KEY) ?: RESULT_KEY
@@ -477,7 +502,31 @@ class WarningConfigFragment : Fragment() {
         }
     }
 
-    private fun updateUiVisibility(challengeIndex: Int, secondaryIndex: Int, animate: Boolean = false) {
+    private fun isOnEachOpenEnabled(): Boolean =
+        arguments?.getBoolean(ARG_SUPPORTS_ON_EACH_OPEN) == true &&
+            binding.switchOnEachOpen.isChecked
+
+    private fun selectedChallengeIndex(): Int =
+        challengeOptions.indexOfFirst {
+            it.title == binding.unlockChallengeDropdown.text.toString()
+        }
+
+    private fun selectedSecondaryIndex(challengeIndex: Int): Int {
+        val options = when (challengeIndex) {
+            1 -> effortOptions
+            NO_EFFORT_CHALLENGE_INDEX -> noEffortOptions
+            else -> return -1
+        }
+        return options.indexOfFirst {
+            it.title == binding.secondaryBehaviorDropdown.text.toString()
+        }
+    }
+
+    private fun updateUiVisibility(
+        challengeIndex: Int,
+        secondaryIndex: Int,
+        animate: Boolean = false
+    ) {
         if (animate) {
             TransitionManager.beginDelayedTransition(
                 binding.mainContentContainer,
@@ -485,12 +534,19 @@ class WarningConfigFragment : Fragment() {
             )
         }
 
-        val isOnOpen = arguments?.getBoolean(ARG_IS_ON_OPEN) == true
+        val isOnOpen = isOnEachOpenEnabled()
 
         binding.apply {
             // Timing container visible if "Requires no effort" + "Fixed time" OR "Require effort" + (Typing or Intent).
             // QR (0) and NFC (3) carry their own per-key timing, so the shared timing slider stays hidden for them.
-            timingContainer.visibility = if (!isOnOpen && ((challengeIndex == 2 && secondaryIndex == 1) || (challengeIndex == 1 && secondaryIndex != 0 && secondaryIndex != 3 && secondaryIndex != -1))) View.VISIBLE else View.GONE
+            val usesSharedTiming = when (challengeIndex) {
+                NO_EFFORT_CHALLENGE_INDEX ->
+                    secondaryIndex == FIXED_TIME_OPTION_INDEX
+                1 -> secondaryIndex == 1 || secondaryIndex == 2
+                else -> false
+            }
+            timingContainer.visibility =
+                if (!isOnOpen && usesSharedTiming) View.VISIBLE else View.GONE
 
             // Proceed delay visible for anything except "Never Unlock" or when nothing selected
             proceedDelayContainer.visibility = if (challengeIndex != 0 && challengeIndex != -1) View.VISIBLE else View.GONE
@@ -503,8 +559,8 @@ class WarningConfigFragment : Fragment() {
     }
     
     private fun showQrConfigDialog(onConfigured: (Long) -> Unit) {
-        if (initialConfig?.isOnOpenConfig == true) {
-            onConfigured(-1L) // Default to dynamic/manual duration, but WarningActivity will override it anyway
+        if (isOnEachOpenEnabled()) {
+            onConfigured(-1L)
             return
         }
         val pickerContainer = LinearLayout(requireContext()).apply {
@@ -594,7 +650,12 @@ class WarningConfigFragment : Fragment() {
             }
 
             val infoText = TextView(requireContext()).apply {
-                val durationText = if (duration == -1L) "Dynamic time" else "${duration / 60000} mins"
+                val durationText = when {
+                    isOnEachOpenEnabled() ->
+                        getString(R.string.warning_current_app_session)
+                    duration == -1L -> "Dynamic time"
+                    else -> "${duration / 60000} mins"
+                }
                 text = "$label - $durationText"
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setPadding(4, 4, 4, 4)
@@ -712,19 +773,24 @@ class WarningConfigFragment : Fragment() {
         const val ARG_CONFIG = "arg_config"
         const val ARG_REQUEST_KEY = "arg_request_key"
         const val ARG_IS_NEW = "arg_is_new"
-        const val ARG_IS_ON_OPEN = "arg_is_on_open"
+        const val ARG_SUPPORTS_ON_EACH_OPEN = "arg_supports_on_each_open"
         const val RESULT_KEY = "request_key_warning_config"
         const val RESULT_CONFIG = "result_config"
+        private const val NO_EFFORT_CHALLENGE_INDEX = 2
+        private const val FIXED_TIME_OPTION_INDEX = 1
 
-
-        fun newInstance(config: AppBlockerWarningScreenConfig, requestKey: String = RESULT_KEY, isNew: Boolean = false,isOnOpen: Boolean = false): WarningConfigFragment {
+        fun newInstance(
+            config: AppBlockerWarningScreenConfig,
+            requestKey: String = RESULT_KEY,
+            isNew: Boolean = false,
+            supportsOnEachOpen: Boolean = false
+        ): WarningConfigFragment {
             return WarningConfigFragment().apply {
                 arguments = Bundle().apply {
                     putString(ARG_CONFIG, Gson().toJson(config))
                     putString(ARG_REQUEST_KEY, requestKey)
                     putBoolean(ARG_IS_NEW, isNew)
-                    putBoolean(ARG_IS_ON_OPEN, isOnOpen)
-
+                    putBoolean(ARG_SUPPORTS_ON_EACH_OPEN, supportsOnEachOpen)
                 }
             }
         }

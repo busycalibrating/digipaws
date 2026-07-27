@@ -123,7 +123,7 @@ class CreateAppGroupFragment : Fragment() {
                 viewModel.warningScrnConfig, 
                 "result_warning_config",
                 isNew = groupId == null,
-                isOnOpen = false
+                supportsOnEachOpen = true
             )
             parentFragmentManager.beginTransaction()
                 .hide(this)
@@ -181,7 +181,7 @@ class CreateAppGroupFragment : Fragment() {
                 if (isEditingRecord && targetExistingGroup != null) targetExistingGroup.isActive
                 else true,
             temporarilyDisabledUntilMs = targetExistingGroup?.temporarilyDisabledUntilMs ?: 0L,
-            warningScreenConfig = viewModel.warningScrnConfig.copy(isOnOpenConfig = false)
+            warningScreenConfig = viewModel.warningScrnConfig
         )
 
         if (isEditingRecord && targetExistingGroup != null) {

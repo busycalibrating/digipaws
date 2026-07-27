@@ -97,11 +97,36 @@ class AppBlocker : BaseBlocker() {
             return
         }
 
+        clearFinishedOnEachOpenSessions(packageName)
+
         val now = System.currentTimeMillis()
 
         blockedAppsList[packageName]?.let { entries ->
+            for (entry in entries) {
+                if (!entry.warningConfig.isOnOpenConfig ||
+                    isGroupInCooldown(entry.groupId, now)
+                ) {
+                    continue
+                }
+                val activeWindow = entry.config.schedule.activeWindow(now)
+                if (activeWindow == null) {
+                    entry.config.schedule.nextChangeAfter(now)?.let { nextChange ->
+                        setUpForcedRefreshChecker(
+                            "schedule:${entry.groupId}:$packageName",
+                            nextChange
+                        )
+                    }
+                    continue
+                }
+
+                notificationManager.stopTimer()
+                showWarningScreen(packageName, entry.groupId, entry.warningConfig)
+                return
+            }
+
             var minRemaining = Long.MAX_VALUE
             for (entry in entries) {
+                if (entry.warningConfig.isOnOpenConfig) continue
                 if (isGroupInCooldown(entry.groupId, now)) continue
                 val activeWindow = entry.config.schedule.activeWindow(now)
                 if (activeWindow == null) {
@@ -153,6 +178,21 @@ class AppBlocker : BaseBlocker() {
         showNextCooldownNotification()
 
         lastPackage = packageName
+    }
+
+    /**
+     * An on-each-open unlock lasts only while the user stays within that group's selected apps.
+     */
+    private fun clearFinishedOnEachOpenSessions(currentPackage: String) {
+        blockedAppsList.values
+            .asSequence()
+            .flatten()
+            .filter { it.warningConfig.isOnOpenConfig }
+            .filter { currentPackage !in it.groupPackages }
+            .map(AppGroupEntry::groupId)
+            .distinct()
+            .filter(cooldownGroupsList::containsKey)
+            .forEach(::removeCooldownFrom)
     }
 
     fun setupReceivers() {

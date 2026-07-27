@@ -1382,6 +1382,8 @@
     <string name="group_details_apps_only">%1$d Apps</string>
     <string name="group_no_usage_left">No time left in this schedule</string>
     <string name="group_usage_left">%1$s left in this schedule</string>
+    <string name="warning_show_on_each_open">Show this screen each time I open the selected apps</string>
+    <string name="warning_current_app_session">Current app session</string>
 
     <!-- Sync account -->
     <string name="account_sync_title">Sync across my devices</string>

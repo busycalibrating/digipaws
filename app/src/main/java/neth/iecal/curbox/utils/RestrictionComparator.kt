@@ -251,8 +251,11 @@ object RestrictionComparator {
         // Message and typing sentence wording never change how strong the block is
         if (o.copy(message = "", typingSentence = "") == n.copy(message = "", typingSentence = "")) return true
 
-        val cooldownOk = n.timeInterval <= o.timeInterval
-        val dynamicIntervalOk = !n.isDynamicIntervalSettingAllowed || o.isDynamicIntervalSettingAllowed
+        val onEachOpenOk = !o.isOnOpenConfig || n.isOnOpenConfig
+        val cooldownOk = n.isOnOpenConfig || n.timeInterval <= o.timeInterval
+        val dynamicIntervalOk = n.isOnOpenConfig ||
+            !n.isDynamicIntervalSettingAllowed ||
+            o.isDynamicIntervalSettingAllowed
         val proceedDisabledOk = !o.isProceedDisabled || n.isProceedDisabled
         val dialogHiddenOk = !o.isWarningDialogHidden || n.isWarningDialogHidden
         val proceedDelayOk = n.proceedDelayInSecs >= o.proceedDelayInSecs
@@ -274,7 +277,8 @@ object RestrictionComparator {
             else -> n.minIntentLength.coerceAtLeast(1) >= o.minIntentLength.coerceAtLeast(1)
         }
 
-        return cooldownOk && dynamicIntervalOk && proceedDisabledOk && dialogHiddenOk &&
+        return onEachOpenOk && cooldownOk && dynamicIntervalOk &&
+            proceedDisabledOk && dialogHiddenOk &&
             proceedDelayOk && vibrateOk && proceedLimitOk && qrOk && nfcOk && typingOk && intentOk &&
             intentMinLengthOk
     }

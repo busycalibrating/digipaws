@@ -20,5 +20,6 @@ data class AppBlockerWarningScreenConfig(
     val typingSentence: String = "",
     val isIntentRequirementEnabled: Boolean = false,
     val minIntentLength: Int = 1,
-    var isOnOpenConfig: Boolean = false,
+    /** For app groups, grant access only for the current selected-app session. */
+    val isOnOpenConfig: Boolean = false,
 )

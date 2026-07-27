@@ -38,7 +38,9 @@ fun List<AppGroup>.upgradeLegacyAppGroupConfigs(gson: Gson = Gson()): List<AppGr
 
         group.copy(
             config = upgradedConfig,
-            warningScreenConfig = group.warningScreenConfig.copy(isOnOpenConfig = false),
+            warningScreenConfig = group.warningScreenConfig.copy(
+                isOnOpenConfig = group.blockingType == AppBlockingType.OnOpen
+            ),
             blockingType = AppBlockingType.Usage,
             setting = "",
             linkedTimeGroupId = null

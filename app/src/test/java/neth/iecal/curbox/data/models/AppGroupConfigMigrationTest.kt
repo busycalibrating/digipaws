@@ -79,6 +79,21 @@ class AppGroupConfigMigrationTest {
     }
 
     @Test
+    fun onOpenGroupKeepsItsSessionGateBehavior() {
+        val legacy = AppGroup(
+            id = "on-open",
+            blockingType = AppBlockingType.OnOpen
+        )
+
+        val upgraded = listOf(legacy).upgradeLegacyAppGroupConfigs(gson).single()
+        val config = requireNotNull(upgraded.config)
+
+        assertEquals(0L, config.usage.uniformLimit)
+        assertNotNull(config.schedule.activeWindow(at(Calendar.MONDAY, 10, 0)))
+        assertTrue(upgraded.warningScreenConfig.isOnOpenConfig)
+    }
+
+    @Test
     fun upgradedConfigDoesNotMigrateTwice() {
         val config = AppGroupConfig(
             schedule = AppTimeConfig.allDay(),
