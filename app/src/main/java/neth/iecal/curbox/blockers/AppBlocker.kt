@@ -184,9 +184,9 @@ class AppBlocker : BaseBlocker() {
      * An on-each-open unlock lasts only while the user stays within that group's selected apps.
      */
     private fun clearFinishedOnEachOpenSessions(currentPackage: String) {
-        blockedAppsList.values
+        blockedAppsList[lastPackage]
+            .orEmpty()
             .asSequence()
-            .flatten()
             .filter { it.warningConfig.isOnOpenConfig }
             .filter { currentPackage !in it.groupPackages }
             .map(AppGroupEntry::groupId)
@@ -195,6 +195,8 @@ class AppBlocker : BaseBlocker() {
             .forEach(::removeCooldownFrom)
     }
 
+    // THIS IS EXPORTED HERE INTENTIONALLY. THE APPBLOCKER SERVICE RUNS IN A DIFFERENT PROCESS THAN
+    // THE MAIN UI.
     fun setupReceivers() {
         val filter = IntentFilter().apply {
             addAction(INTENT_ACTION_REFRESH_APP_BLOCKER)
@@ -204,7 +206,7 @@ class AppBlocker : BaseBlocker() {
             service,
             refreshReceiver,
             filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
+            ContextCompat.RECEIVER_EXPORTED
         )
     }
 

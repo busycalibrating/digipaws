@@ -486,6 +486,8 @@ class KeywordBlocker : BaseBlocker() {
         )
     }
 
+    // THIS IS EXPORTED HERE INTENTIONALLY. THE APPBLOCKER SERVICE RUNS IN A DIFFERENT PROCESS THAN
+    // THE MAIN UI.
     fun setupReceivers() {
         val filter = IntentFilter().apply {
             addAction(INTENT_ACTION_REFRESH_CONFIG)
@@ -495,7 +497,7 @@ class KeywordBlocker : BaseBlocker() {
             service,
             refreshReceiver,
             filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
+            ContextCompat.RECEIVER_EXPORTED
         )
     }
 
