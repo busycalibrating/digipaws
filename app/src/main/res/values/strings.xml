@@ -110,7 +110,7 @@
     <string name="apps_to_block">APPS TO BLOCK</string>
     <string name="select_apps_0">Select Apps (0)</string>
     <string name="blocking_configuration">BLOCKING CONFIGURATION</string>
-    <string name="group_limits">GROUP LIMITS</string>
+    <string name="group_limits">LIMITS</string>
     <string name="configure_group_schedule">Set Active Hours</string>
     <string name="configure_group_usage">Set Available Usage</string>
     <string name="select_start_time">Select Start Time</string>

@@ -94,7 +94,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:letterSpacing="0.1"
-                android:text="@string/group_limits"
+                android:text="SCHEDULE"
                 android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -114,13 +114,23 @@
                 android:id="@+id/btn_configure_usage"
                 android:layout_width="match_parent"
                 android:layout_height="60dp"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="24dp"
                 android:text="@string/configure_group_usage"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 app:backgroundTint="?attr/colorSurfaceContainer"
                 app:cornerRadius="16dp"
                 app:icon="@drawable/ic_reducers"
                 app:iconTint="?attr/colorOnSurfaceVariant" />
+
+            <TextView
+                android:id="@+id/textView3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:letterSpacing="0.1"
+                android:text="WHEN BLOCK TRIGGERED"
+                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/configure_warning_screen"

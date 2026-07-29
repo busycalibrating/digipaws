@@ -23,7 +23,7 @@ import neth.iecal.curbox.utils.activeWindow
 import java.util.Calendar
 
 class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(application) {
-    var currentUsageConfig: AppUsageConfig = AppUsageConfig()
+    var currentUsageConfig: AppUsageConfig = AppUsageConfig(uniformLimit = 0)
     var currentTimeConfig: AppTimeConfig = AppTimeConfig.allDay()
     var warningScrnConfig: AppBlockerWarningScreenConfig = AppBlockerWarningScreenConfig()
 
