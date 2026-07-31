@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.timepicker.MaterialTimePicker
 import com.google.android.material.timepicker.TimeFormat
 import neth.iecal.curbox.R
@@ -20,8 +21,16 @@ import neth.iecal.curbox.data.models.fixOvernightInterval
 import neth.iecal.curbox.ui.fragments.main.reducers.blockertools.DayAdapter
 import neth.iecal.curbox.ui.fragments.main.reducers.blockertools.DayItem
 import neth.iecal.curbox.ui.fragments.main.reducers.blockertools.TimeIntervalAdapter
+import neth.iecal.curbox.utils.hasOverlappingTimeRanges
+import neth.iecal.curbox.utils.isAllDaySchedule
 
 abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
+
+    private enum class ScheduleMode {
+        AllDay,
+        Daily,
+        Custom
+    }
 
     protected open val daysOfWeek = listOf(
         "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
@@ -32,6 +41,9 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
     private lateinit var btnAddEverydayInterval: View
     private lateinit var everydayIntervalsContainer: RecyclerView
     private lateinit var daysListContainer: RecyclerView
+    private var scheduleModeToggle: MaterialButtonToggleGroup? = null
+    private var scheduleMode = ScheduleMode.AllDay
+    private var isLoadingSettings = false
 
     private val everydayIntervals = mutableListOf<TimeInterval>()
     private lateinit var everydayAdapter: TimeIntervalAdapter
@@ -50,6 +62,7 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
         btnAddEverydayInterval = root.findViewById(R.id.btn_add_everyday_interval)
         everydayIntervalsContainer = root.findViewById(R.id.everydayIntervalsContainer)
         daysListContainer = root.findViewById(R.id.daysListContainer)
+        scheduleModeToggle = root.findViewById(R.id.schedule_mode_toggle)
         return root
     }
 
@@ -57,14 +70,27 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         setupRecyclerViews()
 
-        switchEveryDay.setOnCheckedChangeListener { _, isChecked ->
-            everydayContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
-            daysAdapter.isInteractionEnabled = !isChecked
+        if (scheduleModeToggle == null) {
+            switchEveryDay.setOnCheckedChangeListener { _, isChecked ->
+                everydayContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
+                daysAdapter.isInteractionEnabled = !isChecked
+            }
+        } else {
+            scheduleModeToggle?.addOnButtonCheckedListener { _, checkedId, isChecked ->
+                if (!isChecked) return@addOnButtonCheckedListener
+                val selectedMode = when (checkedId) {
+                    R.id.btn_schedule_daily -> ScheduleMode.Daily
+                    R.id.btn_schedule_custom -> ScheduleMode.Custom
+                    else -> ScheduleMode.AllDay
+                }
+                selectScheduleMode(selectedMode, initialize = !isLoadingSettings)
+            }
         }
 
         btnAddEverydayInterval.setOnClickListener {
-            everydayIntervals.add(TimeInterval(9, 0, 17, 0))
-            everydayAdapter.notifyItemInserted(everydayIntervals.size - 1)
+            addInterval(everydayIntervals) {
+                everydayAdapter.notifyItemInserted(everydayIntervals.size - 1)
+            }
         }
 
         loadExistingSettings()
@@ -78,8 +104,10 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
     private fun setupRecyclerViews() {
         everydayAdapter = TimeIntervalAdapter(
             everydayIntervals,
-            onTimeClick = { interval, isStart, position ->
-                showTimePicker(interval, isStart, everydayIntervals) { everydayAdapter.notifyItemChanged(position) }
+            onTimeClick = { interval, isStart, _ ->
+                showTimePicker(interval, isStart, everydayIntervals) {
+                    everydayAdapter.notifyDataSetChanged()
+                }
             },
             onRemove = { position ->
                 everydayIntervals.removeAt(position)
@@ -97,8 +125,9 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
         daysAdapter = DayAdapter(
             dayItems,
             onAddTimeInterval = { dayItem, dayPosition ->
-                dayItem.intervals.add(TimeInterval(9, 0, 17, 0))
-                daysAdapter.notifyItemChanged(dayPosition)
+                addInterval(dayItem.intervals) {
+                    daysAdapter.notifyItemChanged(dayPosition)
+                }
             },
             onTimeClick = { interval, isStart, dayPosition, _ ->
                 showTimePicker(interval, isStart, dayItems[dayPosition].intervals) { daysAdapter.notifyItemChanged(dayPosition) }
@@ -117,8 +146,6 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
 
     private fun loadExistingSettings() {
         val config = getTimeConfig()
-        switchEveryDay.isChecked = config.isEveryday
-        daysAdapter.isInteractionEnabled = !config.isEveryday
 
         everydayIntervals.clear()
         everydayIntervals.addAll(config.everydayIntervals.map { it.copy() })
@@ -131,19 +158,54 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
             dayItem.intervals.addAll(intervals.map { it.copy() })
         }
         daysAdapter.notifyDataSetChanged()
+
+        if (scheduleModeToggle == null) {
+            switchEveryDay.isChecked = config.isEveryday
+            daysAdapter.isInteractionEnabled = !config.isEveryday
+            everydayContainer.visibility = if (config.isEveryday) View.VISIBLE else View.GONE
+            daysListContainer.visibility = View.VISIBLE
+            return
+        }
+
+        scheduleMode = when {
+            config.isAllDaySchedule() -> ScheduleMode.AllDay
+            config.isEveryday -> ScheduleMode.Daily
+            else -> ScheduleMode.Custom
+        }
+        isLoadingSettings = true
+        scheduleModeToggle?.check(
+            when (scheduleMode) {
+                ScheduleMode.AllDay -> R.id.btn_schedule_all_day
+                ScheduleMode.Daily -> R.id.btn_schedule_daily
+                ScheduleMode.Custom -> R.id.btn_schedule_custom
+            }
+        )
+        isLoadingSettings = false
+        selectScheduleMode(scheduleMode, initialize = false)
     }
 
     private fun persistSettings() {
         val dailyIntervals = dayItems
             .filter { it.isActive }
             .associateTo(mutableMapOf()) { it.dayIndex to it.intervals.map { i -> i.copy() }.toMutableList() }
-        saveTimeConfig(
+        val config = if (scheduleModeToggle != null && scheduleMode == ScheduleMode.AllDay) {
+            AppTimeConfig.allDay()
+        } else {
             AppTimeConfig(
                 isEveryday = switchEveryDay.isChecked,
                 everydayIntervals = everydayIntervals.map { it.copy() }.toMutableList(),
                 dailyIntervals = dailyIntervals
             )
-        )
+        }
+        if (config.hasOverlappingTimeRanges()) {
+            Toast.makeText(
+                requireContext(),
+                R.string.schedule_overlap_not_saved,
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        saveTimeConfig(config)
     }
 
     private fun showTimePicker(interval: TimeInterval, isStart: Boolean, list: MutableList<TimeInterval>, onComplete: () -> Unit) {
@@ -161,6 +223,7 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
             .build()
 
         picker.addOnPositiveButtonClickListener {
+            val previousIntervals = list.map(TimeInterval::copy)
             if (isStart) {
                 interval.startHour = picker.hour
                 interval.startMinute = picker.minute
@@ -169,12 +232,72 @@ abstract class BaseTimeSettingsFragment : BottomSheetDialogFragment() {
                     if (picker.hour == 0 && picker.minute == 0) 24 else picker.hour
                 interval.endMinute = picker.minute
             }
-            if (list.fixOvernightInterval(interval)) {
+            val splitOvernight = list.fixOvernightInterval(interval)
+            val hasOverlap = AppTimeConfig(
+                isEveryday = true,
+                everydayIntervals = list
+            ).hasOverlappingTimeRanges()
+            if (hasOverlap) {
+                list.clear()
+                list.addAll(previousIntervals)
+                Toast.makeText(
+                    requireContext(),
+                    R.string.schedule_overlap_not_saved,
+                    Toast.LENGTH_LONG
+                ).show()
+            } else if (splitOvernight) {
                 Toast.makeText(requireContext(), R.string.time_overnight_split, Toast.LENGTH_LONG).show()
             }
             onComplete()
         }
 
         picker.show(childFragmentManager, "time_picker")
+    }
+
+    private fun selectScheduleMode(mode: ScheduleMode, initialize: Boolean) {
+        scheduleMode = mode
+        if (initialize && mode == ScheduleMode.Daily) {
+            val current = AppTimeConfig(
+                isEveryday = true,
+                everydayIntervals = everydayIntervals
+            )
+            if (everydayIntervals.isEmpty() || current.isAllDaySchedule()) {
+                everydayIntervals.clear()
+                everydayIntervals.add(TimeInterval(9, 0, 17, 0))
+                everydayAdapter.notifyDataSetChanged()
+            }
+        }
+        switchEveryDay.isChecked = mode != ScheduleMode.Custom
+        everydayContainer.visibility = if (mode == ScheduleMode.Daily) View.VISIBLE else View.GONE
+        daysListContainer.visibility = if (mode == ScheduleMode.Custom) View.VISIBLE else View.GONE
+        daysAdapter.isInteractionEnabled = mode == ScheduleMode.Custom
+    }
+
+    private fun addInterval(intervals: MutableList<TimeInterval>, onAdded: () -> Unit) {
+        val interval = nextAvailableInterval(intervals)
+        if (interval == null) {
+            Toast.makeText(
+                requireContext(),
+                R.string.schedule_no_room_for_range,
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        intervals.add(interval)
+        onAdded()
+    }
+
+    private fun nextAvailableInterval(intervals: List<TimeInterval>): TimeInterval? {
+        if (intervals.isEmpty()) return TimeInterval(9, 0, 17, 0)
+
+        val candidateHours = (17..23) + (0..16)
+        return candidateHours
+            .map { hour -> TimeInterval(hour, 0, hour + 1, 0) }
+            .firstOrNull { candidate ->
+                !AppTimeConfig(
+                    isEveryday = true,
+                    everydayIntervals = (intervals + candidate).toMutableList()
+                ).hasOverlappingTimeRanges()
+            }
     }
 }

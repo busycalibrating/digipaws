@@ -94,7 +94,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:letterSpacing="0.1"
-                android:text="SCHEDULE"
+                android:text="@string/schedule_section_title"
                 android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -128,7 +128,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:letterSpacing="0.1"
-                android:text="WHEN BLOCK TRIGGERED"
+                android:text="@string/warning_section_title"
                 android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 

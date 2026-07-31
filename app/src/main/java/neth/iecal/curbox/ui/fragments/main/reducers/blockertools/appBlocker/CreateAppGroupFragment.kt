@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import neth.iecal.curbox.R
@@ -20,6 +21,7 @@ import neth.iecal.curbox.data.models.AppGroup
 import neth.iecal.curbox.data.models.AppGroupConfig
 import neth.iecal.curbox.databinding.FragmentCreateAppGroupBinding
 import neth.iecal.curbox.ui.activity.SelectAppsActivity
+import neth.iecal.curbox.utils.scheduleConflictsWith
 import java.util.UUID
 
 class CreateAppGroupFragment : Fragment() {
@@ -100,24 +102,10 @@ class CreateAppGroupFragment : Fragment() {
             }
         }
 
-        binding.btnSelectApps.setOnClickListener {
-            val intent = Intent(requireContext(), SelectAppsActivity::class.java)
-            intent.putStringArrayListExtra("PRE_SELECTED_APPS", selectedApps)
-            selectAppsLauncher.launch(intent)
-        }
+        binding.btnSelectApps.setOnClickListener { openAppSelector() }
 
-        binding.btnConfigureSchedule.setOnClickListener {
-            TimeBasedSettingsFragment().show(
-                parentFragmentManager,
-                TimeBasedSettingsFragment.FRAGMENT_ID
-            )
-        }
-        binding.btnConfigureUsage.setOnClickListener {
-            UsageBasedSettingsFragment().show(
-                parentFragmentManager,
-                UsageBasedSettingsFragment.FRAGMENT_ID
-            )
-        }
+        binding.btnConfigureSchedule.setOnClickListener { openScheduleEditor() }
+        binding.btnConfigureUsage.setOnClickListener { openUsageEditor() }
         binding.configureWarningScreen.setOnClickListener {
             val configFragment = neth.iecal.curbox.ui.fragments.main.reducers.blockertools.shared.WarningConfigFragment.newInstance(
                 viewModel.warningScrnConfig, 
@@ -139,13 +127,12 @@ class CreateAppGroupFragment : Fragment() {
                     Gson().fromJson(configStr, AppBlockerWarningScreenConfig::class.java)
             }
         }
-
         binding.fabSaveGroup.setOnClickListener {
             saveGroup()
         }
     }
 
-    private fun saveGroup() {
+    private fun saveGroup(skipConflictCheck: Boolean = false) {
         if (_binding == null || isDeleting) return
         val name = binding.etGroupName.text.toString().trim()
         if (name.isEmpty()) {
@@ -184,6 +171,24 @@ class CreateAppGroupFragment : Fragment() {
             warningScreenConfig = viewModel.warningScrnConfig
         )
 
+        val conflicts = newGroup.scheduleConflictsWith(viewModel.groups.value)
+        if (!skipConflictCheck && conflicts.isNotEmpty()) {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.schedule_conflict_title)
+                .setMessage(requireContext().appGroupConflictMessage(conflicts))
+                .setNegativeButton(R.string.schedule_conflict_edit_apps) { _, _ ->
+                    openAppSelector()
+                }
+                .setNeutralButton(R.string.schedule_conflict_edit_schedule) { _, _ ->
+                    openScheduleEditor()
+                }
+                .setPositiveButton(R.string.schedule_conflict_keep_both) { _, _ ->
+                    saveGroup(skipConflictCheck = true)
+                }
+                .show()
+            return
+        }
+
         if (isEditingRecord && targetExistingGroup != null) {
             viewModel.updateGroupById(newGroup)
         } else {
@@ -196,6 +201,26 @@ class CreateAppGroupFragment : Fragment() {
 
         Toast.makeText(requireContext(), getString(R.string.group_saved_successfully), Toast.LENGTH_SHORT).show()
         requireActivity().finish()
+    }
+
+    private fun openAppSelector() {
+        val intent = Intent(requireContext(), SelectAppsActivity::class.java)
+        intent.putStringArrayListExtra("PRE_SELECTED_APPS", selectedApps)
+        selectAppsLauncher.launch(intent)
+    }
+
+    private fun openScheduleEditor() {
+        TimeBasedSettingsFragment().show(
+            parentFragmentManager,
+            TimeBasedSettingsFragment.FRAGMENT_ID
+        )
+    }
+
+    private fun openUsageEditor() {
+        UsageBasedSettingsFragment().show(
+            parentFragmentManager,
+            UsageBasedSettingsFragment.FRAGMENT_ID
+        )
     }
 
     override fun onDestroyView() {
