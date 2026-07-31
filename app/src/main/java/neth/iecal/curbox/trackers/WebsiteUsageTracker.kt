@@ -11,7 +11,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import neth.iecal.curbox.blockers.KeywordBlocker
 import neth.iecal.curbox.data.db.AppDatabase
 import neth.iecal.curbox.data.db.WebsiteStatsDao
 import neth.iecal.curbox.data.db.WebsiteStatsEntity
@@ -45,6 +44,7 @@ class WebsiteUsageTracker {
     private var currentDomain: String? = null
     private var currentUrlIdentifier: String? = null
     private var domainStartTimeMs: Long = 0L
+    private var onWebsiteObserved: (WebsiteObservation?) -> Unit = {}
 
     private var recheckJob: Job? = null
     @Volatile private var trackingEnabled = true
@@ -56,8 +56,12 @@ class WebsiteUsageTracker {
         }
     }
 
-    fun setup(service: BaseBlockingService) {
+    fun setup(
+        service: BaseBlockingService,
+        onWebsiteObserved: (WebsiteObservation?) -> Unit = {}
+    ) {
         this.service = service
+        this.onWebsiteObserved = onWebsiteObserved
         val db = AppDatabase.getInstance(service)
         this.websiteStatsDao = db.websiteStatsDao()
         startObservingRecheckTime()
@@ -68,8 +72,14 @@ class WebsiteUsageTracker {
         scope.launch {
             service.dataStoreManager.settings.collect { settings ->
                 val enabled = settings.isWebsiteUsageTrackingEnabled
+                val wasEnabled = trackingEnabled
                 trackingEnabled = enabled
-                if (!enabled) mainHandler.post { discardSession() }
+                mainHandler.post {
+                    when {
+                        !enabled -> pauseUsageSession()
+                        !wasEnabled -> resumeUsageSession()
+                    }
+                }
                 val nextRecheck = settings.nextWebsiteRecheckTime
                 if (nextRecheck > System.currentTimeMillis()) {
                     scheduleRecheck(nextRecheck)
@@ -85,7 +95,10 @@ class WebsiteUsageTracker {
             if (delayMs > 0) {
                 kotlinx.coroutines.delay(delayMs)
                 Log.d("WebsiteUsageTracker", "Executing scheduled recheck")
-                saveSession()
+                mainHandler.post {
+                    saveSession()
+                    emitCurrentObservation()
+                }
             }
         }
     }
@@ -121,18 +134,12 @@ class WebsiteUsageTracker {
         return null
     }
     fun onEvent(event: AccessibilityEvent?) {
-        if (event == null || !trackingEnabled) return
+        if (event == null) return
         
         val packageName = event.packageName?.toString() ?: return
         
         if (!URL_BAR_ID_LIST.containsKey(packageName)) {
-            // Not a supported browser package
-            if (currentPackage != null) {
-                saveSession()
-                currentPackage = null
-                currentDomain = null
-                currentUrlIdentifier = null
-            }
+            mainHandler.post { leaveCurrentWebsite() }
             return
         }
 
@@ -164,15 +171,7 @@ class WebsiteUsageTracker {
                 val filteredUrl = filterOutUrlFromPlainText(text)
                 val siteInfo = extractSiteInfo(filteredUrl?:text)
                 if (siteInfo.domain.isNotEmpty()) {
-                    if (siteInfo.urlIdentifier != currentUrlIdentifier || packageName != currentPackage) {
-                        Log.d("saving session", text)
-                        saveSession()
-                        currentDomain = siteInfo.domain
-                        currentUrlIdentifier = siteInfo.urlIdentifier
-                        currentPackage = packageName
-                        domainStartTimeMs = SystemClock.uptimeMillis()
-                        saveInitialSession()
-                    }
+                    mainHandler.post { observeWebsite(packageName, siteInfo) }
                 }
             }
         } catch (e: Exception) {
@@ -182,6 +181,46 @@ class WebsiteUsageTracker {
 
     private data class SiteInfo(val domain: String, val urlIdentifier: String)
     private data class HourSlice(val date: String, val hour: Int, val durationMs: Long)
+
+    private fun observeWebsite(packageName: String, siteInfo: SiteInfo) {
+        if (siteInfo.urlIdentifier == currentUrlIdentifier && packageName == currentPackage) return
+
+        Log.d("saving session", siteInfo.urlIdentifier)
+        saveSession()
+        currentDomain = siteInfo.domain
+        currentUrlIdentifier = siteInfo.urlIdentifier
+        currentPackage = packageName
+        domainStartTimeMs = if (trackingEnabled) SystemClock.uptimeMillis() else 0L
+        emitCurrentObservation()
+        saveInitialSession()
+    }
+
+    private fun emitCurrentObservation() {
+        val packageName = currentPackage ?: return
+        val domain = currentDomain ?: return
+        val urlIdentifier = currentUrlIdentifier ?: return
+        onWebsiteObserved(WebsiteObservation(packageName, domain, urlIdentifier))
+    }
+
+    private fun leaveCurrentWebsite() {
+        if (currentPackage == null) return
+        saveSession()
+        currentPackage = null
+        currentDomain = null
+        currentUrlIdentifier = null
+        domainStartTimeMs = 0L
+        onWebsiteObserved(null)
+    }
+
+    private fun pauseUsageSession() {
+        domainStartTimeMs = 0L
+    }
+
+    private fun resumeUsageSession() {
+        if (currentPackage == null || currentDomain == null || currentUrlIdentifier == null) return
+        domainStartTimeMs = SystemClock.uptimeMillis()
+        saveInitialSession()
+    }
 
     private fun splitByLocalHour(startMs: Long, endMs: Long): List<HourSlice> {
         if (endMs <= startMs) return emptyList()
@@ -313,12 +352,6 @@ class WebsiteUsageTracker {
     fun onDestroy() {
         recheckJob?.cancel()
         saveSession()
-    }
-
-    private fun discardSession() {
-        currentPackage = null
-        currentDomain = null
-        currentUrlIdentifier = null
-        domainStartTimeMs = 0L
+        onWebsiteObserved(null)
     }
 }

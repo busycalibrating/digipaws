@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.room.InvalidationTracker
 import com.google.gson.Gson
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,6 +33,7 @@ import neth.iecal.curbox.data.models.FocusBlockMode
 import neth.iecal.curbox.data.models.KeywordGroup
 import neth.iecal.curbox.data.models.upgradeLegacyKeywordGroupConfigs
 import neth.iecal.curbox.services.BaseBlockingService
+import neth.iecal.curbox.trackers.WebsiteObservation
 import neth.iecal.curbox.ui.activity.WarningActivity
 import neth.iecal.curbox.utils.ActiveTimeGroupWindow
 import neth.iecal.curbox.utils.KeywordMatcher
@@ -76,6 +78,7 @@ class KeywordBlocker : BaseBlocker() {
     private val blockGuard = Any()
     private var lastBlockedTarget = ""
     private var blockSuppressedUntil = 0L
+    @Volatile private var lastWebsiteObservation: WebsiteObservation? = null
 
     fun compileKeywords(keywords: Collection<String>): Pair<List<Regex>, List<String>> =
         KeywordMatcher.compileKeywords(keywords)
@@ -163,7 +166,7 @@ class KeywordBlocker : BaseBlocker() {
                     latest.lastVisited > (System.currentTimeMillis() - 2500) &&
                     markSnapshotAsObserved(latest)
                 ) {
-                    evaluateAndBlock(latest)
+                    evaluateAndBlock(latest.packageName, latest.urlIdentifier)
                     Log.d("KeywordBlocker", "Evaluated $latest")
                 }
             }
@@ -189,8 +192,14 @@ class KeywordBlocker : BaseBlocker() {
             }
         }
 
-    private fun evaluateAndBlock(entry: WebsiteStatsEntity) {
-        val matched = findMatchingGroups(entry.urlIdentifier)
+    fun onWebsiteObserved(observation: WebsiteObservation?) {
+        lastWebsiteObservation = observation
+        if (observation == null || !isTurnedOn) return
+        evaluateAndBlock(observation.packageName, observation.urlIdentifier)
+    }
+
+    private fun evaluateAndBlock(packageName: String, urlIdentifier: String) {
+        val matched = findMatchingGroups(urlIdentifier)
         if (matched.isEmpty()) return
         val now = System.currentTimeMillis()
 
@@ -206,7 +215,7 @@ class KeywordBlocker : BaseBlocker() {
         for (group in eligible) {
             val window = group.config?.schedule?.activeWindow(now) ?: continue
             if (isUsageLimitExceeded(group, window)) {
-                if (!claimBlock(entry, group.id)) return
+                if (!claimBlock(packageName, urlIdentifier, group.id)) return
                 handleBlocking(group)
                 return
             }
@@ -225,9 +234,13 @@ class KeywordBlocker : BaseBlocker() {
         }
     }
 
-    private fun claimBlock(entry: WebsiteStatsEntity, groupId: String): Boolean = synchronized(blockGuard) {
+    private fun claimBlock(
+        packageName: String,
+        urlIdentifier: String,
+        groupId: String
+    ): Boolean = synchronized(blockGuard) {
         val now = System.currentTimeMillis()
-        val target = blockTarget(entry, groupId)
+        val target = blockTarget(packageName, urlIdentifier, groupId)
         if (target == lastBlockedTarget && now < blockSuppressedUntil) {
             false
         } else {
@@ -237,8 +250,8 @@ class KeywordBlocker : BaseBlocker() {
         }
     }
 
-    private fun blockTarget(entry: WebsiteStatsEntity, groupId: String): String =
-        "$groupId\u0000${entry.packageName}\u0000${entry.urlIdentifier}"
+    private fun blockTarget(packageName: String, urlIdentifier: String, groupId: String): String =
+        "$groupId\u0000$packageName\u0000$urlIdentifier"
 
     private fun handleBlocking(group: KeywordGroup) {
         Thread.sleep(250)
@@ -264,8 +277,9 @@ class KeywordBlocker : BaseBlocker() {
         window: ActiveTimeGroupWindow
     ): Boolean {
         val usage = group.config?.usage ?: return false
-        val limit = limitForToday(usage) * 60_000L
-        return limit <= 0 || groupUsage(group, window) >= limit
+        return isKeywordUsageLimitExceeded(limitForToday(usage)) {
+            groupUsage(group, window)
+        }
     }
 
     // Combined usage of every keyword in the group across all browsers, so the
@@ -276,9 +290,10 @@ class KeywordBlocker : BaseBlocker() {
     ): Long {
         return runBlocking(Dispatchers.IO) {
             val dao = AppDatabase.getInstance(service).websiteStatsDao()
+            val usageEndMs = minOf(System.currentTimeMillis(), window.endMs)
             val zone = ZoneId.systemDefault()
             val startDate = Instant.ofEpochMilli(window.startMs).atZone(zone).toLocalDate()
-            val endDate = Instant.ofEpochMilli(window.endMs).atZone(zone).toLocalDate()
+            val endDate = Instant.ofEpochMilli(usageEndMs).atZone(zone).toLocalDate()
             val dates = buildList {
                 var date = startDate
                 while (!date.isAfter(endDate)) {
@@ -288,7 +303,7 @@ class KeywordBlocker : BaseBlocker() {
             }
             val rows = dao.getStatsForDates(dates)
                 .filter { matchesGroup(group, it.urlIdentifier) }
-            WebsiteUsageWindow.sum(rows, window.startMs, window.endMs)
+            WebsiteUsageWindow.sum(rows, window.startMs, usageEndMs)
         }
     }
 
@@ -365,6 +380,7 @@ class KeywordBlocker : BaseBlocker() {
                 if (isTurnedOn) {
                     startObservingDatabase()
                     showNextCooldownNotification()
+                    reevaluateCurrentWebsite()
                     Handler(Looper.getMainLooper()).post {
                         val currentPackage =
                             service.rootInActiveWindow?.packageName?.toString() ?: return@post
@@ -382,6 +398,21 @@ class KeywordBlocker : BaseBlocker() {
                     notifiedCooldownGroupId = null
                 }
             }
+        }
+    }
+
+    private fun reevaluateCurrentWebsite() {
+        val observation = lastWebsiteObservation ?: return
+        val currentPackage = runCatching {
+            service.rootInActiveWindow?.packageName?.toString()
+        }.getOrNull()
+        if (currentPackage != observation.packageName) return
+
+        try {
+            evaluateAndBlock(observation.packageName, observation.urlIdentifier)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            Log.e("KeywordBlocker", "Failed to recheck current website", error)
         }
     }
 
@@ -431,7 +462,7 @@ class KeywordBlocker : BaseBlocker() {
             val latest = AppDatabase.getInstance(service).websiteStatsDao()
                 .getStatsForDate(date).maxByOrNull { it.lastVisited }
             if (latest != null && latest.lastVisited > (System.currentTimeMillis() - 5000)) {
-                evaluateAndBlock(latest)
+                evaluateAndBlock(latest.packageName, latest.urlIdentifier)
             }
         }
     }
@@ -505,6 +536,7 @@ class KeywordBlocker : BaseBlocker() {
         service.unregisterReceiver(refreshReceiver)
         observationJob?.cancel()
         observationJob = null
+        lastWebsiteObservation = null
         if (::notificationManager.isInitialized) {
             notificationManager.release()
         }

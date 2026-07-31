@@ -46,10 +46,11 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
         val limitMillis = limitForToday(config.usage) * 60_000L
         val patterns = KeywordMatcher.compileKeywords(group.selectedKeywords)
         val used = withContext(Dispatchers.IO) {
+            val usageEndMs = minOf(System.currentTimeMillis(), window.endMs)
             val dao = AppDatabase.getInstance(getApplication()).websiteStatsDao()
             val startDate = java.time.Instant.ofEpochMilli(window.startMs)
                 .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-            val endDate = java.time.Instant.ofEpochMilli(window.endMs)
+            val endDate = java.time.Instant.ofEpochMilli(usageEndMs)
                 .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
             val dates = buildList {
                 var date = startDate
@@ -60,7 +61,7 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
             }
             val rows = dao.getStatsForDates(dates)
                 .filter { KeywordMatcher.matchesPatterns(patterns, it.urlIdentifier) }
-            WebsiteUsageWindow.sum(rows, window.startMs, window.endMs)
+            WebsiteUsageWindow.sum(rows, window.startMs, usageEndMs)
         }
         return (limitMillis - used).coerceAtLeast(0L)
     }

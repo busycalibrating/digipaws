@@ -29,6 +29,7 @@ import neth.iecal.curbox.blockers.uihider.NodePicker
 import neth.iecal.curbox.blockers.uihider.UiHider
 import neth.iecal.curbox.trackers.AppUsageTracker
 import neth.iecal.curbox.trackers.ReelsCountTracker
+import neth.iecal.curbox.trackers.WebsiteObservation
 import neth.iecal.curbox.trackers.WebsiteUsageTracker
 import neth.iecal.curbox.ui.overlay.ReelsOverlayManager
 
@@ -59,6 +60,7 @@ class AppBlockerService : BaseBlockingService() {
     private val eventChannel = Channel<AccessibilityEvent>(Channel.CONFLATED) { droppedEvent ->
         droppedEvent.recycle()
     }
+    private val websiteObservationChannel = Channel<WebsiteObservation?>(Channel.CONFLATED)
 
     private lateinit var crashLogger: CrashLogger
 
@@ -98,7 +100,6 @@ class AppBlockerService : BaseBlockingService() {
             appUsageTracker.onEvent(event)
             reelsCountTracker.onEvent(event)
             mindfulMessage.onEvent(event)
-            websiteUsageTracker.onEvent(event)
         } catch (error: Exception) {
             Log.e("Usage Tracking error", error.toString())
         }
@@ -119,6 +120,7 @@ class AppBlockerService : BaseBlockingService() {
         serviceScope.launch {
             for (event in eventChannel) {
                 try {
+                    websiteUsageTracker.onEvent(event)
                     reelBlocker.doViewBlockerCheck(event)
                     keywordBlocker.checkIfUnsupportedBrowser(event)
                     if (BuildConfig.SUPPORTS_UI_HIDER) {
@@ -132,6 +134,18 @@ class AppBlockerService : BaseBlockingService() {
                     Log.e("Blocker", "Background worker error", t)
                 } finally {
                     event.recycle()
+                }
+            }
+        }
+        serviceScope.launch(Dispatchers.IO) {
+            for (observation in websiteObservationChannel) {
+                try {
+                    keywordBlocker.onWebsiteObserved(observation)
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+
+                    crashLogger.logNonFatalError(Exception(t))
+                    Log.e("KeywordBlocker", "Website observation check failed", t)
                 }
             }
         }
@@ -156,7 +170,9 @@ class AppBlockerService : BaseBlockingService() {
 
         reelsCountTracker.setup(this, reelsOverlayManager)
         mindfulMessage.setup(this)
-        websiteUsageTracker.setup(this)
+        websiteUsageTracker.setup(this) { observation ->
+            websiteObservationChannel.trySend(observation)
+        }
         appUsageTracker.setup(this)
         neth.iecal.curbox.utils.UsageStatsCleaner.watch(this)
 
@@ -214,6 +230,7 @@ class AppBlockerService : BaseBlockingService() {
             appUsageTracker.onDestroy()
 
             eventChannel.close()
+            websiteObservationChannel.close()
             serviceScope.cancel()
         }catch (_: Exception){}
     }
