@@ -20,6 +20,9 @@ data class AppBlockerWarningScreenConfig(
     val typingSentence: String = "",
     val isIntentRequirementEnabled: Boolean = false,
     val minIntentLength: Int = 1,
+    val isAdaptiveMathRequirementEnabled: Boolean = false,
+    val adaptiveMathQuestionCount: Int = 3,
+    val adaptiveMathStartingLevel: Int = 3,
     /** For app groups, grant access only for the current selected-app session. */
     val isOnOpenConfig: Boolean = false,
 )

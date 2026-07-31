@@ -12,6 +12,7 @@ import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -48,6 +49,8 @@ class WarningActivity : AppCompatActivity() {
     private var nfcReaderActive = false
     private var nfcTapDialog: AlertDialog? = null
     private var scannedValidDuration = -1L
+    private var adaptiveMathChallenge: AdaptiveMathChallenge? = null
+    private var isAdaptiveMathComplete = false
 
     private lateinit var binding: DialogWarningOverlayBinding
     private val barcodeLauncher = registerForActivityResult(
@@ -224,6 +227,11 @@ class WarningActivity : AppCompatActivity() {
                                     button.isEnabled =
                                         entered.toString() == requiredSentence
                                 }
+                            } else if (warningScreenConfig.isAdaptiveMathRequirementEnabled) {
+                                setupAdaptiveMathChallenge(
+                                    warningScreenConfig.adaptiveMathQuestionCount,
+                                    warningScreenConfig.adaptiveMathStartingLevel
+                                )
                             } else if (warningScreenConfig.isQrUnlockRequirementEnabled && !isQrScanned) {
                                 button.text = getString(R.string.warning_scan_qr_code)
                                 button.isEnabled = true
@@ -268,6 +276,13 @@ class WarningActivity : AppCompatActivity() {
         }
 
         binding.btnProceed.setOnClickListener {
+            if (warningScreenConfig.isAdaptiveMathRequirementEnabled &&
+                !isAdaptiveMathComplete
+            ) {
+                submitAdaptiveMathAnswer()
+                return@setOnClickListener
+            }
+
             if (warningScreenConfig.isQrUnlockRequirementEnabled && !isQrScanned) {
                 val options = ScanOptions()
                 options.setDesiredBarcodeFormats(ScanOptions.ALL_CODE_TYPES)
@@ -387,6 +402,79 @@ class WarningActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupAdaptiveMathChallenge(questionCount: Int, startingLevel: Int) {
+        val challenge = AdaptiveMathChallenge(
+            requiredAnswers = questionCount.coerceIn(
+                MIN_ADAPTIVE_MATH_QUESTIONS,
+                MAX_ADAPTIVE_MATH_QUESTIONS
+            ),
+            startingDifficulty = startingLevel.coerceIn(
+                MIN_ADAPTIVE_MATH_LEVEL,
+                MAX_ADAPTIVE_MATH_LEVEL
+            )
+        )
+        adaptiveMathChallenge = challenge
+        binding.mathProgress.visibility = View.VISIBLE
+        binding.mathProblem.visibility = View.VISIBLE
+        binding.mathInputLayout.visibility = View.VISIBLE
+        binding.btnProceed.isEnabled = true
+        binding.btnProceed.setText(R.string.warning_math_check_answer)
+        binding.mathInputEdit.doAfterTextChanged {
+            binding.mathInputLayout.error = null
+        }
+        binding.mathInputEdit.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                binding.btnProceed.performClick()
+                true
+            } else {
+                false
+            }
+        }
+        showAdaptiveMathProblem(challenge)
+    }
+
+    private fun submitAdaptiveMathAnswer() {
+        val challenge = adaptiveMathChallenge ?: return
+        val answer = binding.mathInputEdit.text
+            ?.toString()
+            ?.trim()
+            ?.replace(',', '.')
+            ?.toBigDecimalOrNull()
+        if (answer == null) {
+            binding.mathInputLayout.error = getString(R.string.warning_math_answer_required)
+            return
+        }
+
+        val result = challenge.submit(answer)
+        if (result.isComplete) {
+            isAdaptiveMathComplete = true
+            binding.mathProblem.visibility = View.GONE
+            binding.mathInputLayout.visibility = View.GONE
+            binding.mathProgress.text = getString(
+                R.string.warning_math_progress,
+                result.solvedCount,
+                challenge.requiredAnswers
+            )
+            binding.btnProceed.setText(R.string.proceed)
+            return
+        }
+
+        binding.mathInputEdit.text?.clear()
+        if (!result.wasCorrect) {
+            binding.mathInputLayout.error = getString(R.string.warning_math_incorrect)
+        }
+        showAdaptiveMathProblem(challenge)
+    }
+
+    private fun showAdaptiveMathProblem(challenge: AdaptiveMathChallenge) {
+        binding.mathProgress.text = getString(
+            R.string.warning_math_progress,
+            challenge.solvedCount,
+            challenge.requiredAnswers
+        )
+        binding.mathProblem.text = challenge.currentProblem.expression
+    }
+
     private fun startNfcUnlockScan(warningScreenConfig: AppBlockerWarningScreenConfig) {
         if (!NfcUnlockUtils.isNfcReady(this)) {
             Toast.makeText(this, R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
@@ -499,5 +587,12 @@ class WarningActivity : AppCompatActivity() {
                 currentVibrator.vibrate(VibrationEffect.createWaveform(jaggedPattern, -1))
             }
         }
+    }
+
+    private companion object {
+        const val MIN_ADAPTIVE_MATH_QUESTIONS = 1
+        const val MAX_ADAPTIVE_MATH_QUESTIONS = 10
+        const val MIN_ADAPTIVE_MATH_LEVEL = 1
+        const val MAX_ADAPTIVE_MATH_LEVEL = 10
     }
 }

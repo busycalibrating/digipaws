@@ -98,7 +98,6 @@ Source sets: `app/src/sync/java` is added as an extra source dir to full and pla
 ## Writing user displayed text
 - Never use dashes(-) anywhere
 - Keep simple language at a 6th grader level
-- Speak in first person
 - Be crisp and concise
 - Explain with real world examples if too complex
 - The reader is not tech savvy

@@ -16,6 +16,15 @@ internal class WarningConfigFormController(
     private val onEachOpenChanged: () -> Unit
 ) {
     private var supportsOnEachOpen = false
+    private val warningChallengeOptions by lazy {
+        createWarningChallengeOptions(fragment.requireContext())
+    }
+    private val warningEffortOptions by lazy {
+        createWarningEffortOptions(fragment.requireContext())
+    }
+    private val warningNoEffortOptions by lazy {
+        createWarningNoEffortOptions(fragment.requireContext())
+    }
 
     fun bind(
         config: AppBlockerWarningScreenConfig,
@@ -58,6 +67,13 @@ internal class WarningConfigFormController(
         binding.typingSentenceEdit.setText(config.typingSentence)
         binding.intentMinLengthSlider.value = config.minIntentLength.toFloat().coerceIn(1f, 100f)
         updateIntentMinLengthTitle(binding.intentMinLengthSlider.value.toInt())
+
+        binding.mathQuestionCountSlider.value = config.adaptiveMathQuestionCount.toFloat()
+            .coerceIn(MIN_MATH_QUESTIONS.toFloat(), MAX_MATH_QUESTIONS.toFloat())
+        updateMathQuestionCountTitle(binding.mathQuestionCountSlider.value.toInt())
+        binding.mathStartingLevelSlider.value = config.adaptiveMathStartingLevel.toFloat()
+            .coerceIn(MIN_MATH_LEVEL.toFloat(), MAX_MATH_LEVEL.toFloat())
+        updateMathStartingLevelTitle(binding.mathStartingLevelSlider.value.toInt())
 
         binding.fixedTimeSlider.value =
             (config.timeInterval / 60_000).toFloat().coerceIn(1f, 120f)
@@ -150,6 +166,12 @@ internal class WarningConfigFormController(
         binding.intentMinLengthSlider.addOnChangeListener { _, value, _ ->
             updateIntentMinLengthTitle(value.toInt())
         }
+        binding.mathQuestionCountSlider.addOnChangeListener { _, value, _ ->
+            updateMathQuestionCountTitle(value.toInt())
+        }
+        binding.mathStartingLevelSlider.addOnChangeListener { _, value, _ ->
+            updateMathStartingLevelTitle(value.toInt())
+        }
         binding.advancedSettingsHeader.setOnClickListener {
             val isCurrentlyVisible = binding.advancedSettingsContent.isVisible
             TransitionManager.beginDelayedTransition(
@@ -186,6 +208,9 @@ internal class WarningConfigFormController(
             typingSentence = binding.typingSentenceEdit.text.toString(),
             isIntentRequirementEnabled = flags.isIntentRequirementEnabled,
             minIntentLength = binding.intentMinLengthSlider.value.toInt(),
+            isAdaptiveMathRequirementEnabled = flags.isAdaptiveMathRequirementEnabled,
+            adaptiveMathQuestionCount = binding.mathQuestionCountSlider.value.toInt(),
+            adaptiveMathStartingLevel = binding.mathStartingLevelSlider.value.toInt(),
             proceedDelayInSecs = binding.proceedDelaySlider.value.toInt(),
             vibrateAndIncBrightness = binding.switchVibrateBrightness.isChecked,
             proceedLimitEnabled = binding.proceedLimitSwitch.isChecked,
@@ -206,6 +231,7 @@ internal class WarningConfigFormController(
         binding.qrSetupContainer.isVisible = false
         binding.nfcSetupContainer.isVisible = false
         binding.typingSetupContainer.isVisible = false
+        binding.mathSetupContainer.isVisible = false
     }
 
     private fun updateSecondaryDropdown(challengeIndex: Int) {
@@ -248,7 +274,7 @@ internal class WarningConfigFormController(
             WarningUnlockSelectionMapper.NO_EFFORT_INDEX ->
                 secondaryIndex == WarningUnlockSelectionMapper.FIXED_TIME_INDEX
             WarningUnlockSelectionMapper.EFFORT_INDEX ->
-                secondaryIndex == 1 || secondaryIndex == 2
+                secondaryIndex == 1 || secondaryIndex == 2 || secondaryIndex == 4
             else -> false
         }
         binding.timingContainer.isVisible = !isOnEachOpenEnabled() && usesSharedTiming
@@ -267,6 +293,9 @@ internal class WarningConfigFormController(
         binding.nfcSetupContainer.isVisible =
             challengeIndex == WarningUnlockSelectionMapper.EFFORT_INDEX &&
                 secondaryIndex == 3
+        binding.mathSetupContainer.isVisible =
+            challengeIndex == WarningUnlockSelectionMapper.EFFORT_INDEX &&
+                secondaryIndex == 4
     }
 
     private fun selectedChallengeIndex(): Int {
@@ -373,6 +402,21 @@ internal class WarningConfigFormController(
         )
     }
 
+    private fun updateMathQuestionCountTitle(value: Int) {
+        binding.mathQuestionCountTitle.text = fragment.resources.getQuantityString(
+            R.plurals.warning_math_question_count,
+            value,
+            value
+        )
+    }
+
+    private fun updateMathStartingLevelTitle(value: Int) {
+        binding.mathStartingLevelTitle.text = fragment.getString(
+            R.string.warning_math_starting_level,
+            value
+        )
+    }
+
     private fun unitOptions(): List<String> {
         return listOf(
             fragment.getString(R.string.unit_minutes),
@@ -387,5 +431,9 @@ internal class WarningConfigFormController(
         const val DAYS_INDEX = 2
         const val MINUTES_PER_HOUR = 60
         const val MINUTES_PER_DAY = 1_440
+        const val MIN_MATH_QUESTIONS = 1
+        const val MAX_MATH_QUESTIONS = 10
+        const val MIN_MATH_LEVEL = 1
+        const val MAX_MATH_LEVEL = 10
     }
 }

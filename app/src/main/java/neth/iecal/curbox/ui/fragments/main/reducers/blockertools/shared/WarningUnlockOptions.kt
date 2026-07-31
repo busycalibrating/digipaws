@@ -18,44 +18,54 @@ internal data class WarningUnlockOption(
     override fun toString(): String = title
 }
 
-internal val warningChallengeOptions = listOf(
-    WarningUnlockOption("Never Unlock", "Total lockdown. No bypassing allowed."),
+internal fun createWarningChallengeOptions(context: Context) = listOf(
     WarningUnlockOption(
-        "Require effort to unlock",
-        "In behavioral psychology, adding physical friction breaks the automatic habit loop, giving your brain a necessary pause to reconsider.",
-        true
+        context.getString(R.string.warning_option_never_unlock),
+        context.getString(R.string.warning_option_never_unlock_desc)
     ),
-    WarningUnlockOption("Wait to unlock", "Allows immediate access after a short wait.")
-)
-
-internal val warningEffortOptions = listOf(
     WarningUnlockOption(
-        "Unlock requires QR/Barcode scanning",
-        "Scan any code (like a product box) to unlock.",
+        context.getString(R.string.warning_option_require_effort),
+        context.getString(R.string.warning_option_require_effort_desc),
         true
     ),
     WarningUnlockOption(
-        "Unlock requires typing a sentence",
-        "Precisely type a long sentence to prove focus."
-    ),
-    WarningUnlockOption(
-        "Unlock requires stating an intent",
-        "Briefly describe your goal before accessing."
-    ),
-    WarningUnlockOption(
-        "Unlock requires scanning an NFC tag",
-        "Tap a physical NFC tag to unlock."
+        context.getString(R.string.warning_option_wait),
+        context.getString(R.string.warning_option_wait_desc)
     )
 )
 
-internal val warningNoEffortOptions = listOf(
+internal fun createWarningEffortOptions(context: Context) = listOf(
     WarningUnlockOption(
-        "Ask me how much time I need",
-        "You choose the duration during each unlock."
+        context.getString(R.string.warning_option_qr),
+        context.getString(R.string.warning_option_qr_desc),
+        true
     ),
     WarningUnlockOption(
-        "Only give me a fixed amount of time",
-        "Automatically locks after a set duration.",
+        context.getString(R.string.warning_option_typing),
+        context.getString(R.string.warning_option_typing_desc)
+    ),
+    WarningUnlockOption(
+        context.getString(R.string.warning_option_intent),
+        context.getString(R.string.warning_option_intent_desc)
+    ),
+    WarningUnlockOption(
+        context.getString(R.string.warning_option_nfc),
+        context.getString(R.string.warning_option_nfc_desc)
+    ),
+    WarningUnlockOption(
+        context.getString(R.string.warning_option_adaptive_math),
+        context.getString(R.string.warning_option_adaptive_math_desc)
+    )
+)
+
+internal fun createWarningNoEffortOptions(context: Context) = listOf(
+    WarningUnlockOption(
+        context.getString(R.string.warning_option_choose_time),
+        context.getString(R.string.warning_option_choose_time_desc)
+    ),
+    WarningUnlockOption(
+        context.getString(R.string.warning_option_fixed_time),
+        context.getString(R.string.warning_option_fixed_time_desc),
         true
     )
 )
@@ -71,6 +81,7 @@ internal data class WarningUnlockFlags(
     val isTypingRequirementEnabled: Boolean = false,
     val isIntentRequirementEnabled: Boolean = false,
     val isNfcUnlockRequirementEnabled: Boolean = false,
+    val isAdaptiveMathRequirementEnabled: Boolean = false,
     val isDynamicIntervalSettingAllowed: Boolean = false
 )
 
@@ -90,6 +101,7 @@ internal object WarningUnlockSelectionMapper {
             config.isTypingRequirementEnabled -> WarningUnlockSelection(EFFORT_INDEX, 1)
             config.isIntentRequirementEnabled -> WarningUnlockSelection(EFFORT_INDEX, 2)
             config.isNfcUnlockRequirementEnabled -> WarningUnlockSelection(EFFORT_INDEX, 3)
+            config.isAdaptiveMathRequirementEnabled -> WarningUnlockSelection(EFFORT_INDEX, 4)
             config.isDynamicIntervalSettingAllowed -> WarningUnlockSelection(NO_EFFORT_INDEX, 0)
             else -> WarningUnlockSelection(NO_EFFORT_INDEX, FIXED_TIME_INDEX)
         }
@@ -108,6 +120,7 @@ internal object WarningUnlockSelectionMapper {
                 1 -> WarningUnlockFlags(isTypingRequirementEnabled = true)
                 2 -> WarningUnlockFlags(isIntentRequirementEnabled = true)
                 3 -> WarningUnlockFlags(isNfcUnlockRequirementEnabled = true)
+                4 -> WarningUnlockFlags(isAdaptiveMathRequirementEnabled = true)
                 else -> WarningUnlockFlags()
             }
             NO_EFFORT_INDEX -> WarningUnlockFlags(
@@ -144,4 +157,5 @@ internal class WarningUnlockOptionAdapter(
     override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
         return getView(position, convertView, parent)
     }
+
 }

@@ -272,6 +272,18 @@ object RestrictionComparator {
         val nfcOk = unlockKeysOk(o.isNfcUnlockRequirementEnabled, n.isNfcUnlockRequirementEnabled, o.nfcKeys, n.nfcKeys)
         val typingOk = !o.isTypingRequirementEnabled || n.isTypingRequirementEnabled
         val intentOk = !o.isIntentRequirementEnabled || n.isIntentRequirementEnabled
+        val adaptiveMathOk = !o.isAdaptiveMathRequirementEnabled ||
+            n.isAdaptiveMathRequirementEnabled
+        val adaptiveMathQuestionCountOk = when {
+            !o.isAdaptiveMathRequirementEnabled || !n.isAdaptiveMathRequirementEnabled -> true
+            else -> n.adaptiveMathQuestionCount.coerceAtLeast(1) >=
+                o.adaptiveMathQuestionCount.coerceAtLeast(1)
+        }
+        val adaptiveMathStartingLevelOk = when {
+            !o.isAdaptiveMathRequirementEnabled || !n.isAdaptiveMathRequirementEnabled -> true
+            else -> n.adaptiveMathStartingLevel.coerceIn(1, 10) >=
+                o.adaptiveMathStartingLevel.coerceIn(1, 10)
+        }
         val intentMinLengthOk = when {
             !o.isIntentRequirementEnabled || !n.isIntentRequirementEnabled -> true
             else -> n.minIntentLength.coerceAtLeast(1) >= o.minIntentLength.coerceAtLeast(1)
@@ -280,6 +292,7 @@ object RestrictionComparator {
         return onEachOpenOk && cooldownOk && dynamicIntervalOk &&
             proceedDisabledOk && dialogHiddenOk &&
             proceedDelayOk && vibrateOk && proceedLimitOk && qrOk && nfcOk && typingOk && intentOk &&
+            adaptiveMathOk && adaptiveMathQuestionCountOk && adaptiveMathStartingLevelOk &&
             intentMinLengthOk
     }
 
