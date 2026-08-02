@@ -1,117 +1,217 @@
-# Curbox
+# Curbox agent guide
 
-Curbox is an advanced screentime management tool for Android. It blocks apps, reels, keywords, and UI elements using a single accessibility service. Gradle modules: `:app` (the app) and `:apitester` (sample client for the Curbox API). Written in Kotlin, classic Views + Fragments + ViewBinding. **No Jetpack Compose anywhere.**
+Curbox is an Android screen time manager. One accessibility service blocks apps, short videos, keywords, and selected UI elements.
 
-# Code style
-- Prioritize readability over cleverness. Ask clarifying questions before making architectural changes.
-- Comments only when absolutely necessary or when documenting behavior that the code cannot show.
-- JVM target 1.8. Follow the existing style of whatever file you touch.
+This file applies to the whole repository. Preserve more specific instructions if a nested `AGENTS.md` is added later.
 
-# Build, install, test
+## Start here
+
+- Modules: `:app` and `:apitester`. The latter is a sample client for the Curbox API.
+- Language and UI: Kotlin, classic Views, Fragments, and ViewBinding.
+- Do not add Jetpack Compose or the Navigation component.
+- JVM target: 1.8.
+- Package root: `app/src/main/java/neth/iecal/curbox`.
+- Prefer the smallest change that follows the nearest existing implementation.
+- Readability is more important than cleverness. Follow the style of each file you touch.
+- Ask before making an architectural change. Explain the user impact before changing the Room schema because migrations are destructive.
+- Preserve unrelated work in the repository. Do not rewrite nearby code unless the task requires it.
+- Add comments only when they explain behavior the code itself cannot express.
+
+## Working sequence
+
+1. Read the affected class and the closest similar feature before editing.
+2. Trace all relevant process, flavor, persistence, and lifecycle boundaries.
+3. Make the narrowest complete change. Reuse current patterns and dependencies.
+4. Check every entry point, refresh path, cleanup path, and optional feature gate.
+5. Run the most focused useful verification, then broader flavor builds when the change can affect them.
+6. Report what changed, which checks ran, and any checks that could not run.
+
+## Nonnegotiable invariants
+
+### Accessibility service safety
+
+`services/AppBlockerService.kt` must never crash because an individual feature fails.
+
+- Keep feature calls inside the service's existing error containment boundaries.
+- Log nonfatal failures through `CrashLogger.logNonFatalError` and swallow them.
+- In coroutine workers, rethrow `CancellationException`; do not report it as a crash.
+- Wire every new feature through its complete lifecycle: setup, receivers, event handling, and cleanup.
+
+Never traverse accessibility node trees directly in `onAccessibilityEvent`.
+
+- Cheap work such as app blocking, grayscale, focus mode, and lightweight tracking may run inline.
+- Node walking belongs in the background worker fed by `Channel.CONFLATED`.
+- Copy queued events with `AccessibilityEvent.obtain(event)`.
+- Recycle every copied event in all paths, including failed sends, dropped events, exceptions, and shutdown.
+
+### Multiple processes
+
+The app runs in three processes:
+
+| Process | Main component |
+| --- | --- |
+| Main | UI and `Curbox` application initialization guarded by `isMainProcess()` |
+| `:app_blocker_service` | `AppBlockerService` |
+| `:crash_handler` | `CrashLogActivity` |
+
+This has concrete consequences:
+
+- Access Room only through `AppDatabase.getInstance()`. It enables multi instance invalidation.
+- Access settings only through `DataStoreManager` in `utils/DataStore.kt`.
+- Never create a second DataStore for the same file. `DataStoreManager` owns the `MultiProcessDataStoreFactory` singleton.
+- Do not assume initialization guarded by `Curbox.isMainProcess()` also ran in the service process.
+- Sync initializes only in the main process.
+- UI to service configuration updates use broadcasts unless that feature already collects the settings flow. Follow the feature's existing pattern.
+
+### Settings compatibility and delay
+
+`data/models/Settings.kt` is serialized as JSON with Gson.
+
+- Every field must have a default value so older stored JSON still loads.
+- Do not rename a field casually. A rename silently discards its stored value.
+- Add a setting through `Settings`, an `updateX()` method in `DataStoreManager`, the UI, and the feature's refresh path.
+
+Restriction settings are gated by the settings change delay. A change that weakens a restriction is stored as a `PendingSettingsChange`; a stricter change applies immediately and removes the pending value for that field. `RestrictionComparator` is conservative: a change it cannot prove stricter counts as weaker.
+
+For every new gated field, update all of these:
+
+1. `GatedSettingsField`
+2. The `withFieldValue` branch
+3. `utils/RestrictionComparator.kt`
+4. The label in `ui/fragments/main/reducers/advanced/SettingsChangeDelayFragment.kt`
+
+Due pending changes are applied by the service heartbeat, app startup, and the delay screen. Preserve all three paths.
+
+### Room data
+
+Room uses `fallbackToDestructiveMigration()`.
+
+- Any entity change requires a database version bump in `data/db/AppDatabase.kt`.
+- A version bump wipes local user data on upgrade.
+- Tell the user about that tradeoff and get direction before implementing a schema change.
+- Store large or growing records in Room. Store configuration in DataStore.
+
+### Build variants
+
+Gate optional behavior at every entry point, including UI, service setup and cleanup, manifests, and API responses.
+
+| Flavor | Sync | UI hider | Anti uninstall | Internet |
+| --- | --- | --- | --- | --- |
+| `full` | Yes | Yes | Yes | Yes |
+| `playstore` | Yes | No | No | Yes |
+| `fdroid` | No | Yes | Yes | No |
+
+Relevant flags in `app/build.gradle.kts`:
+
+- `SUPPORTS_UI_HIDER`
+- `SUPPORTS_ANTI_UNINSTALL`
+- `SUPPORTS_WRITE_SECURE_SETTINGS`
+- `FDROID_VARIANT`
+- `SYNC_USE_FCM`
+
+The Play Store manifest removes `AdminReceiver` and `NodePickerService`. Do not expose those features through another route.
+
+Real sync code lives in `app/src/sync/java`, which is compiled only by `full` and `playstore`. Interfaces and `SyncGateway` live in main. The F-Droid stub in `app/src/fdroid/java` returns `NoopSyncProvider`. Any sync change must leave `fdroid` compilable without sync only classes, Firebase, Supabase, or the INTERNET permission.
+
+Sync is currently free in both sync flavors. `SyncEntitlement` is a free stub, and no flavor compiles Play Billing. Preserve that behavior unless the task explicitly restores billing. `SUPPORTS_WRITE_SECURE_SETTINGS` is false in `playstore`; keep grayscale and related UI consistent with that capability. `SYNC_USE_FCM` controls the FCM push migration in sync flavors.
+
+## Architecture map
+
+### Accessibility host
+
+`services/AppBlockerService.kt` hosts all blockers, trackers, and anti-stimulants. It extends `services/BaseBlockingService.kt`, which owns the foreground notification, service protection heartbeat, global actions, and `isDelayOver()`.
+
+A typical feature is a plain class with this lifecycle:
+
+1. Instantiate it as a service field.
+2. Call its setup method in `onServiceConnected()`.
+3. Register its receivers after setup.
+4. Call its cheap event check inline or its node walking check in the background worker.
+5. Remove receivers and release resources in `onDestroy()`.
+
+Feature broadcasts use companion constants such as `AppBlocker.INTENT_ACTION_REFRESH_APP_BLOCKER`. Settings screens write through `DataStoreManager` before sending the refresh broadcast.
+
+### Feature locations
+
+- `blockers/AppBlocker.kt`: schedules and usage limits. A package can belong to several groups and blocks when any group requires it.
+- `blockers/ReelBlocker.kt`: Instagram reels, YouTube shorts, and Facebook reels. Runs in the background worker.
+- `blockers/KeywordBlocker.kt`: reacts to website observations written by `WebsiteUsageTracker`; it does not scan visible screen text. Its unsupported browser check runs in the background worker.
+- `blockers/FocusModeBlocker.kt`: temporary app and keyword blocking.
+- `blockers/BrowserBlocker.kt` and `blockers/AntiUninstallBlocker.kt`: browser and device admin protection.
+- `blockers/uihider/`: overlay based UI hiding and its scripting language. Node picking uses `services/NodePickerService`.
+- `trackers/`: app usage, website usage, and short video counts. `WebsiteUsageTracker` has a 15 second heartbeat for browsers that omit URL change events.
+- `anti_stimulants/`: `AutoDnd`, `GrayScaleFilter`, and `MindfulMessage`. Combine DND requests through `AppBlockerService.syncDndState()`.
+- `hardcoded/`: all per app view IDs and configuration. Do not inline these values in feature code.
+- `api/`: the exported AIDL service, user approval flow, and auth store. Keep responses consistent with flavor flags. See `CURBOX_API.md` and the `:apitester` client.
+
+User facing blocking screens go through `ui/activity/WarningActivity` with the appropriate `Constants.WARNING_SCREEN_MODE_*` value.
+
+### Service protection
+
+`ServiceWatchdogJob`, `utils/ServiceProtectionManager`, `receivers/BootReceiver`, and the `BaseBlockingService` heartbeat keep the accessibility service alive and detect stops. Anti uninstall UI lives under `ui/fragments/main/reducers/advanced/`.
+
+### Sync and cleanup
+
+- End to end encryption uses `CryptoBox` and is covered by unit tests.
+- `SupabaseRest` uses OkHttp directly. There is no Supabase Android SDK.
+- Firebase is initialized manually from `FcmConfig`; there is no Google Services Gradle plugin or `google-services.json`.
+- Remote usage is merged through `remoteAppUsage()` and `remoteWebsiteUsage()`; synced websites use `SYNCED_WEB_PACKAGE`.
+- `utils/UsageStatsCleaner.kt` purges old local data.
+- Backend cleanup SQL lives in `supabase/migrations/` and is applied separately, not by the Android build.
+
+## UI and product copy
+
+- Use ViewBinding and existing Fragment transactions.
+- Use Material defaults and dynamic colors. Keep the visual style calm, minimal, and easy to scan.
+- Prefer smooth transitions when views appear, disappear, or resize.
+- Coolvetica is for strong onboarding typography. Inter is the normal app font.
+- Put all user facing text in `app/src/main/res/values/strings.xml`. Follow the existing localization pattern for translations.
+- Write for a nontechnical reader at about a sixth grade level.
+- Keep sentences short and concrete. Use a real world example when an idea is difficult.
+- Do not use hyphens, en dashes, or em dashes in user facing copy. This restriction applies to displayed text, not code, resource names, or developer documentation.
+
+## Common change recipes
+
+### Add a blocker or tracker
+
+1. Add a plain class in `blockers/` or `trackers/` based on the closest feature.
+2. Declare refresh actions as companion constants.
+3. Wire the full lifecycle in `AppBlockerService`.
+4. Keep node traversal in the background worker.
+5. Add defaulted configuration to `Settings` and an updater to `DataStoreManager`.
+6. Add delay gating when the setting controls restriction strength.
+7. Wire UI and refresh behavior.
+8. Apply every relevant flavor flag.
+
+### Add a browser or app mod
+
+Edit `hardcoded/BrowserUrlBarIds.kt` or `hardcoded/ReelAppConfig.kt`. Copy the closest entry and change only the package specific values. See `CONTRIBUTING.md`.
+
+### Change the database
+
+Update the entity and DAO, register them in `AppDatabase`, and bump the database version only after the destructive migration tradeoff is accepted.
+
+## Build and verification
+
+Use the check that matches the change. Documentation only changes do not need a Gradle build.
+
+```bash
+./gradlew testFullDebugUnitTest
+./gradlew assembleFullDebug
+./gradlew assemblePlaystoreDebug
+./gradlew assembleFdroidDebug
+./gradlew installAndGrantAccessibilityFullDebug
 ```
-./gradlew assembleFullDebug            # also: assemblePlaystoreDebug, assembleFdroidDebug
-./gradlew installAndGrantAccessibilityFullDebug   # custom task: installs, grants accessibility via adb, launches the app
-./gradlew testFullDebugUnitTest        # unit tests (CryptoBoxTest, uihider ScriptLanguageTest)
-```
-Lint is configured to never abort the build. Debug builds use applicationId suffix `.debug` and the name "Debug Curbox".
 
-# Hard invariants (never break these)
-1. **AppBlockerService must never crash.** Every feature call inside the service is wrapped in try/catch that logs via `CrashLogger.logNonFatalError` and swallows the error. Keep that pattern for any code you add there. Only `CancellationException` is rethrown.
-2. **The app runs in multiple processes.** The UI runs in the main process, `AppBlockerService` runs in `:app_blocker_service`, and `CrashLogActivity` runs in `:crash_handler`. Because of this:
-   - Room must always be accessed through `AppDatabase.getInstance()` (it uses `enableMultiInstanceInvalidation()`).
-   - Settings must always be accessed through `DataStoreManager` (`utils/DataStore.kt`), which uses `MultiProcessDataStoreFactory` behind a double-checked singleton. Never create another DataStore for the same file; that crashes with "multiple DataStores active for the same file".
-   - Anything initialized in `Curbox` (the Application class) with `isMainProcess()` does NOT run in the service process. Sync only initializes in the main process.
-3. **Never traverse UI nodes in `onAccessibilityEvent`.** Cheap checks (app blocking, grayscale, focus mode, trackers) run inline. Heavy features that walk the node tree (ReelBlocker, UiHider, KeywordBlocker's browser check) consume events from a `Channel.CONFLATED` in a background worker. Events are copied with `AccessibilityEvent.obtain(event)` and must always be `recycle()`d, including on send failure.
-4. **`Settings` is serialized with Gson.** Every field in `data/models/Settings.kt` must have a default value so old JSON on disk deserializes cleanly. Renaming a field silently loses the stored value.
-5. **Room uses `fallbackToDestructiveMigration()`.** Changing any entity requires bumping the version in `AppDatabase.kt`, and it wipes user data. Mention this tradeoff before doing it.
-6. **Gate optional features with BuildConfig flags** (see Build variants below) before surfacing them in UI, services, or the Curbox API.
+- `testFullDebugUnitTest` includes `CryptoBoxTest` and UI hider `ScriptLanguageTest`.
+- Build all three flavors after changing shared source, source sets, manifests, BuildConfig gates, or optional feature wiring.
+- Use the install task only when an emulator or device is available. It installs, grants accessibility through adb, and launches Debug Curbox.
+- Lint does not abort builds, so inspect relevant warnings rather than treating a successful build as proof that lint is clean.
+- Debug builds use the `.debug` application ID suffix and the name `Debug Curbox`.
+- If a relevant check cannot run, say why in the handoff.
 
-# Architecture
-One accessibility service, `services/AppBlockerService.kt` (extends `services/BaseBlockingService.kt`), hosts every blocker and tracker. `BaseBlockingService` provides the foreground notification, a service protection heartbeat, and the global actions `pressHome()` / `pressBack()` plus `isDelayOver()`.
+## Reference docs
 
-Each feature is a compartmental plain class with this lifecycle, all wired in `AppBlockerService`:
-- Instantiated as a field of the service.
-- `setupX(service)` called in `onServiceConnected()` (loads config, gets DAOs).
-- `setupReceivers()` called right after (registers its broadcast receivers).
-- `doXCheck(event)` / `onEvent(event)` called per accessibility event.
-- `removeReceivers()` / `onDestroy()` called in the service's `onDestroy()`.
-
-**UI process → service process communication is via broadcasts.** Each feature declares its intent actions as companion constants, e.g. `AppBlocker.INTENT_ACTION_REFRESH_APP_BLOCKER` = `neth.iecal.curbox.refresh.appblocker`. A settings screen writes config through `DataStoreManager`, then sends the feature's refresh broadcast (some features instead collect the `dataStoreManager.settings` flow; follow whichever pattern the feature already uses).
-
-## Blockers (`blockers/`)
-- `AppBlocker.kt`: blocks apps by schedule or usage limit. Keeps `ConcurrentHashMap`s of blocked/cooldown packages; a package can be in several groups and blocks if any group demands it.
-- `ReelBlocker.kt`: blocks Instagram reels, YouTube shorts, Facebook reels (heavy, runs in worker).
-- `KeywordBlocker.kt`: blocks websites/regex/keywords. It does NOT scan the screen. It observes the website stats Room table (invalidation tracker) that `WebsiteUsageTracker` writes, and decides whether to block.
-- `FocusModeBlocker.kt`: temporarily blocks apps and keywords for a set duration.
-- `BrowserBlocker.kt`, `AntiUninstallBlocker.kt` (device admin via `receivers/AdminReceiver`, shared logic in `utils/AntiUninstallManager.kt`).
-- `uihider/`: hides specific UI elements with an overlay. Contains a full custom scripting language (Lexer, Parser, Interpreter, Budget) under `uihider/script/`, covered by `ScriptLanguageTest`. Node picking runs through `services/NodePickerService`.
-- Blocking decisions that need a user-facing screen go through `ui/activity/WarningActivity` with `Constants.WARNING_SCREEN_MODE_*`.
-
-## Trackers (`trackers/`, run inside AppBlockerService)
-- `AppUsageTracker.kt`: app usage analytics into Room.
-- `WebsiteUsageTracker.kt`: reads browser URL bars (IDs from `hardcoded/BrowserUrlBarIds.kt`), writes website analytics into Room, feeds KeywordBlocker. Has a 15s heartbeat because some browsers never fire URL change events.
-- `ReelsCountTracker.kt`: counts short-form videos scrolled.
-
-## Anti stimulants (`anti_stimulants/`)
-`AutoDnd`, `GrayScaleFilter`, `MindfulMessage`. Same compartment pattern, also hosted in AppBlockerService. DND state is combined via `AppBlockerService.syncDndState()`.
-
-## Hardcoded (`hardcoded/`)
-All hardcoded view IDs and per-app configs live here, never inline in features: `BrowserUrlBarIds.kt` (`URL_BAR_ID_LIST`), `ReelAppConfig.kt` (reel apps and mods), `UiHiderSamples.kt`, `OemAutostartIntents.kt`.
-
-## Service protection
-`ServiceWatchdogJob`, `utils/ServiceProtectionManager`, `receivers/BootReceiver`, and the heartbeat in `BaseBlockingService` keep the service alive and detect it being killed. Anti uninstall UI is under `ui/fragments/main/reducers/advanced/`.
-
-## Curbox API (`api/`)
-An exported AIDL bound service (`CurboxApiService`, contract in `app/src/main/aidl/`) that other apps bind to, Shizuku style, with per-app user approval (`ApiPermissionActivity`, `ApiAuthStore`). Integration guide: `CURBOX_API.md`. Working client: the `:apitester` module. API responses must respect the BuildConfig feature flags.
-
-# Data
-- `data/models/`: plain data classes, including `Settings.kt`, the single Gson-serialized DataStore object. To add a setting: add a defaulted field to `Settings`, add an `updateX()` helper in `DataStoreManager`, then wire UI + feature refresh.
-- **Settings change delay:** the blocker/anti-stimulant `updateX()` methods in `DataStoreManager` go through `updateGated()`. When the user enables the delay (`SettingsChangeDelayConfig`), a write that weakens a restriction (per `utils/RestrictionComparator`, conservative: unprovable = weaker) is NOT applied; it is parked as a `PendingSettingsChange` and applied later by `applyDuePendingChanges()` (called from the service heartbeat, app start, and the delay screen). Stricter writes apply instantly and drop that field's pending change. New gated fields need: a `GatedSettingsField` entry, a `withFieldValue` branch, a `RestrictionComparator` case, and a label in `SettingsChangeDelayFragment`. UI is `reducers/advanced/SettingsChangeDelayFragment`.
-- `data/db/`: all Room objects (entities, DAOs, `AppDatabase`). Room stores large or growing data (usage stats, reel stats, focus stats, intent logs); DataStore stores configuration.
-- `utils/UsageStatsCleaner.kt` purges old local usage rows; `supabase/migrations/` holds backend SQL (pg_cron purge job) applied with the Supabase MCP/CLI, not part of the app build.
-
-# Build variants
-Three product flavors in the "version" dimension (`app/build.gradle.kts`):
-- **full**: every feature including cross device sync.
-- **playstore**: sync, but no UI hider and no anti uninstall. Its manifest (`app/src/playstore/AndroidManifest.xml`) strips AdminReceiver (device admin) and NodePickerService with `tools:node="remove"`. Sync is free here, same as full; `SyncEntitlement` is a free stub in `src/sync` (billing was removed temporarily, July 2026), so no build compiles Play Billing.
-- **fdroid**: every feature except sync. No INTERNET permission, no Firebase, no Supabase code compiled in. CI release workflows build this flavor.
-
-BuildConfig flags: `SUPPORTS_UI_HIDER` and `SUPPORTS_ANTI_UNINSTALL` (true by default, false in playstore), `FDROID_VARIANT` (gates sync UI), `SYNC_USE_FCM` (staging switch for the FCM push migration in the sync flavors).
-
-Source sets: `app/src/sync/java` is added as an extra source dir to full and playstore only. `app/src/fdroid/java` holds the offline stub `SyncProviderFactory` that returns `NoopSyncProvider`. If you add a class under `src/sync`, the fdroid build must still compile without it.
-
-# Sync (`src/sync` + `data/sync` in main)
-- The interface `SyncProvider` and `SyncGateway` live in main so all flavors compile; the real `PlaystoreSyncProvider` lives in `src/sync`. `SyncGateway.init()` is called from the `Curbox` Application class, main process only.
-- Data is end-to-end encrypted with `CryptoBox` (unit tested). `SupabaseRest` is a hand-rolled REST client over OkHttp (no Supabase SDK). `RealtimeClient` (websocket), `FcmPush` + `CurboxMessagingService` (Firebase initialized manually from `FcmConfig`, so no google-services.json or plugin), `SyncWorker` (WorkManager), `SecureKeyStore`.
-- Remote usage from other devices shows up in usage UI via `remoteAppUsage()` / `remoteWebsiteUsage()` and the sentinel package `SYNCED_WEB_PACKAGE`.
-
-# UI
-- Classic Views: `FragmentActivity` hosts fragments with manual `supportFragmentManager` transactions and a bottom nav. ViewBinding everywhere. No Compose, no Navigation component.
-- Feature settings screens live under `ui/fragments/main/reducers/<feature>/`, usually Fragment + ViewModel pairs. Shared blocker settings UIs are in `reducers/blockertools/shared/`.
-- Android dynamic colors (`DynamicColors.applyToActivitiesIfAvailable`). Use default Material values for text, button colors etc. Mix of ascii art, typography, minimalist material design.
-- Fonts: Coolvetica for extreme typographical hooky screens (onboarding), Inter for most of the app.
-- All user-facing text goes in `res/values/strings.xml` (translations exist, e.g. `values-it`).
-
-## UX
-- Doesn't overwhelm users; calming and peaceful; smooth animations for views resizing, appearing, disappearing.
-
-## Writing user displayed text
-- Never use dashes(-) anywhere
-- Keep simple language at a 6th grader level
-- Be crisp and concise
-- Explain with real world examples if too complex
-- The reader is not tech savvy
-
-# Recipes
-**Add a new blocker or tracker:**
-1. Create the class in `blockers/` or `trackers/` following the compartment lifecycle above; declare its `INTENT_ACTION_*` constants in a companion object.
-2. Instantiate it in `AppBlockerService`; call setup + `setupReceivers()` in `onServiceConnected()`, cleanup in `onDestroy()`, and its check in `onAccessibilityEvent` (cheap) or the background worker loop (node traversal). Wrap in the existing try/catch blocks.
-3. Add its config to `Settings.kt` + `DataStoreManager`, and its UI under `ui/fragments/main/reducers/`.
-4. If the feature is variant-restricted, gate every entry point with the BuildConfig flag.
-
-**Add support for a new browser or app mod:** edit `hardcoded/BrowserUrlBarIds.kt` or `hardcoded/ReelAppConfig.kt` (copy the closest existing entry, change the package name). Details in CONTRIBUTING.md.
-
-**Change the database:** edit or add the entity + DAO in `data/db/`, register it in `AppDatabase`, bump the version. Remember migration is destructive.
-
-# Other docs
-`CONTRIBUTING.md` (contributor workflows), `CURBOX_API.md` (API integration guide), `Readme.md`.
+- `CONTRIBUTING.md`: contributor workflows
+- `CURBOX_API.md`: API contract and integration guide
+- `Readme.md`: product overview
