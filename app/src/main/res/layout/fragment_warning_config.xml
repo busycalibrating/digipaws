@@ -488,6 +488,61 @@
                         android:visibility="gone" />
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/focus_goal_requirement_switch"
+                        style="@style/TextAppearance.Material3.TitleSmall"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/label_focus_goal_unlock" />
+
+                    <LinearLayout
+                        android:id="@+id/focus_goal_setup_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            style="@style/TextAppearance.Material3.BodyMedium"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/label_focus_goal_unlock_desc" />
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/focus_goal_group_layout"
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:hint="@string/hint_focus_group">
+
+                            <AutoCompleteTextView
+                                android:id="@+id/focus_goal_group_dropdown"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="none" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <TextView
+                            android:id="@+id/focus_goal_minutes_title"
+                            style="@style/TextAppearance.Material3.BodyMedium"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            tools:text="Required focus time: 60 minutes" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/focus_goal_minutes_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:stepSize="15.0"
+                            android:value="60.0"
+                            android:valueFrom="15.0"
+                            android:valueTo="1440.0" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/proceed_limit_switch"
                         style="@style/TextAppearance.Material3.TitleSmall"
                         android:layout_width="match_parent"

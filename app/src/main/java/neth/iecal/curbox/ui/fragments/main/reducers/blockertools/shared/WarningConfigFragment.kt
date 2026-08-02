@@ -5,10 +5,14 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
 import com.journeyapps.barcodescanner.ScanContract
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
 import neth.iecal.curbox.databinding.FragmentWarningConfigBinding
+import neth.iecal.curbox.utils.DataStoreManager
 
 class WarningConfigFragment : Fragment() {
     private var _binding: FragmentWarningConfigBinding? = null
@@ -81,6 +85,10 @@ class WarningConfigFragment : Fragment() {
             arguments?.getBoolean(ARG_SUPPORTS_ON_EACH_OPEN) == true
 
         formController.bind(config, isNew, supportsOnEachOpen)
+        viewLifecycleOwner.lifecycleScope.launch {
+            val groups = DataStoreManager(requireContext()).settings.first().manualFocusGroups
+            formController.bindFocusGroups(groups)
+        }
         qrController.bind(config.qrKeys)
         nfcController.bind(config.nfcKeys)
         formController.setupListeners(::saveConfig)
@@ -90,6 +98,7 @@ class WarningConfigFragment : Fragment() {
 
     private fun saveConfig() {
         val formController = formController ?: return
+        if (!formController.validate()) return
         val qrController = qrController ?: return
         val nfcController = nfcController ?: return
         val config = formController.createConfig(

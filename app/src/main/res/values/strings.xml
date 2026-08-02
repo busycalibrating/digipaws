@@ -1565,6 +1565,19 @@
         <item quantity="one">Question required: %1$d</item>
         <item quantity="other">Questions required: %1$d</item>
     </plurals>
+    <string name="label_focus_goal_unlock">Daily focus requirement</string>
+    <string name="label_focus_goal_unlock_desc">Unlocking is allowed after the selected focus time is completed today.</string>
+    <string name="hint_focus_group">Focus group</string>
+    <string name="warning_focus_goal_group_required">Select a focus group</string>
+    <plurals name="warning_focus_goal_minutes">
+        <item quantity="one">Required focus time: %1$d minute</item>
+        <item quantity="other">Required focus time: %1$d minutes</item>
+    </plurals>
+    <string name="warning_focus_goal_checking">Checking focus progress</string>
+    <string name="warning_focus_goal_complete">Focus goal complete for %1$s.</string>
+    <string name="warning_focus_goal_not_met">Focus goal not met. %1$d minutes remaining for %2$s.</string>
+    <string name="warning_focus_goal_unavailable">The selected focus group is unavailable. Unlocking is restricted.</string>
+    <string name="warning_focus_goal_check_failed">Focus progress could not be checked. Unlocking is restricted.</string>
     <string name="warning_option_choose_time">Ask me how much time I need</string>
     <string name="warning_option_choose_time_desc">You choose the duration during each unlock.</string>
     <string name="warning_option_fixed_time">Only give me a fixed amount of time</string>

@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.gson.Gson
 import com.journeyapps.barcodescanner.ScanContract
@@ -25,12 +26,19 @@ import neth.iecal.curbox.R
 import neth.iecal.curbox.blockers.AppBlocker
 import neth.iecal.curbox.blockers.KeywordBlocker
 import neth.iecal.curbox.blockers.ReelBlocker
+import neth.iecal.curbox.data.db.AppDatabase
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
 import neth.iecal.curbox.databinding.DialogWarningOverlayBinding
+import neth.iecal.curbox.utils.DataStoreManager
+import neth.iecal.curbox.utils.FocusGoalProgress
+import java.util.Calendar
 import kotlin.random.Random
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.widget.Toast
 import androidx.core.content.edit
 import androidx.core.widget.doAfterTextChanged
@@ -51,6 +59,9 @@ class WarningActivity : AppCompatActivity() {
     private var scannedValidDuration = -1L
     private var adaptiveMathChallenge: AdaptiveMathChallenge? = null
     private var isAdaptiveMathComplete = false
+    private var isFocusGoalRequired = false
+    private var isFocusGoalVerified = true
+    private var isPrimaryUnlockActionReady = false
 
     private lateinit var binding: DialogWarningOverlayBinding
     private val barcodeLauncher = registerForActivityResult(
@@ -67,7 +78,7 @@ class WarningActivity : AppCompatActivity() {
                 isQrScanned = true
                 scannedValidDuration = warningScreenConfig.qrKeys[result.contents] ?: -1L
                 
-                binding.btnProceed.isEnabled = true
+                setPrimaryUnlockActionReady(true)
                 binding.btnProceed.setText(R.string.proceed)
                 
                 if (scannedValidDuration == -1L && !warningScreenConfig.isOnOpenConfig) {
@@ -124,6 +135,14 @@ class WarningActivity : AppCompatActivity() {
         }
 
         binding = DialogWarningOverlayBinding.inflate(layoutInflater)
+        isFocusGoalRequired = warningScreenConfig.isFocusGoalRequirementEnabled
+        isFocusGoalVerified = !isFocusGoalRequired
+        if (isFocusGoalRequired &&
+            !warningScreenConfig.isProceedDisabled &&
+            !isProceedLimitExceeded
+        ) {
+            setupFocusGoalRequirement(warningScreenConfig)
+        }
         val isHomePressRequested = intent.getBooleanExtra("is_press_home", false)
         binding.minsPicker.setValue(3)
         binding.minsPicker.minValue = 2
@@ -164,12 +183,12 @@ class WarningActivity : AppCompatActivity() {
 
                             if (warningScreenConfig.isIntentRequirementEnabled) {
                                 binding.intentInputLayout.visibility = View.VISIBLE
-                                button.isEnabled = false
+                                setPrimaryUnlockActionReady(false)
                                 button.setText(R.string.proceed)
 
                                 val minLength = warningScreenConfig.minIntentLength.coerceAtLeast(1)
                                 fun updateIntentInputState(length: Int) {
-                                    button.isEnabled = length >= minLength
+                                    setPrimaryUnlockActionReady(length >= minLength)
                                     binding.intentInputLayout.helperText = if (length < minLength) {
                                         resources.getQuantityString(
                                             R.plurals.warning_intent_chars_needed,
@@ -196,7 +215,7 @@ class WarningActivity : AppCompatActivity() {
                                 binding.typingTargetSentence.text =
                                     getString(R.string.warning_typing_quote, requiredSentence)
                                 binding.typingInputLayout.visibility = View.VISIBLE
-                                button.isEnabled = false
+                                setPrimaryUnlockActionReady(false)
                                 button.setText(R.string.proceed)
 
                                 val mismatchColor = MaterialColors.getColor(
@@ -224,8 +243,9 @@ class WarningActivity : AppCompatActivity() {
                                             )
                                         }
                                     }
-                                    button.isEnabled =
+                                    setPrimaryUnlockActionReady(
                                         entered.toString() == requiredSentence
+                                    )
                                 }
                             } else if (warningScreenConfig.isAdaptiveMathRequirementEnabled) {
                                 setupAdaptiveMathChallenge(
@@ -234,13 +254,13 @@ class WarningActivity : AppCompatActivity() {
                                 )
                             } else if (warningScreenConfig.isQrUnlockRequirementEnabled && !isQrScanned) {
                                 button.text = getString(R.string.warning_scan_qr_code)
-                                button.isEnabled = true
+                                setPrimaryUnlockActionReady(true)
                             } else if (warningScreenConfig.isNfcUnlockRequirementEnabled && !isNfcScanned) {
                                 button.text = getString(R.string.warning_scan_nfc_tag)
-                                button.isEnabled = true
+                                setPrimaryUnlockActionReady(true)
                             } else {
                                 button.setText(R.string.proceed)
-                                button.isEnabled = true
+                                setPrimaryUnlockActionReady(true)
                             }
                         }
                         binding.proceedSeconds.visibility = View.GONE
@@ -276,6 +296,12 @@ class WarningActivity : AppCompatActivity() {
         }
 
         binding.btnProceed.setOnClickListener {
+            if (isFocusGoalRequired &&
+                !isFocusGoalVerified
+            ) {
+                return@setOnClickListener
+            }
+
             if (warningScreenConfig.isAdaptiveMathRequirementEnabled &&
                 !isAdaptiveMathComplete
             ) {
@@ -417,7 +443,7 @@ class WarningActivity : AppCompatActivity() {
         binding.mathProgress.visibility = View.VISIBLE
         binding.mathProblem.visibility = View.VISIBLE
         binding.mathInputLayout.visibility = View.VISIBLE
-        binding.btnProceed.isEnabled = true
+        setPrimaryUnlockActionReady(true)
         binding.btnProceed.setText(R.string.warning_math_check_answer)
         binding.mathInputEdit.doAfterTextChanged {
             binding.mathInputLayout.error = null
@@ -475,6 +501,92 @@ class WarningActivity : AppCompatActivity() {
         binding.mathProblem.text = challenge.currentProblem.expression
     }
 
+    private fun setPrimaryUnlockActionReady(isReady: Boolean) {
+        isPrimaryUnlockActionReady = isReady
+        binding.btnProceed.isEnabled = isReady &&
+            (!isFocusGoalRequired || isFocusGoalVerified)
+    }
+
+    private fun setupFocusGoalRequirement(config: AppBlockerWarningScreenConfig) {
+        binding.focusGoalStatus.visibility = View.VISIBLE
+        binding.focusGoalStatus.setText(R.string.warning_focus_goal_checking)
+        setPrimaryUnlockActionReady(isPrimaryUnlockActionReady)
+
+        lifecycleScope.launch {
+            try {
+                val now = System.currentTimeMillis()
+                val dayStartCalendar = Calendar.getInstance().apply {
+                    timeInMillis = now
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                val dayStart = dayStartCalendar.timeInMillis
+                val dayEnd = (dayStartCalendar.clone() as Calendar).apply {
+                    add(Calendar.DAY_OF_MONTH, 1)
+                }.timeInMillis
+
+                val (groupName, sessions) = withContext(Dispatchers.IO) {
+                    val settings = DataStoreManager(applicationContext).settings.first()
+                    val group = settings.manualFocusGroups.firstOrNull {
+                        it.groupId == config.focusGoalGroupId
+                    }
+                    val matchingSessions = if (group == null) {
+                        emptyList()
+                    } else {
+                        AppDatabase.getInstance(applicationContext)
+                            .focusStatsDao()
+                            .getSessionsOverlappingDay(group.groupId, dayStart, dayEnd)
+                    }
+                    group?.groupName to matchingSessions
+                }
+
+                if (groupName == null) {
+                    restrictFocusGoal(getString(R.string.warning_focus_goal_unavailable))
+                    return@launch
+                }
+
+                val focusedDuration = FocusGoalProgress.durationWithinDay(
+                    sessions = sessions,
+                    dayStart = dayStart,
+                    dayEnd = dayEnd,
+                    now = now
+                )
+                val requiredDuration = config.focusGoalRequiredMinutes
+                    .coerceIn(MIN_FOCUS_GOAL_MINUTES, MAX_FOCUS_GOAL_MINUTES) * 60_000L
+                if (focusedDuration >= requiredDuration) {
+                    isFocusGoalVerified = true
+                    binding.focusGoalStatus.text = getString(
+                        R.string.warning_focus_goal_complete,
+                        groupName
+                    )
+                    setPrimaryUnlockActionReady(isPrimaryUnlockActionReady)
+                } else {
+                    val remainingMinutes =
+                        (requiredDuration - focusedDuration + 59_999L) / 60_000L
+                    restrictFocusGoal(
+                        getString(
+                            R.string.warning_focus_goal_not_met,
+                            remainingMinutes,
+                            groupName
+                        )
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                restrictFocusGoal(getString(R.string.warning_focus_goal_check_failed))
+            }
+        }
+    }
+
+    private fun restrictFocusGoal(message: String) {
+        binding.focusGoalStatus.text = message
+        binding.btnProceed.visibility = View.GONE
+        binding.btnCancel.setText(R.string.okay)
+    }
+
     private fun startNfcUnlockScan(warningScreenConfig: AppBlockerWarningScreenConfig) {
         if (!NfcUnlockUtils.isNfcReady(this)) {
             Toast.makeText(this, R.string.nfc_unavailable, Toast.LENGTH_LONG).show()
@@ -488,7 +600,7 @@ class WarningActivity : AppCompatActivity() {
             if (match != null) {
                 isNfcScanned = true
                 scannedValidDuration = warningScreenConfig.nfcKeys[match] ?: -1L
-                binding.btnProceed.isEnabled = true
+                setPrimaryUnlockActionReady(true)
                 binding.btnProceed.setText(R.string.proceed)
                 binding.minsPicker.visibility =
                     if (scannedValidDuration == -1L &&
@@ -594,5 +706,7 @@ class WarningActivity : AppCompatActivity() {
         const val MAX_ADAPTIVE_MATH_QUESTIONS = 10
         const val MIN_ADAPTIVE_MATH_LEVEL = 1
         const val MAX_ADAPTIVE_MATH_LEVEL = 10
+        const val MIN_FOCUS_GOAL_MINUTES = 15
+        const val MAX_FOCUS_GOAL_MINUTES = 24 * 60
     }
 }

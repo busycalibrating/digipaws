@@ -8,6 +8,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
+import neth.iecal.curbox.data.models.ManualFocusGroup
 import neth.iecal.curbox.databinding.FragmentWarningConfigBinding
 
 internal class WarningConfigFormController(
@@ -25,6 +26,8 @@ internal class WarningConfigFormController(
     private val warningNoEffortOptions by lazy {
         createWarningNoEffortOptions(fragment.requireContext())
     }
+    private var focusGroupOptions: List<FocusGroupUnlockOption> = emptyList()
+    private var selectedFocusGroupId = ""
 
     fun bind(
         config: AppBlockerWarningScreenConfig,
@@ -74,6 +77,13 @@ internal class WarningConfigFormController(
         binding.mathStartingLevelSlider.value = config.adaptiveMathStartingLevel.toFloat()
             .coerceIn(MIN_MATH_LEVEL.toFloat(), MAX_MATH_LEVEL.toFloat())
         updateMathStartingLevelTitle(binding.mathStartingLevelSlider.value.toInt())
+
+        binding.focusGoalMinutesSlider.value = config.focusGoalRequiredMinutes.toFloat()
+            .coerceIn(MIN_FOCUS_MINUTES.toFloat(), MAX_FOCUS_MINUTES.toFloat())
+        updateFocusGoalMinutesTitle(binding.focusGoalMinutesSlider.value.toInt())
+        selectedFocusGroupId = config.focusGoalGroupId
+        binding.focusGoalRequirementSwitch.isChecked = config.isFocusGoalRequirementEnabled
+        binding.focusGoalSetupContainer.isVisible = config.isFocusGoalRequirementEnabled
 
         binding.fixedTimeSlider.value =
             (config.timeInterval / 60_000).toFloat().coerceIn(1f, 120f)
@@ -172,6 +182,19 @@ internal class WarningConfigFormController(
         binding.mathStartingLevelSlider.addOnChangeListener { _, value, _ ->
             updateMathStartingLevelTitle(value.toInt())
         }
+        binding.focusGoalMinutesSlider.addOnChangeListener { _, value, _ ->
+            updateFocusGoalMinutesTitle(value.toInt())
+        }
+        binding.focusGoalGroupDropdown.setOnItemClickListener { _, _, position, _ ->
+            selectedFocusGroupId = focusGroupOptions[position].groupId
+            binding.focusGoalGroupLayout.error = null
+        }
+        binding.focusGoalRequirementSwitch.setOnCheckedChangeListener { _, isChecked ->
+            binding.focusGoalSetupContainer.isVisible = isChecked
+            if (!isChecked) {
+                binding.focusGoalGroupLayout.error = null
+            }
+        }
         binding.advancedSettingsHeader.setOnClickListener {
             val isCurrentlyVisible = binding.advancedSettingsContent.isVisible
             TransitionManager.beginDelayedTransition(
@@ -211,6 +234,13 @@ internal class WarningConfigFormController(
             isAdaptiveMathRequirementEnabled = flags.isAdaptiveMathRequirementEnabled,
             adaptiveMathQuestionCount = binding.mathQuestionCountSlider.value.toInt(),
             adaptiveMathStartingLevel = binding.mathStartingLevelSlider.value.toInt(),
+            isFocusGoalRequirementEnabled = binding.focusGoalRequirementSwitch.isChecked,
+            focusGoalGroupId = if (binding.focusGoalRequirementSwitch.isChecked) {
+                selectedFocusGroupId
+            } else {
+                ""
+            },
+            focusGoalRequiredMinutes = binding.focusGoalMinutesSlider.value.toInt(),
             proceedDelayInSecs = binding.proceedDelaySlider.value.toInt(),
             vibrateAndIncBrightness = binding.switchVibrateBrightness.isChecked,
             proceedLimitEnabled = binding.proceedLimitSwitch.isChecked,
@@ -222,6 +252,33 @@ internal class WarningConfigFormController(
 
     fun isOnEachOpenEnabled(): Boolean {
         return supportsOnEachOpen && binding.switchOnEachOpen.isChecked
+    }
+
+    fun bindFocusGroups(groups: List<ManualFocusGroup>) {
+        focusGroupOptions = groups.map { FocusGroupUnlockOption(it.groupId, it.groupName) }
+        binding.focusGoalGroupDropdown.setAdapter(
+            android.widget.ArrayAdapter(
+                fragment.requireContext(),
+                android.R.layout.simple_dropdown_item_1line,
+                focusGroupOptions
+            )
+        )
+        val selectedGroup = focusGroupOptions.firstOrNull {
+            it.groupId == selectedFocusGroupId
+        }
+        binding.focusGoalGroupDropdown.setText(selectedGroup?.name.orEmpty(), false)
+    }
+
+    fun validate(): Boolean {
+        if (binding.focusGoalRequirementSwitch.isChecked &&
+            focusGroupOptions.none { it.groupId == selectedFocusGroupId }
+        ) {
+            binding.focusGoalGroupLayout.error = fragment.getString(
+                R.string.warning_focus_goal_group_required
+            )
+            return false
+        }
+        return true
     }
 
     private fun hideUnlockConfiguration() {
@@ -417,6 +474,14 @@ internal class WarningConfigFormController(
         )
     }
 
+    private fun updateFocusGoalMinutesTitle(value: Int) {
+        binding.focusGoalMinutesTitle.text = fragment.resources.getQuantityString(
+            R.plurals.warning_focus_goal_minutes,
+            value,
+            value
+        )
+    }
+
     private fun unitOptions(): List<String> {
         return listOf(
             fragment.getString(R.string.unit_minutes),
@@ -435,5 +500,14 @@ internal class WarningConfigFormController(
         const val MAX_MATH_QUESTIONS = 10
         const val MIN_MATH_LEVEL = 1
         const val MAX_MATH_LEVEL = 10
+        const val MIN_FOCUS_MINUTES = 15
+        const val MAX_FOCUS_MINUTES = 24 * 60
     }
+}
+
+private data class FocusGroupUnlockOption(
+    val groupId: String,
+    val name: String
+) {
+    override fun toString(): String = name
 }

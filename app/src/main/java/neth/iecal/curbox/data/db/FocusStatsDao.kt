@@ -23,4 +23,16 @@ interface FocusStatsDao {
 
     @Query("SELECT * FROM focus_stats ORDER BY startTimeInMillis DESC")
     fun getAllSessionsFlow(): Flow<List<FocusStatsEntity>>
+
+    @Query(
+        """SELECT * FROM focus_stats
+            WHERE groupId = :groupId
+            AND startTimeInMillis < :dayEnd
+            AND (status = 0 OR actualEndTimeInMillis > :dayStart)"""
+    )
+    suspend fun getSessionsOverlappingDay(
+        groupId: String,
+        dayStart: Long,
+        dayEnd: Long
+    ): List<FocusStatsEntity>
 }
