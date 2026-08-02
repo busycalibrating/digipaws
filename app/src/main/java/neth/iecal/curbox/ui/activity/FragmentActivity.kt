@@ -36,6 +36,7 @@ import android.net.Uri
 import android.os.Build
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class FragmentActivity : AppCompatActivity() {
@@ -254,6 +255,9 @@ class FragmentActivity : AppCompatActivity() {
     private fun showTab(itemId: Int, commitNow: Boolean = false) {
         val tag = tabTags[itemId] ?: return
         val fm = supportFragmentManager
+
+          fm.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+
         val transaction = fm.beginTransaction()
 
         for ((id, otherTag) in tabTags) {
