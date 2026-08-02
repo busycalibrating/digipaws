@@ -3,7 +3,7 @@ package neth.iecal.curbox.data.models
 
 data class AppBlockerWarningScreenConfig(
     val message: String = "You can setup a custom message to appear here!",
-    val timeInterval: Int = 120000, // default cooldown period
+    val timeInterval: Long = 120000L, // default cooldown period
     val isDynamicIntervalSettingAllowed: Boolean = false,
     val isProceedDisabled: Boolean = false,
     val isWarningDialogHidden: Boolean = false, // perform back/home action directly without showing warning screen
@@ -11,7 +11,7 @@ data class AppBlockerWarningScreenConfig(
     val vibrateAndIncBrightness: Boolean = false,
     val proceedLimitEnabled: Boolean = false,
     val allowedProceeds: Int = 3,
-    val proceedsTimeWindowMn: Int = 60,
+    val proceedsTimeWindowMn: Long = 60L,
     val isQrUnlockRequirementEnabled: Boolean = false,
     val qrKeys: Map<String,Long> = mapOf(), // qr code content -> Duration of unlock (-1 if dynamic timing)
     val isNfcUnlockRequirementEnabled: Boolean = false,

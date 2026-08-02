@@ -5,7 +5,11 @@ import android.transition.TransitionManager
 import android.view.View
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
+import com.google.android.material.slider.Slider
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
 import neth.iecal.curbox.data.models.ManualFocusGroup
@@ -68,50 +72,57 @@ internal class WarningConfigFormController(
         }
 
         binding.typingSentenceEdit.setText(config.typingSentence)
-        binding.intentMinLengthSlider.value = config.minIntentLength.toFloat().coerceIn(1f, 100f)
-        updateIntentMinLengthTitle(binding.intentMinLengthSlider.value.toInt())
+        val intentMinLength = config.minIntentLength.coerceAtLeast(1)
+        binding.intentMinLengthSlider.value = intentMinLength.toFloat().coerceAtMost(100f)
+        updateIntentMinLengthInput(intentMinLength.toLong())
 
-        binding.mathQuestionCountSlider.value = config.adaptiveMathQuestionCount.toFloat()
-            .coerceIn(MIN_MATH_QUESTIONS.toFloat(), MAX_MATH_QUESTIONS.toFloat())
-        updateMathQuestionCountTitle(binding.mathQuestionCountSlider.value.toInt())
-        binding.mathStartingLevelSlider.value = config.adaptiveMathStartingLevel.toFloat()
-            .coerceIn(MIN_MATH_LEVEL.toFloat(), MAX_MATH_LEVEL.toFloat())
-        updateMathStartingLevelTitle(binding.mathStartingLevelSlider.value.toInt())
+        val mathQuestionCount = config.adaptiveMathQuestionCount.coerceAtLeast(MIN_MATH_QUESTIONS)
+        binding.mathQuestionCountSlider.value = mathQuestionCount.toFloat()
+            .coerceAtMost(MAX_MATH_QUESTIONS.toFloat())
+        updateMathQuestionCountInput(mathQuestionCount.toLong())
+        val mathStartingLevel = config.adaptiveMathStartingLevel.coerceAtLeast(MIN_MATH_LEVEL)
+        binding.mathStartingLevelSlider.value = mathStartingLevel.toFloat()
+            .coerceAtMost(MAX_MATH_LEVEL.toFloat())
+        updateMathStartingLevelInput(mathStartingLevel.toLong())
 
-        binding.focusGoalMinutesSlider.value = config.focusGoalRequiredMinutes.toFloat()
-            .coerceIn(MIN_FOCUS_MINUTES.toFloat(), MAX_FOCUS_MINUTES.toFloat())
-        updateFocusGoalMinutesTitle(binding.focusGoalMinutesSlider.value.toInt())
+        val focusGoalMinutes = config.focusGoalRequiredMinutes.coerceAtLeast(MIN_FOCUS_MINUTES)
+        binding.focusGoalMinutesSlider.value = focusGoalMinutes.toFloat()
+            .coerceAtMost(MAX_FOCUS_MINUTES.toFloat())
+        updateFocusGoalMinutesInput(focusGoalMinutes.toLong())
         selectedFocusGroupId = config.focusGoalGroupId
         binding.focusGoalRequirementSwitch.isChecked = config.isFocusGoalRequirementEnabled
         binding.focusGoalSetupContainer.isVisible = config.isFocusGoalRequirementEnabled
 
-        binding.fixedTimeSlider.value =
-            (config.timeInterval / 60_000).toFloat().coerceIn(1f, 120f)
-        updateFixedTimeTitle(binding.fixedTimeSlider.value.toInt())
+        val fixedTimeMinutes = (config.timeInterval / 60_000L).coerceAtLeast(1L)
+        binding.fixedTimeSlider.value = fixedTimeMinutes.toFloat().coerceAtMost(120f)
+        updateFixedTimeInput(fixedTimeMinutes)
 
-        binding.proceedDelaySlider.value =
-            config.proceedDelayInSecs.toFloat().coerceIn(0f, 60f)
-        updateProceedDelayTitle(binding.proceedDelaySlider.value.toInt())
+        val proceedDelay = config.proceedDelayInSecs.coerceAtLeast(0)
+        binding.proceedDelaySlider.value = proceedDelay.toFloat().coerceAtMost(60f)
+        updateProceedDelayInput(proceedDelay.toLong())
 
         binding.proceedLimitSwitch.isChecked = config.proceedLimitEnabled
         binding.proceedLimitContainer.isVisible = config.proceedLimitEnabled
 
-        binding.allowedProceedsSlider.value =
-            config.allowedProceeds.toFloat().coerceIn(1f, 20f)
-        updateAllowedProceedsTitle(binding.allowedProceedsSlider.value.toInt())
+        val allowedProceeds = config.allowedProceeds.coerceAtLeast(1)
+        binding.allowedProceedsSlider.value = allowedProceeds.toFloat().coerceAtMost(20f)
+        updateAllowedProceedsInput(allowedProceeds.toLong())
 
         val totalMinutes = config.proceedsTimeWindowMn
-        val (initialUnitIndex, initialSliderValue) = when {
-            totalMinutes > 0 && totalMinutes % MINUTES_PER_DAY == 0 ->
-                DAYS_INDEX to (totalMinutes / MINUTES_PER_DAY).toFloat().coerceIn(1f, 30f)
-            totalMinutes > 0 && totalMinutes % MINUTES_PER_HOUR == 0 ->
-                HOURS_INDEX to (totalMinutes / MINUTES_PER_HOUR).toFloat().coerceIn(1f, 24f)
-            else -> MINUTES_INDEX to totalMinutes.toFloat().coerceIn(1f, 60f)
+        val (initialUnitIndex, initialInputValue) = when {
+            totalMinutes > 0 && totalMinutes % MINUTES_PER_DAY == 0L ->
+                DAYS_INDEX to (totalMinutes / MINUTES_PER_DAY)
+            totalMinutes > 0 && totalMinutes % MINUTES_PER_HOUR == 0L ->
+                HOURS_INDEX to (totalMinutes / MINUTES_PER_HOUR)
+            else -> MINUTES_INDEX to totalMinutes.coerceAtLeast(1L)
         }
         binding.proceedWindowUnitBtn.text = unitOptions()[initialUnitIndex]
         updateProceedWindowSliderBounds(initialUnitIndex)
-        binding.proceedWindowSlider.value = initialSliderValue
-        updateProceedWindowTitle(initialUnitIndex, initialSliderValue.toInt())
+        binding.proceedWindowSlider.value = initialInputValue.toFloat().coerceIn(
+            binding.proceedWindowSlider.valueFrom,
+            binding.proceedWindowSlider.valueTo
+        )
+        updateProceedWindowInput(initialInputValue)
 
         binding.warningMsgEdit.setText(config.message)
         binding.switchVibrateBrightness.isChecked = config.vibrateAndIncBrightness
@@ -139,12 +150,19 @@ internal class WarningConfigFormController(
             updateUiVisibility(selectedChallengeIndex(), position, animate = true)
         }
 
-        binding.fixedTimeSlider.addOnChangeListener { _, value, _ ->
-            updateFixedTimeTitle(value.toInt())
-        }
-        binding.proceedDelaySlider.addOnChangeListener { _, value, _ ->
-            updateProceedDelayTitle(value.toInt())
-        }
+        setupNumericInput(
+            binding.fixedTimeSlider,
+            binding.fixedTimeInput,
+            binding.fixedTimeInputLayout,
+            maximumValue = { Long.MAX_VALUE / 60_000L },
+            updateInput = ::updateFixedTimeInput
+        )
+        setupNumericInput(
+            binding.proceedDelaySlider,
+            binding.proceedDelayInput,
+            binding.proceedDelayInputLayout,
+            updateInput = ::updateProceedDelayInput
+        )
         binding.proceedLimitSwitch.setOnCheckedChangeListener { _, isChecked ->
             binding.proceedLimitContainer.isVisible = isChecked
         }
@@ -164,27 +182,48 @@ internal class WarningConfigFormController(
             )
             onEachOpenChanged()
         }
-        binding.allowedProceedsSlider.addOnChangeListener { _, value, _ ->
-            updateAllowedProceedsTitle(value.toInt())
-        }
-        binding.proceedWindowSlider.addOnChangeListener { _, value, _ ->
-            updateProceedWindowTitle(selectedUnitIndex(), value.toInt())
-        }
+        setupNumericInput(
+            binding.allowedProceedsSlider,
+            binding.allowedProceedsInput,
+            binding.allowedProceedsInputLayout,
+            updateInput = ::updateAllowedProceedsInput
+        )
+        setupNumericInput(
+            binding.proceedWindowSlider,
+            binding.proceedWindowInput,
+            binding.proceedWindowInputLayout,
+            maximumValue = {
+                Long.MAX_VALUE / 60_000L / minutesForUnit(selectedUnitIndex())
+            },
+            updateInput = ::updateProceedWindowInput
+        )
         binding.proceedWindowUnitBtn.setOnClickListener { button ->
             showProceedWindowUnitMenu(button)
         }
-        binding.intentMinLengthSlider.addOnChangeListener { _, value, _ ->
-            updateIntentMinLengthTitle(value.toInt())
-        }
-        binding.mathQuestionCountSlider.addOnChangeListener { _, value, _ ->
-            updateMathQuestionCountTitle(value.toInt())
-        }
-        binding.mathStartingLevelSlider.addOnChangeListener { _, value, _ ->
-            updateMathStartingLevelTitle(value.toInt())
-        }
-        binding.focusGoalMinutesSlider.addOnChangeListener { _, value, _ ->
-            updateFocusGoalMinutesTitle(value.toInt())
-        }
+        setupNumericInput(
+            binding.intentMinLengthSlider,
+            binding.intentMinLengthInput,
+            binding.intentMinLengthInputLayout,
+            updateInput = ::updateIntentMinLengthInput
+        )
+        setupNumericInput(
+            binding.mathQuestionCountSlider,
+            binding.mathQuestionCountInput,
+            binding.mathQuestionCountInputLayout,
+            updateInput = ::updateMathQuestionCountInput
+        )
+        setupNumericInput(
+            binding.mathStartingLevelSlider,
+            binding.mathStartingLevelInput,
+            binding.mathStartingLevelInputLayout,
+            updateInput = ::updateMathStartingLevelInput
+        )
+        setupNumericInput(
+            binding.focusGoalMinutesSlider,
+            binding.focusGoalMinutesInput,
+            binding.focusGoalMinutesInputLayout,
+            updateInput = ::updateFocusGoalMinutesInput
+        )
         binding.focusGoalGroupDropdown.setOnItemClickListener { _, _, position, _ ->
             selectedFocusGroupId = focusGroupOptions[position].groupId
             binding.focusGoalGroupLayout.error = null
@@ -219,7 +258,7 @@ internal class WarningConfigFormController(
         )
         return AppBlockerWarningScreenConfig(
             message = binding.warningMsgEdit.text.toString(),
-            timeInterval = binding.fixedTimeSlider.value.toInt() * 60_000,
+            timeInterval = numericInputValue(binding.fixedTimeInput) * 60_000L,
             isDynamicIntervalSettingAllowed = flags.isDynamicIntervalSettingAllowed,
             isProceedDisabled = flags.isProceedDisabled,
             isWarningDialogHidden = false,
@@ -230,21 +269,21 @@ internal class WarningConfigFormController(
             isTypingRequirementEnabled = flags.isTypingRequirementEnabled,
             typingSentence = binding.typingSentenceEdit.text.toString(),
             isIntentRequirementEnabled = flags.isIntentRequirementEnabled,
-            minIntentLength = binding.intentMinLengthSlider.value.toInt(),
+            minIntentLength = numericInputValue(binding.intentMinLengthInput).toInt(),
             isAdaptiveMathRequirementEnabled = flags.isAdaptiveMathRequirementEnabled,
-            adaptiveMathQuestionCount = binding.mathQuestionCountSlider.value.toInt(),
-            adaptiveMathStartingLevel = binding.mathStartingLevelSlider.value.toInt(),
+            adaptiveMathQuestionCount = numericInputValue(binding.mathQuestionCountInput).toInt(),
+            adaptiveMathStartingLevel = numericInputValue(binding.mathStartingLevelInput).toInt(),
             isFocusGoalRequirementEnabled = binding.focusGoalRequirementSwitch.isChecked,
             focusGoalGroupId = if (binding.focusGoalRequirementSwitch.isChecked) {
                 selectedFocusGroupId
             } else {
                 ""
             },
-            focusGoalRequiredMinutes = binding.focusGoalMinutesSlider.value.toInt(),
-            proceedDelayInSecs = binding.proceedDelaySlider.value.toInt(),
+            focusGoalRequiredMinutes = numericInputValue(binding.focusGoalMinutesInput).toInt(),
+            proceedDelayInSecs = numericInputValue(binding.proceedDelayInput).toInt(),
             vibrateAndIncBrightness = binding.switchVibrateBrightness.isChecked,
             proceedLimitEnabled = binding.proceedLimitSwitch.isChecked,
-            allowedProceeds = binding.allowedProceedsSlider.value.toInt(),
+            allowedProceeds = numericInputValue(binding.allowedProceedsInput).toInt(),
             proceedsTimeWindowMn = selectedProceedWindowMinutes(),
             isOnOpenConfig = isOnEachOpenEnabled()
         )
@@ -270,6 +309,9 @@ internal class WarningConfigFormController(
     }
 
     fun validate(): Boolean {
+        if (!numericInputs().all { validateNumericInput(it) }) {
+            return false
+        }
         if (binding.focusGoalRequirementSwitch.isChecked &&
             focusGroupOptions.none { it.groupId == selectedFocusGroupId }
         ) {
@@ -279,6 +321,130 @@ internal class WarningConfigFormController(
             return false
         }
         return true
+    }
+
+    private fun setupNumericInput(
+        slider: Slider,
+        input: TextInputEditText,
+        inputLayout: TextInputLayout,
+        maximumValue: () -> Long = { Int.MAX_VALUE.toLong() },
+        updateInput: (Long) -> Unit
+    ) {
+        slider.addOnChangeListener { _, value, _ ->
+            updateInput(value.toLong())
+        }
+        input.doAfterTextChanged { editable ->
+            val value = editable?.toString()?.toLongOrNull()
+            if (value == null) {
+                inputLayout.error = null
+                return@doAfterTextChanged
+            }
+            if (value < slider.valueFrom.toLong()) {
+                showNumericInputMinimumError(slider, inputLayout)
+                return@doAfterTextChanged
+            }
+            if (value > maximumValue()) {
+                showNumericInputTooLargeError(inputLayout)
+                return@doAfterTextChanged
+            }
+            inputLayout.error = null
+            if (value <= slider.valueTo.toLong() && slider.value.toLong() != value) {
+                slider.value = value.toFloat()
+            }
+        }
+        input.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus && !isNumericInputValid(slider, input, maximumValue())) {
+                inputLayout.error = null
+                updateInput(slider.value.toLong())
+            }
+        }
+    }
+
+    private fun numericInputs(): List<NumericInput> {
+        return listOf(
+            NumericInput(
+                binding.fixedTimeSlider,
+                binding.fixedTimeInput,
+                binding.fixedTimeInputLayout,
+                Long.MAX_VALUE / 60_000L
+            ),
+            NumericInput(
+                binding.proceedDelaySlider,
+                binding.proceedDelayInput,
+                binding.proceedDelayInputLayout
+            ),
+            NumericInput(
+                binding.allowedProceedsSlider,
+                binding.allowedProceedsInput,
+                binding.allowedProceedsInputLayout
+            ),
+            NumericInput(
+                binding.proceedWindowSlider,
+                binding.proceedWindowInput,
+                binding.proceedWindowInputLayout,
+                Long.MAX_VALUE / 60_000L / minutesForUnit(selectedUnitIndex())
+            ),
+            NumericInput(
+                binding.intentMinLengthSlider,
+                binding.intentMinLengthInput,
+                binding.intentMinLengthInputLayout
+            ),
+            NumericInput(
+                binding.mathQuestionCountSlider,
+                binding.mathQuestionCountInput,
+                binding.mathQuestionCountInputLayout
+            ),
+            NumericInput(
+                binding.mathStartingLevelSlider,
+                binding.mathStartingLevelInput,
+                binding.mathStartingLevelInputLayout
+            ),
+            NumericInput(
+                binding.focusGoalMinutesSlider,
+                binding.focusGoalMinutesInput,
+                binding.focusGoalMinutesInputLayout
+            )
+        )
+    }
+
+    private fun validateNumericInput(numericInput: NumericInput): Boolean {
+        if (isNumericInputValid(
+                numericInput.slider,
+                numericInput.input,
+                numericInput.maximumValue
+            )
+        ) {
+            numericInput.inputLayout.error = null
+            return true
+        }
+        val value = numericInput.input.text?.toString()?.toLongOrNull()
+        if (value != null && value > numericInput.maximumValue) {
+            showNumericInputTooLargeError(numericInput.inputLayout)
+        } else {
+            showNumericInputMinimumError(numericInput.slider, numericInput.inputLayout)
+        }
+        numericInput.input.requestFocus()
+        return false
+    }
+
+    private fun isNumericInputValid(
+        slider: Slider,
+        input: TextInputEditText,
+        maximumValue: Long
+    ): Boolean {
+        val value = input.text?.toString()?.toLongOrNull() ?: return false
+        return value >= slider.valueFrom.toLong() && value <= maximumValue
+    }
+
+    private fun showNumericInputMinimumError(slider: Slider, inputLayout: TextInputLayout) {
+        inputLayout.error = fragment.getString(
+            R.string.warning_numeric_value_minimum,
+            slider.valueFrom.toInt()
+        )
+    }
+
+    private fun showNumericInputTooLargeError(inputLayout: TextInputLayout) {
+        inputLayout.error = fragment.getString(R.string.warning_numeric_value_too_large)
     }
 
     private fun hideUnlockConfiguration() {
@@ -382,9 +548,8 @@ internal class WarningConfigFormController(
             setOnMenuItemClickListener { item ->
                 binding.proceedWindowUnitBtn.text = item.title
                 updateProceedWindowSliderBounds(item.itemId)
-                updateProceedWindowTitle(
-                    item.itemId,
-                    binding.proceedWindowSlider.value.toInt()
+                updateProceedWindowInput(
+                    binding.proceedWindowSlider.value.toLong()
                 )
                 true
             }
@@ -408,13 +573,9 @@ internal class WarningConfigFormController(
         binding.proceedWindowSlider.value = newValue
     }
 
-    private fun selectedProceedWindowMinutes(): Int {
-        val value = binding.proceedWindowSlider.value.toInt()
-        return when (selectedUnitIndex()) {
-            HOURS_INDEX -> value * MINUTES_PER_HOUR
-            DAYS_INDEX -> value * MINUTES_PER_DAY
-            else -> value
-        }
+    private fun selectedProceedWindowMinutes(): Long {
+        return numericInputValue(binding.proceedWindowInput) *
+            minutesForUnit(selectedUnitIndex())
     }
 
     private fun selectedUnitIndex(): Int {
@@ -422,64 +583,44 @@ internal class WarningConfigFormController(
             .coerceAtLeast(MINUTES_INDEX)
     }
 
-    private fun updateProceedWindowTitle(unitIndex: Int, value: Int) {
-        binding.proceedWindowTitle.text = fragment.getString(
-            R.string.warning_time_window,
-            value,
-            unitOptions()[unitIndex]
-        )
+    private fun minutesForUnit(unitIndex: Int): Long {
+        return when (unitIndex) {
+            HOURS_INDEX -> MINUTES_PER_HOUR
+            DAYS_INDEX -> MINUTES_PER_DAY
+            else -> 1L
+        }
     }
 
-    private fun updateFixedTimeTitle(value: Int) {
-        binding.timingTitle.text = fragment.getString(
-            R.string.warning_fixed_unlock_duration,
-            value
-        )
+    private fun updateProceedWindowInput(value: Long) {
+        setNumericInputValue(binding.proceedWindowInput, value)
     }
 
-    private fun updateProceedDelayTitle(value: Int) {
-        binding.proceedDelayTitle.text = fragment.getString(
-            R.string.warning_wait_before_unlock,
-            value
-        )
+    private fun updateFixedTimeInput(value: Long) {
+        setNumericInputValue(binding.fixedTimeInput, value)
     }
 
-    private fun updateAllowedProceedsTitle(value: Int) {
-        binding.allowedProceedsTitle.text = fragment.getString(
-            R.string.warning_allowed_proceeds,
-            value
-        )
+    private fun updateProceedDelayInput(value: Long) {
+        setNumericInputValue(binding.proceedDelayInput, value)
     }
 
-    private fun updateIntentMinLengthTitle(value: Int) {
-        binding.intentMinLengthTitle.text = fragment.resources.getQuantityString(
-            R.plurals.warning_intent_min_length,
-            value,
-            value
-        )
+    private fun updateAllowedProceedsInput(value: Long) {
+        setNumericInputValue(binding.allowedProceedsInput, value)
     }
 
-    private fun updateMathQuestionCountTitle(value: Int) {
-        binding.mathQuestionCountTitle.text = fragment.resources.getQuantityString(
-            R.plurals.warning_math_question_count,
-            value,
-            value
-        )
+    private fun updateIntentMinLengthInput(value: Long) {
+        setNumericInputValue(binding.intentMinLengthInput, value)
     }
 
-    private fun updateMathStartingLevelTitle(value: Int) {
-        binding.mathStartingLevelTitle.text = fragment.getString(
-            R.string.warning_math_starting_level,
-            value
-        )
+    private fun updateMathQuestionCountInput(value: Long) {
+        setNumericInputValue(binding.mathQuestionCountInput, value)
     }
 
-    private fun updateFocusGoalMinutesTitle(value: Int) {
-        binding.focusGoalMinutesTitle.text = fragment.resources.getQuantityString(
-            R.plurals.warning_focus_goal_minutes,
-            value,
-            value
-        )
+    private fun updateMathStartingLevelInput(value: Long) {
+        setNumericInputValue(binding.mathStartingLevelInput, value)
+    }
+
+    private fun updateFocusGoalMinutesInput(value: Long) {
+        setNumericInputValue(binding.focusGoalMinutesInput, value)
     }
 
     private fun unitOptions(): List<String> {
@@ -490,12 +631,23 @@ internal class WarningConfigFormController(
         )
     }
 
+    private fun numericInputValue(input: TextInputEditText): Long {
+        return input.text?.toString()?.toLongOrNull() ?: 0L
+    }
+
+    private fun setNumericInputValue(input: TextInputEditText, value: Long) {
+        val text = value.toString()
+        if (input.text?.toString() != text) {
+            input.setText(text)
+        }
+    }
+
     private companion object {
         const val MINUTES_INDEX = 0
         const val HOURS_INDEX = 1
         const val DAYS_INDEX = 2
-        const val MINUTES_PER_HOUR = 60
-        const val MINUTES_PER_DAY = 1_440
+        const val MINUTES_PER_HOUR = 60L
+        const val MINUTES_PER_DAY = 1_440L
         const val MIN_MATH_QUESTIONS = 1
         const val MAX_MATH_QUESTIONS = 10
         const val MIN_MATH_LEVEL = 1
@@ -511,3 +663,10 @@ private data class FocusGroupUnlockOption(
 ) {
     override fun toString(): String = name
 }
+
+private data class NumericInput(
+    val slider: Slider,
+    val input: TextInputEditText,
+    val inputLayout: TextInputLayout,
+    val maximumValue: Long = Int.MAX_VALUE.toLong()
+)

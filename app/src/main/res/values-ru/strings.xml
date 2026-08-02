@@ -688,6 +688,17 @@
     <string name="warning_wait_before_unlock">Ожидание перед разблокировкой: %1$d с</string>
     <string name="warning_allowed_proceeds">Разрешено продолжений: %1$d</string>
     <string name="warning_time_window">Временное окно: %1$d %2$s</string>
+    <string name="warning_fixed_unlock_duration_input">Фиксированное время разблокировки</string>
+    <string name="warning_wait_before_unlock_input">Ожидание перед разблокировкой</string>
+    <string name="warning_intent_min_length_input">Минимум символов</string>
+    <string name="warning_math_question_count_input">Необходимое число вопросов</string>
+    <string name="warning_math_starting_level_input">Начальный уровень</string>
+    <string name="warning_focus_goal_minutes_input">Необходимое время фокусировки</string>
+    <string name="warning_allowed_proceeds_input">Разрешенное число продолжений</string>
+    <string name="warning_time_window_input">Временное окно</string>
+    <string name="warning_numeric_value_minimum">Введите %1$d или больше.</string>
+    <string name="warning_numeric_value_too_large">Это число слишком велико.</string>
+    <string name="unit_seconds">Секунды</string>
     <string name="warning_qr_generated_title">QR-код/штрихкод создан</string>
     <string name="warning_qr_generated_message">Пожалуйста, сохраните или распечатайте этот QR-код/штрихкод. Он понадобится вам для разблокировки.</string>
     <string name="warning_save_to_gallery">Сохранить в галерею</string>

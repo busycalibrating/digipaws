@@ -119,7 +119,11 @@ class WarningActivity : AppCompatActivity() {
             if (validHistory.size >= warningScreenConfig.allowedProceeds) {
                 isProceedLimitExceeded = true
                 val oldestProceed = validHistory.minOrNull() ?: nowTime
-                val expirationTime = oldestProceed + windowMillis
+                val expirationTime = if (windowMillis > Long.MAX_VALUE - oldestProceed) {
+                    Long.MAX_VALUE
+                } else {
+                    oldestProceed + windowMillis
+                }
                 timeUntilNextProceedMn = (expirationTime - nowTime + 59_999) / 60_000L
             } else {
                 proceedsLeft = warningScreenConfig.allowedProceeds - validHistory.size
@@ -281,7 +285,11 @@ class WarningActivity : AppCompatActivity() {
         if (warningScreenConfig.isOnOpenConfig) {
             binding.minsPicker.visibility = View.GONE
         } else {
-            binding.minsPicker.setValue(warningScreenConfig.timeInterval / 60000)
+            binding.minsPicker.setValue(
+                (warningScreenConfig.timeInterval / 60_000L)
+                    .coerceAtMost(Int.MAX_VALUE.toLong())
+                    .toInt()
+            )
         }
 
         binding.btnCancel.setOnClickListener {
@@ -654,7 +662,7 @@ class WarningActivity : AppCompatActivity() {
     private fun sendRefreshRequest(id: String, action: String, time: Int) {
         val intent = Intent(action)
         intent.putExtra("result_id", id)
-        intent.putExtra("selected_time", time * 60_000)
+        intent.putExtra("selected_time", time * 60_000L)
         sendBroadcast(intent)
     }
 

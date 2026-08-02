@@ -1517,6 +1517,17 @@
     <string name="warning_wait_before_unlock">Wait before unlocking: %1$ds</string>
     <string name="warning_allowed_proceeds">Allowed proceeds: %1$d</string>
     <string name="warning_time_window">Time window: %1$d %2$s</string>
+    <string name="warning_fixed_unlock_duration_input">Fixed unlock duration</string>
+    <string name="warning_wait_before_unlock_input">Wait before unlocking</string>
+    <string name="warning_intent_min_length_input">Minimum characters</string>
+    <string name="warning_math_question_count_input">Questions required</string>
+    <string name="warning_math_starting_level_input">Starting level</string>
+    <string name="warning_focus_goal_minutes_input">Required focus time</string>
+    <string name="warning_allowed_proceeds_input">Allowed proceeds</string>
+    <string name="warning_time_window_input">Time window</string>
+    <string name="warning_numeric_value_minimum">Enter %1$d or more.</string>
+    <string name="warning_numeric_value_too_large">This number is too large.</string>
+    <string name="unit_seconds">Seconds</string>
     <string name="warning_qr_generated_title">QR/Barcode Generated</string>
     <string name="warning_qr_generated_message">Please save or print this QR/Barcode. You will need it to unlock.</string>
     <string name="warning_save_to_gallery">Save to Gallery</string>

@@ -449,7 +449,7 @@ class KeywordBlocker : BaseBlocker() {
 
     private fun handleCooldownIntent(intent: Intent) {
         val groupId = intent.getStringExtra("result_id") ?: return
-        val duration = intent.getIntExtra("selected_time", 120000).toLong()
+        val duration = intent.getLongExtra("selected_time", 120000L)
         if (duration <= 0L) return
 
         val cooldownEnd = System.currentTimeMillis() + duration

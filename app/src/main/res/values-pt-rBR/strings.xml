@@ -688,6 +688,17 @@
     <string name="warning_wait_before_unlock">Espera antes de desbloquear: %1$d s</string>
     <string name="warning_allowed_proceeds">Continuações permitidas: %1$d</string>
     <string name="warning_time_window">Janela de tempo: %1$d %2$s</string>
+    <string name="warning_fixed_unlock_duration_input">Duração fixa de desbloqueio</string>
+    <string name="warning_wait_before_unlock_input">Espera antes de desbloquear</string>
+    <string name="warning_intent_min_length_input">Mínimo de caracteres</string>
+    <string name="warning_math_question_count_input">Perguntas necessárias</string>
+    <string name="warning_math_starting_level_input">Nível inicial</string>
+    <string name="warning_focus_goal_minutes_input">Tempo de foco necessário</string>
+    <string name="warning_allowed_proceeds_input">Continuações permitidas</string>
+    <string name="warning_time_window_input">Janela de tempo</string>
+    <string name="warning_numeric_value_minimum">Insira %1$d ou mais.</string>
+    <string name="warning_numeric_value_too_large">Este número é muito grande.</string>
+    <string name="unit_seconds">Segundos</string>
     <string name="warning_qr_generated_title">QR code/código de barras gerado</string>
     <string name="warning_qr_generated_message">Salve ou imprima esse QR code/código de barras. Você vai precisar dele para desbloquear.</string>
     <string name="warning_save_to_gallery">Salvar na galeria</string>

@@ -688,6 +688,17 @@
     <string name="warning_wait_before_unlock">الانتظار قبل إلغاء القفل: %1$d ثانية</string>
     <string name="warning_allowed_proceeds">مرات المتابعة المسموحة: %1$d</string>
     <string name="warning_time_window">النافذة الزمنية: %1$d %2$s</string>
+    <string name="warning_fixed_unlock_duration_input">مدة إلغاء القفل الثابتة</string>
+    <string name="warning_wait_before_unlock_input">الانتظار قبل إلغاء القفل</string>
+    <string name="warning_intent_min_length_input">الحد الأدنى للأحرف</string>
+    <string name="warning_math_question_count_input">عدد الأسئلة المطلوبة</string>
+    <string name="warning_math_starting_level_input">مستوى البداية</string>
+    <string name="warning_focus_goal_minutes_input">وقت التركيز المطلوب</string>
+    <string name="warning_allowed_proceeds_input">مرات المتابعة المسموحة</string>
+    <string name="warning_time_window_input">النافذة الزمنية</string>
+    <string name="warning_numeric_value_minimum">أدخل %1$d أو أكثر.</string>
+    <string name="warning_numeric_value_too_large">هذا الرقم كبير جدًا.</string>
+    <string name="unit_seconds">ثوان</string>
     <string name="warning_qr_generated_title">تم إنشاء رمز الاستجابة السريعة/الباركود</string>
     <string name="warning_qr_generated_message">يُرجى حفظ هذا الرمز أو طباعته. ستحتاج إليه لإلغاء القفل.</string>
     <string name="warning_save_to_gallery">حفظ في المعرض</string>

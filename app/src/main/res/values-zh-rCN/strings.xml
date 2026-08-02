@@ -688,6 +688,17 @@
     <string name="warning_wait_before_unlock">解锁前等待：%1$d秒</string>
     <string name="warning_allowed_proceeds">允许继续次数：%1$d</string>
     <string name="warning_time_window">时间窗口：%1$d%2$s</string>
+    <string name="warning_fixed_unlock_duration_input">固定解锁时长</string>
+    <string name="warning_wait_before_unlock_input">解锁前等待时间</string>
+    <string name="warning_intent_min_length_input">最少字符数</string>
+    <string name="warning_math_question_count_input">所需题目数</string>
+    <string name="warning_math_starting_level_input">起始等级</string>
+    <string name="warning_focus_goal_minutes_input">所需专注时间</string>
+    <string name="warning_allowed_proceeds_input">允许继续次数</string>
+    <string name="warning_time_window_input">时间窗口</string>
+    <string name="warning_numeric_value_minimum">请输入 %1$d 或更大的值。</string>
+    <string name="warning_numeric_value_too_large">这个数字太大了。</string>
+    <string name="unit_seconds">秒</string>
     <string name="warning_qr_generated_title">二维码/条形码已生成</string>
     <string name="warning_qr_generated_message">请保存或打印这个二维码/条形码，解锁时会用到它。</string>
     <string name="warning_save_to_gallery">保存到相册</string>

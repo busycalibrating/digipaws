@@ -688,6 +688,17 @@
     <string name="warning_wait_before_unlock">ロック解除前の待機時間：%1$d秒</string>
     <string name="warning_allowed_proceeds">許可される継続回数：%1$d</string>
     <string name="warning_time_window">時間枠：%1$d%2$s</string>
+    <string name="warning_fixed_unlock_duration_input">固定のロック解除時間</string>
+    <string name="warning_wait_before_unlock_input">ロック解除前の待機時間</string>
+    <string name="warning_intent_min_length_input">最小文字数</string>
+    <string name="warning_math_question_count_input">必要な問題数</string>
+    <string name="warning_math_starting_level_input">開始レベル</string>
+    <string name="warning_focus_goal_minutes_input">必要な集中時間</string>
+    <string name="warning_allowed_proceeds_input">許可する続行回数</string>
+    <string name="warning_time_window_input">時間枠</string>
+    <string name="warning_numeric_value_minimum">%1$d以上を入力してください。</string>
+    <string name="warning_numeric_value_too_large">この数値は大きすぎます。</string>
+    <string name="unit_seconds">秒</string>
     <string name="warning_qr_generated_title">QRコード/バーコードを生成しました</string>
     <string name="warning_qr_generated_message">このQRコード/バーコードを保存または印刷してください。ロック解除に必要になります。</string>
     <string name="warning_save_to_gallery">ギャラリーに保存</string>

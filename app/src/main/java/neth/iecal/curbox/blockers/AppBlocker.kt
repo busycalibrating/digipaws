@@ -46,7 +46,7 @@ class AppBlocker : BaseBlocker() {
         /**
          * Add cooldown to an app group.
          * This broadcast should always be sent together with the following keys:
-         * selected_time: Int -> Duration of cooldown in millis
+         * selected_time: Long -> Duration of cooldown in millis
          * result_id : String -> ID of the app group to be put into cooldown
          */
         const val INTENT_ACTION_REFRESH_APP_BLOCKER_COOLDOWN = "neth.iecal.curbox.refresh.appblocker.cooldown"
@@ -284,13 +284,18 @@ class AppBlocker : BaseBlocker() {
     private fun handlePutCooldownIntentBroadcast(intent: Intent) {
         val groupId = intent.getStringExtra("result_id") ?: return
 
-        val durationMillis = intent.getIntExtra(
+        val durationMillis = intent.getLongExtra(
             "selected_time",
-            appBlockerWarningScrnConfgs[groupId]?.timeInterval ?: 10
+            appBlockerWarningScrnConfgs[groupId]?.timeInterval ?: 10L
         )
         if (durationMillis <= 0) return
         Log.d("cooldown for ", durationMillis.toString())
-        val realTimeEndMillis = System.currentTimeMillis() + durationMillis
+        val currentTimeMillis = System.currentTimeMillis()
+        val realTimeEndMillis = if (durationMillis > Long.MAX_VALUE - currentTimeMillis) {
+            Long.MAX_VALUE
+        } else {
+            currentTimeMillis + durationMillis
+        }
 
         putCooldownTo(groupId, realTimeEndMillis)
         showNextCooldownNotification()

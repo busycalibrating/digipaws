@@ -226,10 +226,19 @@ class ReelBlocker : BaseBlocker() {
                 INTENT_ACTION_REFRESH_REEL_BLOCKER -> setupBlocker(service)
 
                 INTENT_ACTION_REFRESH_REEL_BLOCKER_COOLDOWN -> {
-                    val interval = intent.getIntExtra("selected_time", reelBlockerConfig.warningScreenConfig.timeInterval)
+                    val interval = intent.getLongExtra(
+                        "selected_time",
+                        reelBlockerConfig.warningScreenConfig.timeInterval
+                    )
+                    val currentUptime = SystemClock.uptimeMillis()
+                    val endTime = if (interval > Long.MAX_VALUE - currentUptime) {
+                        Long.MAX_VALUE
+                    } else {
+                        currentUptime + interval
+                    }
                     applyCooldown(
                         intent.getStringExtra("result_id") ?: "xxxxxxxxxxxxxx",
-                        SystemClock.uptimeMillis() + interval
+                        endTime
                     )
                 }
             }
