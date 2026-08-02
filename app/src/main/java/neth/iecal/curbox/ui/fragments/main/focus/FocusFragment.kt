@@ -358,7 +358,7 @@ class FocusFragment : Fragment() {
 
         val layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)
         bInitial.rvRuler.layoutManager = layoutManager
-        bInitial.rvRuler.adapter = RulerAdapter(240)
+        bInitial.rvRuler.adapter = RulerAdapter()
 
         bInitial.rvRuler.setOnTouchListener { _, _ ->
             viewModel.currentRunningFocus.value.first != null

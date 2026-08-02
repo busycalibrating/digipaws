@@ -8,7 +8,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.color.MaterialColors
 import neth.iecal.curbox.R
 
-class RulerAdapter(private val maxValue: Int = 180) : RecyclerView.Adapter<RulerAdapter.TickViewHolder>() {
+class RulerAdapter : RecyclerView.Adapter<RulerAdapter.TickViewHolder>() {
 
     class TickViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val vTick: View = view.findViewById(R.id.vTick)
@@ -40,5 +40,5 @@ class RulerAdapter(private val maxValue: Int = 180) : RecyclerView.Adapter<Ruler
         holder.vTick.layoutParams = params
     }
 
-    override fun getItemCount(): Int = maxValue + 1
+    override fun getItemCount(): Int = Int.MAX_VALUE
 }
