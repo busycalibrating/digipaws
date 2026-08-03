@@ -3,6 +3,7 @@ package neth.iecal.curbox.data.sync
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -45,5 +46,40 @@ class CryptoBoxTest {
         // Round trips
         assertEquals(v.get("dekHex").asString, CryptoBox.toHex(CryptoBox.unwrapDek(kek, wrapped, userId)))
         assertEquals(v.get("plaintext").asString, CryptoBox.decryptRecord(dek, aad, record))
+    }
+
+    @Test
+    fun rejectsTruncatedEncryptedBlobs() {
+        val key = ByteArray(32)
+        val aad = CryptoBox.recordAad("user", "namespace", "record")
+        expectIllegalArgument { CryptoBox.decryptRecord(key, aad, byteArrayOf()) }
+        expectIllegalArgument { CryptoBox.decryptRecord(key, aad, ByteArray(28)) }
+    }
+
+    @Test
+    fun rejectsUnboundedOrUnsupportedKdfParameters() {
+        val salt = ByteArray(16)
+        expectIllegalArgument {
+            CryptoBox.deriveKekBytes("phrase", salt, CryptoBox.KdfParams(iterations = 2_000_001))
+        }
+        expectIllegalArgument {
+            CryptoBox.deriveKekBytes("phrase", salt, CryptoBox.KdfParams(alg = "scrypt"))
+        }
+        expectIllegalArgument {
+            CryptoBox.deriveKekBytes("phrase", salt, CryptoBox.KdfParams(dkLenBits = 128))
+        }
+    }
+
+    @Test
+    fun rejectsOversizedPairingPayloadBeforeParsingIt() {
+        expectIllegalArgument { CryptoBox.parsePairingPayload("x".repeat(2049)) }
+    }
+
+    private fun expectIllegalArgument(block: () -> Unit) {
+        try {
+            block()
+            fail("expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
     }
 }

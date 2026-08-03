@@ -3,8 +3,10 @@ package neth.iecal.curbox.data.sync
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import java.text.SimpleDateFormat
+import java.security.MessageDigest
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import neth.iecal.curbox.data.db.AppDatabase
@@ -46,9 +49,13 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     private val entitlement by lazy { SyncEntitlement(context) }
     private val entitled get() = entitlement.billing.value.entitled
     private val db by lazy { AppDatabase.getInstance(context) }
+    private val dataStoreManager by lazy { DataStoreManager(context) }
     private val dataStore by lazy { DataStoreManager.getSettingsDataStore(context, gson) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val startMutex = kotlinx.coroutines.sync.Mutex()
+    private val startMutex = Mutex()
+    private val tokenMutex = Mutex()
+    private val pullMutex = Mutex()
+    private val pushMutex = Mutex()
 
     private val NS_ANDROID_CONFIG = "android_config"
     private val NS_USAGE_WEB = "usage_web"
@@ -63,18 +70,19 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     // usage row is rewritten on the server, which keeps row churn, network, and battery low.
     // Focus and config changes are not sampled and still sync instantly.
     private val USAGE_PUSH_SAMPLE_MS = 5 * 60_000L
+    private val PULL_PAGE_SIZE = 500
 
     private var session: SupabaseRest.Session? = null
+    private var signedInInitialised = false
     private var dek: ByteArray? = null
     private var vaultExists: Boolean = false
     private var realtime: RealtimeClient? = null
     @Volatile private var realtimeConnected = false
     private var pollStarted = false
-    // Compared structurally, not as JSON strings: Gson can serialize the same
-    // HashSet fields in a different order after a cross process DataStore
-    // re-read, and a string compare then re-pushes an unchanged config on
-    // every settings emission.
+    // Compare both ways. Structural equality handles HashSet order changes,
+    // while JSON equality handles primitive arrays whose Kotlin equals uses identity.
     private var lastConfig: Settings? = null
+    private var lastConfigJson: String? = null
     // Dedup key for focus state. The wire payload stamps startedAt with the
     // push time, so comparing full payloads never matches and every collector
     // wake re-pushed an unchanged session. The key holds only the fields that
@@ -82,7 +90,10 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     private var lastFocusKey: String? = null
     private val injectedGroupIds = HashSet<String>()
     private val focusGroupShadow = HashMap<String, String>()
-    private val pushedHashes = HashMap<String, Int>()
+    private val knownFocusGroupIds = HashSet<String>()
+    private val pushedDigests = HashMap<String, String>()
+    private val wakeRunning = AtomicBoolean(false)
+    private val wakePending = AtomicBoolean(false)
     private var observersStarted = false
     private var devices: List<SyncDevice> = emptyList()
 
@@ -101,7 +112,15 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     override fun refreshBilling() = entitlement.refresh()
 
     override fun start() {
-        scope.launch { ensureStarted() }
+        scope.launch {
+            try {
+                ensureStarted()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                publishStatus(error = e.message)
+            }
+        }
         watchEntitlement()
     }
 
@@ -119,8 +138,14 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
                 .drop(1)
                 .collect { nowEntitled ->
                     if (nowEntitled) {
-                        ensureStarted()
-                        if (session != null && dek != null) onSignedIn()
+                        try {
+                            ensureStarted()
+                            if (session != null && dek != null) onSignedIn()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            publishStatus(error = e.message)
+                        }
                     } else {
                         stopRealtime()
                         publishStatus()
@@ -130,7 +155,10 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     private suspend fun ensureStarted() = startMutex.withLock {
-        if (session != null) return
+        if (session != null) {
+            if (!signedInInitialised) onSignedIn()
+            return
+        }
         runCatching { SyncWorker.schedule(context) }
         if (!entitled) {
             publishStatus()
@@ -139,25 +167,43 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val refresh = keys.refreshToken ?: return
         try {
             session = rest.refresh(refresh).also { persistSession(it) }
+            signedInInitialised = false
             keys.dekB64?.let { dek = CryptoBox.fromBase64Url(it) }
             onSignedIn()
         } catch (e: Exception) {
             if (isRejectedToken(e)) {
-                keys.clear()
-                session = null
-                dek = null
+                clearLocalAccount()
+                publishStatus(error = e.message)
+                return
             }
             publishStatus(error = e.message)
+            throw e
         }
     }
 
     fun wake() {
+        wakePending.set(true)
+        if (!wakeRunning.compareAndSet(false, true)) return
         scope.launch {
-            ensureStarted()
-            if (session != null && dek != null && entitled) {
-                ensureFreshToken()
-                runCatching { pullSinceCursor() }
-                runCatching { pushUsage() }
+            try {
+                do {
+                    wakePending.set(false)
+                    ensureStarted()
+                    if (session != null && dek != null && entitled) {
+                        ensureFreshToken()
+                        retryAfterRefreshingAccess {
+                            pullSinceCursor()
+                            pushMutex.withLock { pushUsage() }
+                        }
+                    }
+                } while (wakePending.get())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                publishStatus(error = e.message)
+            } finally {
+                wakeRunning.set(false)
+                if (wakePending.get()) wake()
             }
         }
     }
@@ -171,6 +217,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             publishStatus()
         } else {
             session = s
+            signedInInitialised = false
             persistSession(s)
             pendingEmail = null
             onSignedIn()
@@ -189,6 +236,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             throw e
         }
         session = s
+        signedInInitialised = false
         persistSession(s)
         pendingEmail = null
         onSignedIn()
@@ -197,6 +245,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     override suspend fun verifySignupCode(email: String, code: String) = withContext(Dispatchers.IO) {
         val s = rest.verifyOtp(email, code.trim(), "signup")
         session = s
+        signedInInitialised = false
         persistSession(s)
         pendingEmail = null
         onSignedIn()
@@ -214,29 +263,31 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val s = rest.verifyOtp(email, code.trim(), "recovery")
         rest.updatePassword(s, newPassword)
         session = s
+        signedInInitialised = false
         persistSession(s)
         pendingEmail = null
         onSignedIn()
     }
 
     override suspend fun signOut() = withContext(Dispatchers.IO) {
-        stopRealtime()
-        runCatching { session?.let { rest.clearDeviceToken(it, keys.deviceId) } }
-        keys.clear()
-        session = null
-        dek = null
-        vaultExists = false
-        lastConfig = null
-        lastFocusKey = null
-        pendingEmail = null
-        pushedHashes.clear()
-        injectedGroupIds.clear()
-        focusGroupShadow.clear()
-        runCatching { RemoteUsageStore(context).clear() }
-        publishStatus()
+        startMutex.withLock {
+            tokenMutex.withLock {
+                val oldSession = session
+                val oldDeviceId = if (oldSession != null) keys.deviceId else null
+                stopRealtime()
+                runCatching { if (oldSession != null && oldDeviceId != null) rest.clearDeviceToken(oldSession, oldDeviceId) }
+                runCatching { if (oldSession != null) rest.signOut(oldSession) }
+                pullMutex.withLock {
+                    pushMutex.withLock { clearLocalAccount() }
+                }
+                publishStatus()
+            }
+        }
     }
 
     override suspend fun setPassphrase(passphrase: String) = withContext(Dispatchers.IO) {
+        require(passphrase.length >= 8) { context.getString(neth.iecal.curbox.R.string.account_msg_phrase_too_short) }
+        require(passphrase.length <= 1024) { context.getString(neth.iecal.curbox.R.string.account_msg_phrase_too_long) }
         val s = requireSession()
         if (rest.getVault(s) != null) throw IllegalStateException("a passphrase already exists, unlock instead")
         val salt = CryptoBox.randomSalt()
@@ -249,6 +300,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     override suspend fun unlock(passphrase: String) = withContext(Dispatchers.IO) {
+        require(passphrase.length <= 1024) { context.getString(neth.iecal.curbox.R.string.account_msg_phrase_too_long) }
         val s = requireSession()
         val vault = rest.getVault(s) ?: throw IllegalStateException("no passphrase set yet")
         val params = gson.fromJson(vault.paramsJson, JsonObject::class.java)
@@ -256,7 +308,9 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             passphrase,
             CryptoBox.fromBase64Url(vault.saltB64),
             CryptoBox.KdfParams(
+                alg = params.get("alg")?.asString ?: "PBKDF2-HMAC-SHA256",
                 iterations = params.get("iterations").asInt,
+                hash = params.get("hash")?.asString ?: "SHA-256",
                 dkLenBits = params.get("dkLenBits").asInt,
             ),
         )
@@ -279,8 +333,16 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val s = requireSession()
         val pairing = CryptoBox.parsePairingPayload(payload)
         if (pairing.userId != s.userId) throw IllegalStateException("this code is for a different account")
-        adoptDek(pairing.dek)
-        onSignedIn()
+        val previousDek = dek
+        try {
+            adoptDek(pairing.dek)
+            onSignedIn()
+        } catch (e: Exception) {
+            dek = previousDek
+            keys.dekB64 = previousDek?.let { CryptoBox.toBase64Url(it) }
+            publishStatus(error = e.message)
+            throw e
+        }
     }
 
     // Called from cold processes (SyncWorker) where start() may not have finished
@@ -288,50 +350,82 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     // nothing when it is still null.
     override suspend fun refresh() = withContext(Dispatchers.IO) {
         ensureStarted()
+        if (session == null || dek == null || !entitled) return@withContext
         ensureFreshToken()
-        pullSinceCursor()
+        retryAfterRefreshingAccess {
+            val current = requireSession()
+            rest.upsertDevice(current, keys.deviceId, "android", keys.deviceName, keys.fcmToken)
+            pullSinceCursor()
+        }
+        startLiveSync()
+        session?.let { runCatching { refreshDevices(it) } }
+        publishStatus()
     }
 
     override suspend fun remoteWebsiteUsage(dateIso: String): Map<String, Long> = withContext(Dispatchers.IO) {
-        if (!keys.syncUsageStats) emptyMap() else RemoteUsageStore(context).websiteTotals(dateIso, keys.usageDeviceIds)
+        if (!keys.syncUsageStats || session == null || dek == null) {
+            emptyMap()
+        } else {
+            RemoteUsageStore(context).websiteTotals(dateIso, keys.usageDeviceIds)
+        }
     }
 
     override suspend fun remoteAppUsage(dateIso: String): Map<String, Long> = withContext(Dispatchers.IO) {
-        if (!keys.syncUsageStats) emptyMap() else RemoteUsageStore(context).appTotals(dateIso, keys.usageDeviceIds)
+        if (!keys.syncUsageStats || session == null || dek == null) {
+            emptyMap()
+        } else {
+            RemoteUsageStore(context).appTotals(dateIso, keys.usageDeviceIds)
+        }
     }
 
     override suspend fun pushNow() = withContext(Dispatchers.IO) {
         ensureStarted()
+        if (session == null || dek == null || !entitled) return@withContext
         ensureFreshToken()
-        pushConfig()
-        pushUsage()
+        retryAfterRefreshingAccess {
+            pushMutex.withLock {
+                pushConfig()
+                pushUsage()
+            }
+        }
     }
 
     override suspend fun setDeviceName(name: String) = withContext(Dispatchers.IO) {
         val label = name.trim().take(60)
         require(label.isNotEmpty()) { "Enter a device name" }
-        val s = requireSession()
         keys.deviceName = label
-        rest.upsertDevice(s, keys.deviceId, "android", label, keys.fcmToken)
-        refreshDevices(s)
+        retryAfterRefreshingAccess {
+            val current = requireSession()
+            rest.upsertDevice(current, keys.deviceId, "android", label, keys.fcmToken)
+            refreshDevices(current)
+        }
         publishStatus()
     }
 
     override suspend fun setPreferences(preferences: SyncPreferences) = withContext(Dispatchers.IO) {
         keys.syncUsageStats = preferences.usageStats
         keys.syncReducerConfigs = preferences.reducerConfigs
-        keys.usageDeviceIds = preferences.usageDeviceIds
+        keys.usageDeviceIds = preferences.usageDeviceIds - keys.deviceId
         keys.cursor = "1970-01-01T00:00:00Z"
         // Rebuild the cache so a device removed from the selection cannot keep
         // contributing stale totals.
-        RemoteUsageStore(context).clear()
-        pullSinceCursor()
-        if (keys.syncReducerConfigs) {
-            pushConfig()
-            runCatching { pushFocusGroups(dataStore.data.first()) }
-            runCatching { pushFocusFrom(dataStore.data.first()) }
+        pullMutex.withLock {
+            RemoteUsageStore(context).clear()
         }
-        if (keys.syncUsageStats) pushUsage()
+        retryAfterRefreshingAccess {
+            pullSinceCursor()
+        }
+        retryAfterRefreshingAccess {
+            pushMutex.withLock {
+                if (keys.syncReducerConfigs) {
+                    val settings = dataStore.data.first()
+                    pushConfig()
+                    pushFocusGroups(settings)
+                    pushFocusFrom(settings)
+                }
+                if (keys.syncUsageStats) pushUsage()
+            }
+        }
         publishStatus()
     }
 
@@ -346,8 +440,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         e is SupabaseRest.AuthHttpException && e.code in setOf(400, 401, 403)
 
     private fun persistSession(s: SupabaseRest.Session) {
-        keys.accessToken = s.accessToken
-        keys.refreshToken = s.refreshToken
+        keys.setSession(s.accessToken, s.refreshToken)
     }
 
     private fun adoptDek(bytes: ByteArray) {
@@ -357,34 +450,61 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
 
     private fun paramsJson(): String = gson.toJson(CryptoBox.DEFAULT_KDF_PARAMS)
 
+    private fun clearLocalAccount() {
+        stopRealtime()
+        keys.clear()
+        session = null
+        signedInInitialised = false
+        dek = null
+        vaultExists = false
+        lastConfig = null
+        lastConfigJson = null
+        lastFocusKey = null
+        pendingEmail = null
+        devices = emptyList()
+        pushedDigests.clear()
+        injectedGroupIds.clear()
+        focusGroupShadow.clear()
+        knownFocusGroupIds.clear()
+        runCatching { RemoteUsageStore(context).clear() }
+    }
+
     private suspend fun onSignedIn() {
         val s = session ?: return
-        try {
-            rest.upsertDevice(s, keys.deviceId, "android", keys.deviceName, keys.fcmToken)
-            refreshDevices(s)
-        } catch (_: Exception) {
-        }
+        rest.upsertDevice(s, keys.deviceId, "android", keys.deviceName, keys.fcmToken)
+        runCatching { refreshDevices(s) }
         registerFcmToken()
-        vaultExists = if (dek != null) true else runCatching { rest.getVault(s) != null }.getOrElse { vaultExists }
+        vaultExists = dek != null || rest.getVault(s) != null
+        knownFocusGroupIds.clear()
+        knownFocusGroupIds.addAll(keys.knownFocusGroupIds)
         publishStatus()
+        signedInInitialised = true
         if (dek != null && entitled) {
-            startObservers()
-            if (!neth.iecal.curbox.BuildConfig.SYNC_USE_FCM) startRealtime()
-            startSafetyPoll()
             pullSinceCursor()
-            if (keys.syncReducerConfigs) {
-                pushConfig()
-                runCatching { pushFocusGroups(dataStore.data.first()) }
-                runCatching { pushFocusFrom(dataStore.data.first()) }
+            startLiveSync()
+            pushMutex.withLock {
+                if (keys.syncReducerConfigs) {
+                    val settings = dataStore.data.first()
+                    pushConfig()
+                    pushFocusGroups(settings)
+                    pushFocusFrom(settings)
+                }
+                if (keys.syncUsageStats) pushUsage()
             }
-            if (keys.syncUsageStats) pushUsage()
         }
         publishStatus()
     }
 
+    private fun startLiveSync() {
+        startObservers()
+        if (!neth.iecal.curbox.BuildConfig.SYNC_USE_FCM) startRealtime()
+        startSafetyPoll()
+    }
+
     private fun refreshDevices(s: SupabaseRest.Session) {
         devices = rest.devices(s).map {
-            SyncDevice(it.id, it.platform, it.label.ifBlank { it.platform }, it.lastSeen, it.id == keys.deviceId)
+            val platform = it.platform.ifBlank { "device" }.take(40)
+            SyncDevice(it.id, platform, it.label.ifBlank { platform }.take(60), it.lastSeen, it.id == keys.deviceId)
         }
     }
 
@@ -398,7 +518,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         realtime = RealtimeClient(
             userId = s.userId,
             accessToken = s.accessToken,
-            onChange = { scope.launch { pullSinceCursor() } },
+            onChange = { wake() },
             onConnected = { realtimeConnected = it },
         ).also { runCatching { it.start() } }
     }
@@ -438,21 +558,40 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
                 }
                 delay(interval)
                 if (dek == null || session == null || !entitled) continue
-                ensureFreshToken()
-                runCatching { pullSinceCursor() }
+                try {
+                    ensureFreshToken()
+                    retryAfterRefreshingAccess { pullSinceCursor() }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    publishStatus(error = e.message)
+                }
             }
         }
     }
 
-    private suspend fun ensureFreshToken() {
-        val s = session ?: return
-        val refresh = keys.refreshToken ?: return
-        if (System.currentTimeMillis() < s.expiresAt - 60_000) return
-        runCatching {
-            val ns = rest.refresh(refresh)
-            session = ns
-            persistSession(ns)
-            realtime?.updateToken(ns.accessToken)
+    private suspend fun ensureFreshToken(force: Boolean = false) = tokenMutex.withLock {
+        val s = session ?: return@withLock
+        val refresh = keys.refreshToken ?: throw IllegalStateException("sign in again")
+        if (!force && System.currentTimeMillis() < s.expiresAt - 60_000) return@withLock
+        try {
+            val next = rest.refresh(refresh)
+            session = next
+            persistSession(next)
+            realtime?.updateToken(next.accessToken)
+        } catch (e: Exception) {
+            if (isRejectedToken(e)) clearLocalAccount()
+            throw e
+        }
+    }
+
+    private suspend fun <T> retryAfterRefreshingAccess(block: suspend () -> T): T {
+        return try {
+            block()
+        } catch (e: SupabaseRest.RestHttpException) {
+            if (e.code != 401) throw e
+            ensureFreshToken(force = true)
+            block()
         }
     }
 
@@ -464,32 +603,82 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             dataStore.data.debounce(1500).collect { settings ->
                 if (dek == null || !entitled) return@collect
                 val norm = normalize(settings)
-                if (keys.syncReducerConfigs && norm != lastConfig) {
-                    lastConfig = norm
-                    runCatching { pushConfigJson(gson.toJson(norm)) }.onFailure { publishStatus(error = it.message) }
+                val normJson = gson.toJson(norm)
+                if (keys.syncReducerConfigs && !sameAsLastConfig(norm, normJson)) {
+                    try {
+                        retryAfterRefreshingAccess {
+                            pushMutex.withLock { pushConfigJson(norm, normJson) }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        publishStatus(error = e.message)
+                    }
                 }
-                if (keys.syncReducerConfigs) runCatching { pushFocusGroups(settings) }
+                if (keys.syncReducerConfigs) {
+                    try {
+                        retryAfterRefreshingAccess {
+                            pushMutex.withLock { pushFocusGroups(settings) }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        publishStatus(error = e.message)
+                    }
+                }
             }
         }
         scope.launch {
             dataStore.data
                 .distinctUntilChangedBy { it.activeManualFocusGroupId }
                 .collect { settings ->
-                    if (dek != null && entitled && keys.syncReducerConfigs) runCatching { pushFocusFrom(settings) }
+                    if (dek != null && entitled && keys.syncReducerConfigs) {
+                        try {
+                            retryAfterRefreshingAccess {
+                                pushMutex.withLock { pushFocusFrom(settings) }
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            publishStatus(error = e.message)
+                        }
+                    }
                 }
         }
         scope.launch {
             currentDayFlow().flatMapLatest { native ->
                 db.websiteStatsDao().observeStatsForDate(native).map { native to it }
             }.sample(USAGE_PUSH_SAMPLE_MS).collect { (native, rows) ->
-                if (dek != null && entitled && keys.syncUsageStats) runCatching { pushWebRows(isoFor(native), rows) }
+                val iso = isoFor(native) ?: return@collect
+                if (dek != null && entitled && keys.syncUsageStats) {
+                    try {
+                        retryAfterRefreshingAccess {
+                            pushMutex.withLock { pushWebRows(iso, rows) }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        publishStatus(error = e.message)
+                    }
+                }
             }
         }
         scope.launch {
             currentDayFlow().flatMapLatest { native ->
                 db.appUsageDao().observeForDate(native).map { native to it }
             }.sample(USAGE_PUSH_SAMPLE_MS).collect { (native, rows) ->
-                if (dek != null && entitled && keys.syncUsageStats) runCatching { pushAppRows(isoFor(native), rows) }
+                val iso = isoFor(native) ?: return@collect
+                if (dek != null && entitled && keys.syncUsageStats) {
+                    try {
+                        retryAfterRefreshingAccess {
+                            pushMutex.withLock { pushAppRows(iso, rows) }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        publishStatus(error = e.message)
+                    }
+                }
             }
         }
     }
@@ -508,46 +697,77 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
 
     private fun normalize(s: Settings): Settings =
         s.copy(
+            blockedAppGroups = s.blockedAppGroups.map { it.copy(temporarilyDisabledUntilMs = 0L) },
             activeManualFocusGroupId = Pair(null, 0L),
+            reelBlockerConfig = s.reelBlockerConfig.copy(temporarilyDisabledUntilMs = 0L),
+            keywordBlockerConfig = s.keywordBlockerConfig.copy(
+                keywordGroups = s.keywordBlockerConfig.keywordGroups.map {
+                    it.copy(temporarilyDisabledUntilMs = 0L)
+                }
+            ),
             nextWebsiteRecheckTime = 0L,
             manualFocusGroups = emptyList(),
+            antiUninstallConfig = s.antiUninstallConfig.copy(unlockRequestedAtMs = 0L),
+            serviceProtectionConfig = s.serviceProtectionConfig.copy(appBlockerLastAliveMs = 0L),
+            settingsChangeDelayConfig = s.settingsChangeDelayConfig.copy(pendingChanges = emptyList()),
         )
 
     private suspend fun pushConfig() {
         if (!keys.syncReducerConfigs) return
         val settings = dataStore.data.first()
         val norm = normalize(settings)
-        if (norm == lastConfig) return
-        lastConfig = norm
-        pushConfigJson(gson.toJson(norm))
+        val normJson = gson.toJson(norm)
+        if (sameAsLastConfig(norm, normJson)) return
+        pushConfigJson(norm, normJson)
     }
 
-    private fun pushConfigJson(norm: String) {
+    private fun sameAsLastConfig(norm: Settings, normJson: String): Boolean =
+        norm == lastConfig || normJson == lastConfigJson
+
+    private fun pushConfigJson(norm: Settings, normJson: String) {
         if (!entitled) return
+        if (sameAsLastConfig(norm, normJson)) return
         val s = session ?: return
         val d = dek ?: return
         val aad = CryptoBox.recordAad(s.userId, NS_ANDROID_CONFIG, "config")
-        val blob = CryptoBox.encryptRecord(d, aad, norm)
+        val blob = CryptoBox.encryptRecord(d, aad, normJson)
         rest.upsertRecord(s, NS_ANDROID_CONFIG, "config", keys.deviceId, CryptoBox.toBase64Url(blob), System.currentTimeMillis())
+        lastConfig = norm
+        lastConfigJson = normJson
     }
 
     private suspend fun pushUsage() {
         if (!keys.syncUsageStats) return
-        val native = todayNative()
-        val iso = todayIso()
-        runCatching { pushWebRows(iso, db.websiteStatsDao().getStatsForDate(native)) }
-        runCatching { pushAppRows(iso, db.appUsageDao().getForDate(native)) }
+        for (native in db.websiteStatsDao().getDistinctDates().sorted()) {
+            val iso = isoFor(native) ?: continue
+            if (!isRetainedUsageDate(iso)) continue
+            pushWebRows(iso, db.websiteStatsDao().getStatsForDate(native))
+        }
+        for (native in db.appUsageDao().getDistinctDates().sorted()) {
+            val iso = isoFor(native) ?: continue
+            if (!isRetainedUsageDate(iso)) continue
+            pushAppRows(iso, db.appUsageDao().getForDate(native))
+        }
     }
 
     private fun pushWebRows(date: String, rows: List<WebsiteStatsEntity>) {
         val s = session ?: return
         val d = dek ?: return
         val domains = JsonObject()
-        for ((domain, group) in rows.groupBy { it.domain }) {
+        for ((domain, group) in rows.groupBy { it.domain }.toSortedMap()) {
             // Skip brief visits. Anything under a minute is noise we don't sync.
-            val total = group.sumOf { it.totalTime }
+            val total = group.fold(0L) { sum, row -> saturatedAdd(sum, row.totalTime.coerceAtLeast(0L)) }
             if (total < MIN_WEBSITE_SYNC_MS) continue
-            val paths = JsonObject().apply { group.forEach { addProperty(it.urlIdentifier, it.totalTime) } }
+            val paths = JsonObject().apply {
+                group.groupBy { it.urlIdentifier }.toSortedMap().forEach { (path, pathRows) ->
+                    addProperty(
+                        path,
+                        pathRows.fold(0L) { sum, row ->
+                            saturatedAdd(sum, row.totalTime.coerceAtLeast(0L))
+                        },
+                    )
+                }
+            }
             domains.add(domain, JsonObject().apply {
                 addProperty("ms", total)
                 add("paths", paths)
@@ -565,10 +785,10 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val s = session ?: return
         val d = dek ?: return
         val apps = JsonObject()
-        for (row in rows) {
+        for (row in rows.sortedBy { it.packageName }) {
             apps.add(row.packageName, JsonObject().apply {
-                addProperty("ms", row.totalTime)
-                addProperty("launchCount", row.launchCount)
+                addProperty("ms", row.totalTime.coerceAtLeast(0L))
+                addProperty("launchCount", row.launchCount.coerceAtLeast(0))
                 addProperty("hourlyUsage", row.hourlyUsage)
             })
         }
@@ -582,12 +802,19 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     private fun pushUsageRecord(s: SupabaseRest.Session, d: ByteArray, namespace: String, recordKey: String, payload: JsonObject) {
         if (!entitled) return
         val hashKey = "$namespace/$recordKey"
-        if (pushedHashes[hashKey] == payload.hashCode()) return
+        val payloadJson = payload.toString()
+        val digest = CryptoBox.toBase64Url(
+            MessageDigest.getInstance("SHA-256").digest(payloadJson.toByteArray(Charsets.UTF_8))
+        )
+        if (pushedDigests[hashKey] == digest) return
         val aad = CryptoBox.recordAad(s.userId, namespace, recordKey)
-        val blob = CryptoBox.encryptRecord(d, aad, payload.toString())
+        val blob = CryptoBox.encryptRecord(d, aad, payloadJson)
         rest.upsertRecord(s, namespace, recordKey, keys.deviceId, CryptoBox.toBase64Url(blob), System.currentTimeMillis())
-        pushedHashes[hashKey] = payload.hashCode()
+        pushedDigests[hashKey] = digest
     }
+
+    private fun saturatedAdd(left: Long, right: Long): Long =
+        if (right > Long.MAX_VALUE - left) Long.MAX_VALUE else left + right
 
     private fun buildFocusJson(
         active: Boolean,
@@ -624,7 +851,15 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         packages: List<String>,
         mode: String,
         exitable: Boolean,
-    ): String = "$active|$groupId|$endsAt|$mode|$exitable|${domains.sorted()}|${packages.sorted()}"
+    ): String = JsonObject().apply {
+        addProperty("active", active)
+        addProperty("groupId", groupId)
+        addProperty("endsAt", endsAt)
+        addProperty("mode", mode)
+        addProperty("exitable", exitable)
+        add("domains", com.google.gson.JsonArray().apply { domains.sorted().forEach { add(it) } })
+        add("packages", com.google.gson.JsonArray().apply { packages.sorted().forEach { add(it) } })
+    }.toString()
 
     private fun pushFocusFrom(settings: Settings) {
         if (!keys.syncReducerConfigs) return
@@ -641,7 +876,6 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val key = if (active) focusKey(true, groupId!!, endsAt, domains, packages, mode, exitable)
                   else focusKey(false, "", 0, emptyList(), emptyList(), "only", true)
         if (key == lastFocusKey) return
-        lastFocusKey = key
         val json = if (active) {
             buildFocusJson(true, groupId!!, g?.groupName ?: "Focus", endsAt, System.currentTimeMillis(), domains, packages, mode, exitable)
         } else {
@@ -650,30 +884,33 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val aad = CryptoBox.recordAad(s.userId, NS_FOCUS, "active")
         val blob = CryptoBox.encryptRecord(d, aad, json)
         rest.upsertRecord(s, NS_FOCUS, "active", keys.deviceId, CryptoBox.toBase64Url(blob), System.currentTimeMillis())
+        lastFocusKey = key
     }
 
     private suspend fun applyFocusRow(d: ByteArray, s: SupabaseRest.Session, row: SupabaseRest.SyncRow) {
         val aad = CryptoBox.recordAad(s.userId, NS_FOCUS, row.recordKey)
         val json = CryptoBox.decryptRecord(d, aad, CryptoBox.fromBase64Url(row.ciphertext))
+        require(json.length <= 1_000_000) { context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid) }
         val p = JSONObject(json)
-        val active = p.optBoolean("active")
         val endsAt = p.optLong("endsAt")
         val groupId = p.optString("groupId")
+        require(groupId.length <= 200) { context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid) }
+        val active = p.optBoolean("active") && groupId.isNotBlank() && endsAt > System.currentTimeMillis()
         val domains = jsonArrToList(p.optJSONArray("domains"))
         val packages = jsonArrToList(p.optJSONArray("packages"))
         val mode = p.optString("mode", "only")
-        val name = p.optString("name", "Focus")
+        val name = p.optString("name", "Focus").take(100)
         val exitable = p.optBoolean("exitable", true)
 
         // Match the key the local push will compute after this apply, so the
         // resulting settings change is not echoed straight back up.
-        lastFocusKey = if (active && endsAt > System.currentTimeMillis()) {
+        lastFocusKey = if (active) {
             focusKey(true, groupId, endsAt, domains, packages, mode, exitable)
         } else {
             focusKey(false, "", 0, emptyList(), emptyList(), "only", true)
         }
 
-        if (active && endsAt > System.currentTimeMillis()) {
+        if (active) {
             dataStore.updateData { local ->
                 val existing = local.manualFocusGroups.find { it.groupId == groupId }
                 val groups = if (existing != null) {
@@ -699,7 +936,14 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
 
     private fun jsonArrToList(arr: org.json.JSONArray?): List<String> {
         if (arr == null) return emptyList()
-        return (0 until arr.length()).map { arr.getString(it) }
+        require(arr.length() <= 5000) { context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid) }
+        return (0 until arr.length()).map {
+            arr.getString(it).also { value ->
+                require(value.length <= 1000) {
+                    context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid)
+                }
+            }
+        }
     }
 
     private fun canonicalFocusGroupJson(g: neth.iecal.curbox.data.models.ManualFocusGroup): String {
@@ -720,23 +964,29 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val s = session ?: return
         val d = dek ?: return
         val present = HashSet<String>()
-        for (g in settings.manualFocusGroups) {
-            if (g.groupId in injectedGroupIds) continue
+        val groupsById = LinkedHashMap<String, neth.iecal.curbox.data.models.ManualFocusGroup>()
+        settings.manualFocusGroups.forEach { groupsById[it.groupId] = it }
+        for (g in groupsById.values) {
+            if (g.groupId.isBlank()) continue
             present.add(g.groupId)
+            if (g.groupId in injectedGroupIds) continue
             val json = canonicalFocusGroupJson(g)
             if (focusGroupShadow[g.groupId] == json) continue
             val aad = CryptoBox.recordAad(s.userId, NS_FOCUS_GROUPS, g.groupId)
             val blob = CryptoBox.encryptRecord(d, aad, json)
             rest.upsertRecord(s, NS_FOCUS_GROUPS, g.groupId, keys.deviceId, CryptoBox.toBase64Url(blob), System.currentTimeMillis())
             focusGroupShadow[g.groupId] = json
+            knownFocusGroupIds.add(g.groupId)
         }
-        for (id in focusGroupShadow.keys.toList()) {
+        for (id in knownFocusGroupIds.toList()) {
             if (id in present) continue
             val aad = CryptoBox.recordAad(s.userId, NS_FOCUS_GROUPS, id)
             val blob = CryptoBox.encryptRecord(d, aad, JSONObject().put("id", id).toString())
             rest.upsertRecord(s, NS_FOCUS_GROUPS, id, keys.deviceId, CryptoBox.toBase64Url(blob), System.currentTimeMillis(), deleted = true)
             focusGroupShadow.remove(id)
+            knownFocusGroupIds.remove(id)
         }
+        keys.knownFocusGroupIds = knownFocusGroupIds
     }
 
     private suspend fun applyFocusGroupRows(d: ByteArray, s: SupabaseRest.Session, rows: List<SupabaseRest.SyncRow>) {
@@ -744,18 +994,25 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val removed = HashSet<String>()
         val upserts = LinkedHashMap<String, neth.iecal.curbox.data.models.ManualFocusGroup>()
         for (row in rows) {
+            require(row.recordKey.isNotBlank() && row.recordKey.length <= 200) {
+                context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid)
+            }
             if (row.deleted) {
                 removed.add(row.recordKey)
                 upserts.remove(row.recordKey)
                 focusGroupShadow.remove(row.recordKey)
+                knownFocusGroupIds.remove(row.recordKey)
                 continue
             }
             val aad = CryptoBox.recordAad(s.userId, NS_FOCUS_GROUPS, row.recordKey)
             val json = CryptoBox.decryptRecord(d, aad, CryptoBox.fromBase64Url(row.ciphertext))
+            require(json.length <= 1_000_000) {
+                context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid)
+            }
             val p = JSONObject(json)
             val g = neth.iecal.curbox.data.models.ManualFocusGroup(
-                groupId = p.optString("id", row.recordKey),
-                groupName = p.optString("name", "Focus"),
+                groupId = row.recordKey,
+                groupName = p.optString("name", "Focus").take(100),
                 packages = HashSet(jsonArrToList(p.optJSONArray("packages"))),
                 keywords = HashSet(jsonArrToList(p.optJSONArray("domains"))),
                 blockMode = if (p.optString("mode", "only") == "all-except") FocusBlockMode.BLOCK_ALL_EXCEPT_SELECTED else FocusBlockMode.BLOCK_SELECTED,
@@ -765,6 +1022,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             upserts[row.recordKey] = g
             removed.remove(row.recordKey)
             focusGroupShadow[row.recordKey] = canonicalFocusGroupJson(g)
+            knownFocusGroupIds.add(row.recordKey)
         }
         dataStore.updateData { local ->
             val byId = LinkedHashMap<String, neth.iecal.curbox.data.models.ManualFocusGroup>()
@@ -774,68 +1032,119 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             injectedGroupIds.removeAll(upserts.keys)
             local.copy(manualFocusGroups = byId.values.toList())
         }
+        keys.knownFocusGroupIds = knownFocusGroupIds
     }
 
-    private suspend fun pullSinceCursor() {
+    private suspend fun pullSinceCursor() = pullMutex.withLock {
+        pullSinceCursorLocked()
+    }
+
+    private suspend fun pullSinceCursorLocked() {
         if (!entitled) return
         val s = session ?: return
         val d = dek ?: return
-        try {
-            val rows = rest.pull(s, keys.cursor)
-            if (rows.isEmpty()) return
-            var configRow: SupabaseRest.SyncRow? = null
-            var focusRow: SupabaseRest.SyncRow? = null
-            val focusGroupRows = ArrayList<SupabaseRest.SyncRow>()
-            var remoteUsage: RemoteUsageStore? = null
-            var maxCursor = keys.cursor
+        val cursor = keys.cursor
+        var after: SupabaseRest.PullPosition? = null
+        var configRow: SupabaseRest.SyncRow? = null
+        var focusRow: SupabaseRest.SyncRow? = null
+        val focusGroupRows = ArrayList<SupabaseRest.SyncRow>()
+        var remoteUsage: RemoteUsageStore? = null
+        var maxCursor = cursor
+        var foundRows = false
+
+        var pageSize: Int
+        do {
+            val rows = rest.pull(s, cursor, after, PULL_PAGE_SIZE)
+            pageSize = rows.size
+            if (rows.isEmpty()) break
+            foundRows = true
             for (row in rows) {
-                runCatching {
-                    when {
-                        keys.syncReducerConfigs && row.namespace == NS_ANDROID_CONFIG && row.deviceId != keys.deviceId -> configRow = row
-                        keys.syncReducerConfigs && row.namespace == NS_FOCUS && row.deviceId != keys.deviceId -> focusRow = row
-                        keys.syncReducerConfigs && row.namespace == NS_FOCUS_GROUPS && row.deviceId != keys.deviceId -> focusGroupRows.add(row)
-                        keys.syncUsageStats && row.namespace == NS_USAGE_WEB && row.deviceId != keys.deviceId &&
-                            (keys.usageDeviceIds.isEmpty() || row.deviceId in keys.usageDeviceIds) ->
-                            applyUsageRow(d, s, row, remoteUsage ?: RemoteUsageStore(context).also { remoteUsage = it }, web = true)
-                        keys.syncUsageStats && row.namespace == NS_USAGE_APP && row.deviceId != keys.deviceId &&
-                            (keys.usageDeviceIds.isEmpty() || row.deviceId in keys.usageDeviceIds) ->
-                            applyUsageRow(d, s, row, remoteUsage ?: RemoteUsageStore(context).also { remoteUsage = it }, web = false)
-                        else -> {}
+                when {
+                    keys.syncReducerConfigs && !row.deleted &&
+                        row.namespace == NS_ANDROID_CONFIG && row.deviceId != keys.deviceId ->
+                        configRow = row
+                    keys.syncReducerConfigs && !row.deleted &&
+                        row.namespace == NS_FOCUS && row.deviceId != keys.deviceId ->
+                        focusRow = row
+                    keys.syncReducerConfigs && row.namespace == NS_FOCUS_GROUPS &&
+                        row.deviceId != keys.deviceId -> {
+                        require(focusGroupRows.size < 5000) {
+                            context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid)
+                        }
+                        focusGroupRows.add(row)
                     }
+                    keys.syncUsageStats && row.namespace == NS_USAGE_WEB &&
+                        selectedRemoteDevice(row.deviceId) ->
+                        applyUsageRow(
+                            d,
+                            s,
+                            row,
+                            remoteUsage ?: RemoteUsageStore(context).also { remoteUsage = it },
+                            web = true,
+                        )
+                    keys.syncUsageStats && row.namespace == NS_USAGE_APP &&
+                        selectedRemoteDevice(row.deviceId) ->
+                        applyUsageRow(
+                            d,
+                            s,
+                            row,
+                            remoteUsage ?: RemoteUsageStore(context).also { remoteUsage = it },
+                            web = false,
+                        )
+                    else -> Unit
                 }
-                if (row.updatedAt > maxCursor) maxCursor = row.updatedAt
+                maxCursor = row.updatedAt
             }
-            remoteUsage?.flush()
-            if (focusGroupRows.isNotEmpty()) runCatching { applyFocusGroupRows(d, s, focusGroupRows) }
-            configRow?.let { runCatching { applyConfigRow(d, s, it) } }
-            focusRow?.let { runCatching { applyFocusRow(d, s, it) } }
-            keys.cursor = maxCursor
-            publishStatus(lastSync = System.currentTimeMillis())
-        } catch (e: Exception) {
-            publishStatus(error = e.message)
-        }
+            val last = rows.last()
+            after = SupabaseRest.PullPosition(last.updatedAt, last.id)
+        } while (pageSize == PULL_PAGE_SIZE)
+
+        if (!foundRows) return
+        remoteUsage?.flush()
+        if (focusGroupRows.isNotEmpty()) applyFocusGroupRows(d, s, focusGroupRows)
+        configRow?.let { applyConfigRow(d, s, it) }
+        focusRow?.let { applyFocusRow(d, s, it) }
+        keys.cursor = maxCursor
+        publishStatus(lastSync = System.currentTimeMillis())
+    }
+
+    private fun selectedRemoteDevice(deviceId: String?): Boolean {
+        if (deviceId == null || deviceId == keys.deviceId) return false
+        val selected = keys.usageDeviceIds
+        return selected.isEmpty() || deviceId in selected
     }
 
     private suspend fun applyConfigRow(d: ByteArray, s: SupabaseRest.Session, row: SupabaseRest.SyncRow) {
         val aad = CryptoBox.recordAad(s.userId, NS_ANDROID_CONFIG, row.recordKey)
         val json = CryptoBox.decryptRecord(d, aad, CryptoBox.fromBase64Url(row.ciphertext))
+        require(json.length <= 5_000_000) { context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid) }
+        val root = gson.fromJson(json, JsonObject::class.java)
+        require(root.entrySet().none { it.value.isJsonNull }) {
+            context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid)
+        }
         val remote = gson.fromJson(json, Settings::class.java)
         val norm = normalize(remote)
-        if (norm == lastConfig) return
-        lastConfig = norm
-        dataStore.updateData { local ->
-            remote.copy(
-                activeManualFocusGroupId = local.activeManualFocusGroupId,
-                nextWebsiteRecheckTime = local.nextWebsiteRecheckTime,
-                manualFocusGroups = local.manualFocusGroups,
-            )
-        }
+        val normJson = gson.toJson(norm)
+        if (sameAsLastConfig(norm, normJson)) return
+        dataStoreManager.updateFromSync(remote)
+        val applied = normalize(dataStore.data.first())
+        lastConfig = applied
+        lastConfigJson = gson.toJson(applied)
     }
 
     private fun applyUsageRow(d: ByteArray, s: SupabaseRest.Session, row: SupabaseRest.SyncRow, store: RemoteUsageStore, web: Boolean) {
         val ns = if (web) NS_USAGE_WEB else NS_USAGE_APP
+        if (row.deleted) {
+            store.remove(ns, row.recordKey)
+            return
+        }
         val aad = CryptoBox.recordAad(s.userId, ns, row.recordKey)
         val json = CryptoBox.decryptRecord(d, aad, CryptoBox.fromBase64Url(row.ciphertext))
+        require(json.length <= 2_000_000) { context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid) }
+        val payloadDate = JSONObject(json).getString("date")
+        require(row.recordKey == "${row.deviceId}:$payloadDate") {
+            context.getString(neth.iecal.curbox.R.string.account_err_sync_data_invalid)
+        }
         store.put(ns, row.recordKey, json)
     }
 
@@ -846,7 +1155,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             email = s?.email,
             hasVault = vaultExists || dek != null,
             unlocked = dek != null,
-            deviceId = keys.deviceId,
+            deviceId = if (s != null) keys.deviceId else null,
             lastSync = lastSync,
             error = error,
             pendingEmail = pendingEmail,
@@ -856,14 +1165,18 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     private fun todayNative(): String = neth.iecal.curbox.utils.TimeTools.getCurrentDate()
-    private fun todayIso(): String = java.time.LocalDate.now().toString()
-
-    private fun isoFor(native: String): String = try {
+    private fun isoFor(native: String): String? = try {
         java.time.LocalDate.parse(
             native,
             java.time.format.DateTimeFormatter.ofPattern("dd MMMM yyyy", Locale.getDefault()),
         ).toString()
     } catch (e: Exception) {
-        todayIso()
+        null
+    }
+
+    private fun isRetainedUsageDate(iso: String): Boolean {
+        val date = java.time.LocalDate.parse(iso)
+        val today = java.time.LocalDate.now()
+        return !date.isBefore(today.minusDays(28)) && !date.isAfter(today.plusDays(28))
     }
 }

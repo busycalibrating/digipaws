@@ -1460,6 +1460,8 @@
     <string name="account_msg_new_code_sent">I sent a new code to %1$s</string>
     <string name="account_msg_reset_code_sent">I sent a reset code to %1$s</string>
     <string name="account_msg_phrase_too_short">Please pick a secret phrase with at least 8 letters.</string>
+    <string name="account_msg_phrase_too_long">That secret phrase is too long.</string>
+    <string name="account_err_sync_data_invalid">Some synced data could not be read.</string>
     <string name="account_msg_syncing">Syncing your latest data now</string>
     <string name="account_err_generic">Something went wrong. Please try again.</string>
     <string name="account_err_invalid_login">That email or password did not match. Please try again.</string>

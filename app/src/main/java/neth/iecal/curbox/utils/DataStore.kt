@@ -158,6 +158,109 @@ class DataStoreManager(private val context: Context) {
         settingsDataStore.updateData { it.copy(manualFocusGroups = newGroup) }
     }
 
+    /**
+     * Applies a configuration received from sync without letting another device bypass this
+     * device's settings change delay. Runtime focus state stays on its dedicated sync channel,
+     * and pending changes remain local because their deadlines are based on this device's clock.
+     */
+    suspend fun updateFromSync(remote: Settings) {
+        settingsDataStore.updateData { current ->
+            val delayConfig = current.settingsChangeDelayConfig
+            val timeGateActive = delayConfig.isEnabled && delayConfig.delayMinutes > 0
+            val tamperGated = delayConfig.requireTamperProtectionOff &&
+                current.antiUninstallConfig.isEnabled
+
+            val remoteWithLocalRuntime = remote.copy(
+                blockedAppGroups = remote.blockedAppGroups.map { group ->
+                    group.copy(
+                        temporarilyDisabledUntilMs = current.blockedAppGroups
+                            .find { it.id == group.id }
+                            ?.temporarilyDisabledUntilMs
+                            ?: 0L
+                    )
+                },
+                reelBlockerConfig = remote.reelBlockerConfig.copy(
+                    temporarilyDisabledUntilMs = current.reelBlockerConfig.temporarilyDisabledUntilMs
+                ),
+                keywordBlockerConfig = remote.keywordBlockerConfig.copy(
+                    keywordGroups = remote.keywordBlockerConfig.keywordGroups.map { group ->
+                        group.copy(
+                            temporarilyDisabledUntilMs = current.keywordBlockerConfig.keywordGroups
+                                .find { it.id == group.id }
+                                ?.temporarilyDisabledUntilMs
+                                ?: 0L
+                        )
+                    }
+                ),
+                antiUninstallConfig = remote.antiUninstallConfig.copy(
+                    unlockRequestedAtMs = current.antiUninstallConfig.unlockRequestedAtMs
+                ),
+                serviceProtectionConfig = remote.serviceProtectionConfig.copy(
+                    appBlockerLastAliveMs = current.serviceProtectionConfig.appBlockerLastAliveMs
+                ),
+            )
+
+            // Start with non-gated configuration from the remote device. Each gated field is
+            // restored to its local value and considered independently below.
+            var updated = remoteWithLocalRuntime.copy(
+                blockedAppGroups = current.blockedAppGroups,
+                manualFocusGroups = current.manualFocusGroups,
+                autoDndGroups = current.autoDndGroups,
+                activeManualFocusGroupId = current.activeManualFocusGroupId,
+                reelBlockerConfig = current.reelBlockerConfig,
+                keywordBlockerConfig = current.keywordBlockerConfig,
+                isReelCounterOn = current.isReelCounterOn,
+                grayscaleGroups = current.grayscaleGroups,
+                isAppUsageTrackingEnabled = current.isAppUsageTrackingEnabled,
+                isWebsiteUsageTrackingEnabled = current.isWebsiteUsageTrackingEnabled,
+                mindfulMessageConfig = current.mindfulMessageConfig,
+                uiHiderConfig = current.uiHiderConfig,
+                nextWebsiteRecheckTime = current.nextWebsiteRecheckTime,
+                settingsChangeDelayConfig = delayConfig,
+            )
+
+            for (field in GatedSettingsField.values()) {
+                val newValueJson = syncedFieldValueJson(remoteWithLocalRuntime, field) ?: continue
+                val existingPending = updated.settingsChangeDelayConfig.pendingChanges
+                    .find { it.field == field.name }
+                if (existingPending?.newValueJson == newValueJson) continue
+
+                val proposed = withFieldValue(updated, field, newValueJson) ?: continue
+                if ((!timeGateActive && !tamperGated) ||
+                    RestrictionComparator.isSameOrStricter(field, current, proposed)
+                ) {
+                    updated = proposed.copy(
+                        settingsChangeDelayConfig = proposed.settingsChangeDelayConfig.copy(
+                            pendingChanges = proposed.settingsChangeDelayConfig.pendingChanges
+                                .filterNot { it.field == field.name }
+                        )
+                    )
+                } else {
+                    val now = System.currentTimeMillis()
+                    val delayMinutes = delayConfig.delayMinutes.coerceIn(
+                        0,
+                        SettingsChangeDelayConfig.MAX_DELAY_MINUTES,
+                    )
+                    val appliesAt = if (timeGateActive) now + delayMinutes * 60_000L else now
+                    val pending = PendingSettingsChange(
+                        field = field.name,
+                        newValueJson = newValueJson,
+                        requestedAtMs = now,
+                        appliesAtMs = appliesAt,
+                    )
+                    updated = updated.copy(
+                        settingsChangeDelayConfig = updated.settingsChangeDelayConfig.copy(
+                            pendingChanges = updated.settingsChangeDelayConfig.pendingChanges
+                                .filterNot { it.field == field.name } + pending
+                        )
+                    )
+                }
+            }
+            updated
+        }
+        schedulePendingChanges()
+    }
+
     suspend fun updateAutoDndGroups(newGroups: List<neth.iecal.curbox.data.models.AutoDndGroup>) {
         updateGated(GatedSettingsField.AUTO_DND_GROUPS) { newGroups }
     }
@@ -536,6 +639,32 @@ class DataStoreManager(private val context: Context) {
             }
         }.getOrNull()
     }
+
+    private fun syncedFieldValueJson(settings: Settings, field: GatedSettingsField): String? =
+        runCatching {
+            val value: Any = when (field) {
+                GatedSettingsField.APP_GROUPS -> settings.blockedAppGroups
+                GatedSettingsField.AUTO_DND_GROUPS -> settings.autoDndGroups
+                GatedSettingsField.REEL_BLOCKER -> settings.reelBlockerConfig
+                GatedSettingsField.KEYWORD_BLOCKER -> settings.keywordBlockerConfig
+                GatedSettingsField.REEL_COUNTER -> settings.isReelCounterOn
+                GatedSettingsField.GRAYSCALE_GROUPS -> settings.grayscaleGroups
+                GatedSettingsField.MINDFUL_MESSAGES -> settings.mindfulMessageConfig
+                GatedSettingsField.UI_HIDER -> settings.uiHiderConfig
+                GatedSettingsField.APP_USAGE_TRACKING -> settings.isAppUsageTrackingEnabled
+                GatedSettingsField.WEBSITE_USAGE_TRACKING -> settings.isWebsiteUsageTrackingEnabled
+                GatedSettingsField.CHANGE_DELAY -> SettingsChangeDelayPrefs(
+                    isEnabled = settings.settingsChangeDelayConfig.isEnabled,
+                    delayMinutes = settings.settingsChangeDelayConfig.delayMinutes.coerceIn(
+                        0,
+                        SettingsChangeDelayConfig.MAX_DELAY_MINUTES,
+                    ),
+                    requireTamperProtectionOff =
+                        settings.settingsChangeDelayConfig.requireTamperProtectionOff,
+                )
+            }
+            gson.toJson(value)
+        }.getOrNull()
 
     /**
      * Pops the review warning screen so an accidental weakening can be undone on the spot.

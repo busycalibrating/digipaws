@@ -45,12 +45,22 @@ object CryptoBox {
     fun toHex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
 
     fun deriveKekBytes(passphrase: String, salt: ByteArray, params: KdfParams = DEFAULT_KDF_PARAMS): ByteArray {
+        require(params.alg == "PBKDF2-HMAC-SHA256" && params.hash == "SHA-256") { "unsupported key derivation" }
+        require(params.iterations in 1..2_000_000) { "invalid key derivation work factor" }
+        require(params.dkLenBits == 256) { "invalid key length" }
+        require(salt.size in 8..64) { "invalid salt length" }
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
         val spec = PBEKeySpec(passphrase.toCharArray(), salt, params.iterations, params.dkLenBits)
-        return factory.generateSecret(spec).encoded
+        return try {
+            factory.generateSecret(spec).encoded
+        } finally {
+            spec.clearPassword()
+        }
     }
 
     private fun seal(key: ByteArray, aad: ByteArray, plaintext: ByteArray, nonce: ByteArray): ByteArray {
+        require(key.size in setOf(16, 24, 32)) { "invalid encryption key length" }
+        require(nonce.size == NONCE_LEN) { "invalid nonce length" }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(TAG_BITS, nonce))
         cipher.updateAAD(aad)
@@ -63,6 +73,8 @@ object CryptoBox {
     }
 
     private fun open(key: ByteArray, aad: ByteArray, blob: ByteArray): ByteArray {
+        require(key.size in setOf(16, 24, 32)) { "invalid encryption key length" }
+        require(blob.size >= 1 + NONCE_LEN + TAG_BITS / 8) { "encrypted blob is too short" }
         require(blob[0] == FORMAT_VERSION) { "unsupported blob version ${blob[0]}" }
         val nonce = blob.copyOfRange(1, 1 + NONCE_LEN)
         val ctWithTag = blob.copyOfRange(1 + NONCE_LEN, blob.size)
@@ -100,10 +112,13 @@ object CryptoBox {
     data class Pairing(val userId: String, val dek: ByteArray)
 
     fun parsePairingPayload(raw: String): Pairing {
+        require(raw.length <= 2048) { "pairing code is too large" }
         val obj = JSONObject(raw)
         require(obj.optString("t") == "curbox-dek" && obj.optInt("v") == 1) { "not a curbox pairing code" }
+        val userId = obj.getString("uid")
+        require(userId.isNotBlank() && userId.length <= 128) { "bad pairing account" }
         val dek = fromBase64Url(obj.getString("dek"))
         require(dek.size == 32) { "bad pairing key length" }
-        return Pairing(obj.getString("uid"), dek)
+        return Pairing(userId, dek)
     }
 }

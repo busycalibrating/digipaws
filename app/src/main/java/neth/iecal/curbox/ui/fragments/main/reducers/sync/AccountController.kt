@@ -24,6 +24,7 @@ import neth.iecal.curbox.data.sync.SyncBillingStatus
 import neth.iecal.curbox.data.sync.SyncGateway
 import neth.iecal.curbox.data.sync.SyncStatus
 import neth.iecal.curbox.data.sync.SyncPreferences
+import neth.iecal.curbox.data.sync.NO_SYNC_USAGE_DEVICE
 
 /**
  * Drives the whole account experience over a view_account layout: sign in, sign
@@ -140,7 +141,7 @@ class AccountController(
                 .show()
         }
         root.findViewById<View>(R.id.btn_force_sync).setOnClickListener { btn ->
-            submit(toast = fragment.getString(R.string.account_msg_syncing), button = btn) { provider.pushNow(); provider.refresh() }
+            submit(toast = fragment.getString(R.string.account_msg_syncing), button = btn) { provider.refresh(); provider.pushNow() }
         }
         root.findViewById<View>(R.id.btn_save_device_name).setOnClickListener { btn ->
             submit(toast = fragment.getString(R.string.account_save_device_name), button = btn) {
@@ -288,7 +289,13 @@ class AccountController(
                     setOnCheckedChangeListener { _, checked ->
                         if (applyingControls) return@setOnCheckedChangeListener
                         val ids = last.preferences.usageDeviceIds.toMutableSet()
-                        if (checked) ids.add(device.id) else ids.remove(device.id)
+                        if (checked) {
+                            ids.remove(NO_SYNC_USAGE_DEVICE)
+                            ids.add(device.id)
+                        } else {
+                            ids.remove(device.id)
+                            if (ids.isEmpty()) ids.add(NO_SYNC_USAGE_DEVICE)
+                        }
                         savePreferences(last.preferences.copy(usageDeviceIds = ids))
                     }
                 })
@@ -378,7 +385,7 @@ class AccountController(
             "unable to resolve host" in m || "failed to connect" in m || "timeout" in m ||
                 "network" in m || "no address associated" in m ->
                 fragment.getString(R.string.account_err_no_network)
-            else -> raw ?: fragment.getString(R.string.account_err_generic)
+            else -> raw
         }
     }
 }

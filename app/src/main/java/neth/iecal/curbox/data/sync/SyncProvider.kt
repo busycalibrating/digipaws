@@ -62,6 +62,9 @@ interface SyncProvider {
 /** Sentinel package used for the synthetic "Synced browsing" row in the usage list. */
 const val SYNCED_WEB_PACKAGE = "__curbox_synced_web__"
 
+/** Internal selection marker for "no remote devices"; empty keeps its existing "all" meaning. */
+const val NO_SYNC_USAGE_DEVICE = "__curbox_no_sync_usage_device__"
+
 data class SyncStatus(
     val signedIn: Boolean = false,
     val email: String? = null,
@@ -88,7 +91,7 @@ data class SyncDevice(
 data class SyncPreferences(
     val usageStats: Boolean = true,
     val reducerConfigs: Boolean = true,
-    /** Empty means every other device, matching desktop and extension. */
+    /** Empty means every other device. [NO_SYNC_USAGE_DEVICE] represents an explicit empty selection. */
     val usageDeviceIds: Set<String> = emptySet(),
 )
 

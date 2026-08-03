@@ -3,6 +3,9 @@ package neth.iecal.curbox.data.sync
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import java.io.IOException
+import java.time.Instant
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -19,6 +22,9 @@ class SupabaseRest(
     /** Thrown when the auth endpoint itself rejects a request, carrying the HTTP status. */
     class AuthHttpException(val code: Int, message: String) : IOException(message)
 
+    /** Thrown when the Data API rejects a request, carrying the HTTP status. */
+    class RestHttpException(val code: Int, message: String) : IOException(message)
+
     data class Session(
         val accessToken: String,
         val refreshToken: String,
@@ -30,6 +36,7 @@ class SupabaseRest(
     data class VaultRow(val saltB64: String, val paramsJson: String, val wrappedB64: String)
 
     data class SyncRow(
+        val id: String,
         val namespace: String,
         val recordKey: String,
         val deviceId: String?,
@@ -41,16 +48,25 @@ class SupabaseRest(
 
     data class DeviceRow(val id: String, val platform: String, val label: String, val lastSeen: String?)
 
-    private fun parseSession(body: JsonObject): Session? {
+    data class PullPosition(val updatedAt: String, val id: String)
+
+    private fun parseSession(body: JsonObject, fallbackRefreshToken: String? = null): Session? {
         val token = body.get("access_token")?.takeIf { !it.isJsonNull }?.asString ?: return null
-        val user = body.getAsJsonObject("user")
-        val expiresIn = body.get("expires_in")?.asLong ?: 3600
+        val user = body.get("user")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+        val refreshToken = body.get("refresh_token")
+            ?.takeIf { !it.isJsonNull }
+            ?.asString
+            ?: fallbackRefreshToken
+            ?: return null
+        val expiresIn = body.get("expires_in")?.asLong?.coerceAtLeast(0L) ?: 3600L
+        val expiresInMs = if (expiresIn > Long.MAX_VALUE / 1000L) Long.MAX_VALUE else expiresIn * 1000L
+        val now = System.currentTimeMillis()
         return Session(
             accessToken = token,
-            refreshToken = body.get("refresh_token").asString,
+            refreshToken = refreshToken,
             userId = user.get("id").asString,
             email = user.get("email")?.takeIf { !it.isJsonNull }?.asString,
-            expiresAt = System.currentTimeMillis() + expiresIn * 1000,
+            expiresAt = if (expiresInMs > Long.MAX_VALUE - now) Long.MAX_VALUE else now + expiresInMs,
         )
     }
 
@@ -63,7 +79,16 @@ class SupabaseRest(
             .build()
         client.newCall(req).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
-            val obj = if (text.isBlank()) JsonObject() else gson.fromJson(text, JsonObject::class.java)
+            val obj = if (text.isBlank()) {
+                JsonObject()
+            } else {
+                try {
+                    gson.fromJson(text, JsonObject::class.java)
+                } catch (e: Exception) {
+                    if (resp.isSuccessful) throw IOException("authentication returned an invalid response", e)
+                    JsonObject()
+                }
+            }
             if (!resp.isSuccessful) {
                 val msg = obj.get("error_description")?.asString ?: obj.get("msg")?.asString
                 ?: obj.get("error")?.asString ?: "request failed (${resp.code})"
@@ -86,7 +111,7 @@ class SupabaseRest(
 
     fun refresh(refreshToken: String): Session {
         val body = JsonObject().apply { addProperty("refresh_token", refreshToken) }
-        return parseSession(postAuth("token?grant_type=refresh_token", body))
+        return parseSession(postAuth("token?grant_type=refresh_token", body), refreshToken)
             ?: throw IOException("could not refresh session")
     }
 
@@ -121,6 +146,20 @@ class SupabaseRest(
         }
     }
 
+    fun signOut(session: Session) {
+        val req = Request.Builder()
+            .url("$baseUrl/auth/v1/logout?scope=local")
+            .header("apikey", anonKey)
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .post("{}".toRequestBody(jsonType))
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful && resp.code !in setOf(401, 403)) {
+                throw AuthHttpException(resp.code, "could not sign out (${resp.code})")
+            }
+        }
+    }
+
     private fun authedGet(session: Session, path: String): String {
         val req = Request.Builder()
             .url("$baseUrl/rest/v1/$path")
@@ -130,7 +169,21 @@ class SupabaseRest(
             .build()
         client.newCall(req).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) throw IOException("read failed (${resp.code}): $text")
+            if (!resp.isSuccessful) throw RestHttpException(resp.code, "read failed (${resp.code}): $text")
+            return text
+        }
+    }
+
+    private fun authedGet(session: Session, url: HttpUrl): String {
+        val req = Request.Builder()
+            .url(url)
+            .header("apikey", anonKey)
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        client.newCall(req).execute().use { resp ->
+            val text = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw RestHttpException(resp.code, "read failed (${resp.code}): $text")
             return text
         }
     }
@@ -145,7 +198,9 @@ class SupabaseRest(
             .post(jsonBody.toRequestBody(jsonType))
             .build()
         client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IOException("write failed (${resp.code}): ${resp.body?.string()}")
+            if (!resp.isSuccessful) {
+                throw RestHttpException(resp.code, "write failed (${resp.code}): ${resp.body?.string()}")
+            }
         }
     }
 
@@ -177,6 +232,7 @@ class SupabaseRest(
             addProperty("user_id", session.userId)
             addProperty("platform", platform)
             addProperty("label", label)
+            addProperty("last_seen", Instant.now().toString())
             if (fcmToken != null) addProperty("fcm_token", fcmToken)
         }
         authedPost(session, "devices?on_conflict=id", "[$obj]", "resolution=merge-duplicates,return=minimal")
@@ -204,18 +260,23 @@ class SupabaseRest(
             .header("Prefer", "return=minimal")
             .patch(JsonObject().apply { add("fcm_token", com.google.gson.JsonNull.INSTANCE) }.toString().toRequestBody(jsonType))
             .build()
-        client.newCall(req).execute().use { }
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw RestHttpException(resp.code, "could not clear device token (${resp.code})")
+        }
     }
 
-    fun pull(session: Session, cursor: String): List<SyncRow> {
-        val encodedCursor = java.net.URLEncoder.encode(cursor, "UTF-8")
-        val path = "sync_records?user_id=eq.${session.userId}&updated_at=gt.$encodedCursor" +
-            "&order=updated_at.asc&select=namespace,record_key,device_id,ciphertext,version,deleted,updated_at"
-        val text = authedGet(session, path)
+    fun pull(
+        session: Session,
+        cursor: String,
+        after: PullPosition? = null,
+        limit: Int = 500,
+    ): List<SyncRow> {
+        val text = authedGet(session, buildPullUrl(session, cursor, after, limit))
         val arr = gson.fromJson(text, com.google.gson.JsonArray::class.java)
         return arr.map { el ->
             val o = el.asJsonObject
             SyncRow(
+                id = o.get("id").asString,
                 namespace = o.get("namespace").asString,
                 recordKey = o.get("record_key").asString,
                 deviceId = o.get("device_id")?.takeIf { !it.isJsonNull }?.asString,
@@ -226,6 +287,28 @@ class SupabaseRest(
             )
         }
     }
+
+    internal fun buildPullUrl(
+        session: Session,
+        cursor: String,
+        after: PullPosition? = null,
+        limit: Int = 500,
+    ): HttpUrl = "$baseUrl/rest/v1/sync_records".toHttpUrl().newBuilder()
+        .addQueryParameter("user_id", "eq.${session.userId}")
+        .addQueryParameter("order", "updated_at.asc,id.asc")
+        .addQueryParameter("limit", limit.coerceIn(1, 1000).toString())
+        .addQueryParameter("select", "id,namespace,record_key,device_id,ciphertext,version,deleted,updated_at")
+        .apply {
+            if (after == null) {
+                addQueryParameter("updated_at", "gte.$cursor")
+            } else {
+                addQueryParameter(
+                    "or",
+                    "(updated_at.gt.${after.updatedAt},and(updated_at.eq.${after.updatedAt},id.gt.${after.id}))",
+                )
+            }
+        }
+        .build()
 
     fun upsertRecord(session: Session, namespace: String, recordKey: String, deviceId: String, ciphertextB64: String, version: Long, deleted: Boolean = false) {
         val obj = JsonObject().apply {
