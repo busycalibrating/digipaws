@@ -25,7 +25,7 @@ class UiHiderRuntime(
     private val budget: Budget,
     private val globals: Map<String, Any?>,
     private val scriptId: String,
-    private val store: ScriptStore
+    private val store: ScriptStore?
 ) : RuntimeApi {
 
     val drawCommands = ArrayList<DrawCommand>()
@@ -67,12 +67,15 @@ class UiHiderRuntime(
             "save" -> {
                 val value = args.getOrNull(1)
                 assertStorable(value)
-                store.put(scriptId, storeKey(args, "save"), value)
+                requireStore("save").put(scriptId, storeKey(args, "save"), value)
                 null
             }
-            "load" -> store.get(scriptId, storeKey(args, "load"))
-            "has" -> store.has(scriptId, storeKey(args, "has"))
-            "remove" -> { store.remove(scriptId, storeKey(args, "remove")); null }
+            "load" -> requireStore("load").get(scriptId, storeKey(args, "load"))
+            "has" -> requireStore("has").has(scriptId, storeKey(args, "has"))
+            "remove" -> {
+                requireStore("remove").remove(scriptId, storeKey(args, "remove"))
+                null
+            }
             else -> {
                 val result = Builtins.tryCall(name, args, budget, regexCache)
                 if (result === Builtins.UNKNOWN) throw ScriptError("unknown function '$name'")
@@ -149,6 +152,9 @@ class UiHiderRuntime(
         if (k !is String) throw ScriptError("$fn() expects a string key")
         return k
     }
+
+    private fun requireStore(functionName: String): ScriptStore = store
+        ?: throw ScriptError("$functionName() is unavailable in this script context")
 
     /** Reject values that can't be persisted (live node handles); everything else is JSON-friendly. */
     private fun assertStorable(value: Any?) {

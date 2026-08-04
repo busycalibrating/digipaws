@@ -6,13 +6,9 @@ import android.content.Context
 import android.content.Context.RECEIVER_EXPORTED
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.Rect
 import android.os.Build
 import android.os.SystemClock
-import android.util.DisplayMetrics
-import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityNodeInfo
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,13 +17,11 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import neth.iecal.curbox.Constants
 import neth.iecal.curbox.R
-import neth.iecal.curbox.blockers.uihider.NodeFinder
 import neth.iecal.curbox.data.models.ReelBlocker
 import neth.iecal.curbox.data.models.ReelBlockingType
 import neth.iecal.curbox.data.models.ReelTimeConfig
 import neth.iecal.curbox.data.models.ReelCountConfig
 import neth.iecal.curbox.data.db.AppDatabase
-import neth.iecal.curbox.hardcoded.ReelAppConfig.Companion.reelData
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.ui.activity.WarningActivity
 import neth.iecal.curbox.utils.TimeTools
@@ -59,15 +53,13 @@ class ReelBlocker : BaseBlocker() {
     private var countJob: Job? = null
     
     private val cooldownViewIdsList = mutableMapOf<String, Long>()
-    private var screenWidth: Int = 0
-    private var screenHeight: Int = 0
-
     private var lastEventTimeStamp = 0L
 
     private lateinit var notificationManager: TimerNotification
 
     fun doViewBlockerCheck(
-        event: AccessibilityEvent?
+        event: AccessibilityEvent?,
+        dynamicComparator: String?
     ){
         fun showWarningScreen(viewId: String){
             if(service.isDelayOver(3000)) {
@@ -92,25 +84,10 @@ class ReelBlocker : BaseBlocker() {
             return
         }
 
-        val node = service.rootInActiveWindow
-        if (node == null) return
-        
         val pkg = event.packageName?.toString() ?: return
-        val data = reelData[pkg] ?: return
-        val viewId = data.viewId
+        val viewId = pkg
 
-        if(isViewOpened(node, viewId)){
-            Log.d("reelblocker","view found")
-            for (req in data.requiresPresent) {
-                if (!NodeFinder.exists(node, req)) return
-            }
-            Log.d("reelblocker","all present")
-
-            for (req in data.requiresAbsent) {
-                if (NodeFinder.exists(node, req)) return
-            }
-            Log.d("reelblocker","all absent")
-
+        if (dynamicComparator != null) {
             if (isCooldownActive(viewId)) {
                 return
             }
@@ -148,9 +125,6 @@ class ReelBlocker : BaseBlocker() {
         this.service = service
 
         notificationManager = TimerNotification(service)
-        var displayMetrics: DisplayMetrics = service.resources.displayMetrics
-        screenHeight = displayMetrics.heightPixels
-        screenWidth = displayMetrics.widthPixels
 
         settingsJob?.cancel()
         countJob?.cancel()
@@ -252,16 +226,6 @@ class ReelBlocker : BaseBlocker() {
             return false
         }
         return true
-    }
-
-    private fun isViewOpened(rootNode: AccessibilityNodeInfo, viewId: String): Boolean {
-        val viewNode = NodeFinder.findFirst(rootNode, viewId) ?: return false
-        val nodeRect = Rect()
-        viewNode.getBoundsInScreen(nodeRect)
-        NodeFinder.recycle(viewNode)
-        val isOffScreenLeft = nodeRect.right <= 0
-        val isOffScreenRight = nodeRect.left >= screenWidth
-        return !isOffScreenLeft && !isOffScreenRight
     }
 
     private fun getDailyReelCountLimit(): Int? {

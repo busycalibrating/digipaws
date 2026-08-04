@@ -8,7 +8,7 @@ package neth.iecal.curbox.blockers.uihider.script
  * statement and loop iteration so a run can never hang the service.
  *
  * `and`/`or` short-circuit and return the deciding operand value (Lua-style). A top-level
- * `return` simply ends the run.
+ * `return` ends the run and exposes its value to the host.
  */
 class Interpreter(
     private val api: RuntimeApi,
@@ -51,14 +51,15 @@ class Interpreter(
     private val globals = Environment(null)
     private val functions = HashMap<String, UserFunction>()
 
-    fun run(program: List<Stmt>) {
+    fun run(program: List<Stmt>): Any? {
         for ((name, value) in api.provideGlobals()) globals.define(name, value)
         // Hoist function declarations so order doesn't matter.
         for (stmt in program) if (stmt is Stmt.FnDecl) functions[stmt.name] = UserFunction(stmt)
-        try {
+        return try {
             for (stmt in program) execute(stmt, globals)
-        } catch (_: ReturnSignal) {
-            // top-level return ends the script
+            null
+        } catch (returnSignal: ReturnSignal) {
+            returnSignal.value
         } catch (_: BreakSignal) {
             throw ScriptError("'break' outside of a loop")
         } catch (_: ContinueSignal) {

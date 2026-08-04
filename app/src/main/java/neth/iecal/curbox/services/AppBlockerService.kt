@@ -25,6 +25,7 @@ import neth.iecal.curbox.blockers.AppBlocker
 import neth.iecal.curbox.blockers.FocusModeBlocker
 import neth.iecal.curbox.blockers.KeywordBlocker
 import neth.iecal.curbox.blockers.ReelBlocker
+import neth.iecal.curbox.blockers.ReelScriptRunner
 import neth.iecal.curbox.blockers.uihider.NodePicker
 import neth.iecal.curbox.blockers.uihider.UiHider
 import neth.iecal.curbox.trackers.AppUsageTracker
@@ -40,6 +41,7 @@ class AppBlockerService : BaseBlockingService() {
     private val focusModeBlocker = FocusModeBlocker()
     private val autoDnd = AutoDnd()
     private val reelBlocker = ReelBlocker()
+    private val reelScriptRunner = ReelScriptRunner()
     private var keywordBlocker = KeywordBlocker()
     private val uiHider = UiHider()
     private val nodePicker = NodePicker()
@@ -98,7 +100,6 @@ class AppBlockerService : BaseBlockingService() {
 
         try {
             appUsageTracker.onEvent(event)
-            reelsCountTracker.onEvent(event)
             mindfulMessage.onEvent(event)
         } catch (error: Exception) {
             Log.e("Usage Tracking error", error.toString())
@@ -121,7 +122,9 @@ class AppBlockerService : BaseBlockingService() {
             for (event in eventChannel) {
                 try {
                     websiteUsageTracker.onEvent(event)
-                    reelBlocker.doViewBlockerCheck(event)
+                    val reelComparator = reelScriptRunner.detect(event)
+                    reelsCountTracker.onEvent(event, reelComparator)
+                    reelBlocker.doViewBlockerCheck(event, reelComparator)
                     keywordBlocker.checkIfUnsupportedBrowser(event)
                     if (BuildConfig.SUPPORTS_UI_HIDER) {
                         uiHider.doUiHiderCheck(event)
@@ -158,6 +161,7 @@ class AppBlockerService : BaseBlockingService() {
         focusModeBlocker.setupFocusMode(this)
         autoDnd.setup(this)
         reelBlocker.setupBlocker(this)
+        reelScriptRunner.setup(this)
         keywordBlocker.setupBlocker(this)
         grayScaleFilter.setup(this)
         if (BuildConfig.SUPPORTS_UI_HIDER) {

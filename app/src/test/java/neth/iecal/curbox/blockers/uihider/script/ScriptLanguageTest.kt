@@ -108,6 +108,12 @@ class ScriptLanguageTest {
         assertEquals("1\n", run(src).log.toString())
     }
 
+    @Test fun topLevelReturnExposesPrimitiveResultToHost() {
+        val api = StubApi()
+        val result = Interpreter(api, Budget()).run(Parser.parse("return [true, \"comparator\"]"))
+        assertEquals(listOf(true, "comparator"), result)
+    }
+
     @Test fun infiniteLoopIsBudgetAborted() {
         try {
             run("while true { }")
@@ -123,6 +129,16 @@ class ScriptLanguageTest {
                 Parser.parse(script.source)
             } catch (e: ScriptError) {
                 fail("Default script '${script.id}' failed to parse: ${e.message}")
+            }
+        }
+    }
+
+    @Test fun shippedReelDetectorScriptsAllParse() {
+        for ((packageName, data) in neth.iecal.curbox.hardcoded.ReelAppConfig.reelData) {
+            try {
+                Parser.parse(data.scriptSource)
+            } catch (e: ScriptError) {
+                fail("Reel detector for '$packageName' failed to parse: ${e.message}")
             }
         }
     }

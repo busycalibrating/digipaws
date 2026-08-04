@@ -7,25 +7,22 @@ import android.content.Context.RECEIVER_EXPORTED
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
-import android.util.Log
-import android.graphics.Rect
 import android.util.LruCache
 import android.view.View
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import neth.iecal.curbox.blockers.ReelBlocker
-import neth.iecal.curbox.blockers.uihider.NodeFinder
+import neth.iecal.curbox.CrashLogger
 import neth.iecal.curbox.data.db.AppDatabase
 import neth.iecal.curbox.data.db.ReelStatsDao
 import neth.iecal.curbox.data.db.ReelStatsEntity
-import neth.iecal.curbox.data.models.ReelAppData
 import neth.iecal.curbox.data.models.ReelCounterOverlayConfig
 import neth.iecal.curbox.hardcoded.ReelAppConfig.Companion.reelData
 import neth.iecal.curbox.services.BaseBlockingService
@@ -43,8 +40,10 @@ class ReelsCountTracker {
     private lateinit var service: BaseBlockingService
     private lateinit var overlayManager: ReelsOverlayManager
     private lateinit var reelStatsDao: ReelStatsDao
+    private lateinit var crashLogger: CrashLogger
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var isOnDisplayCounter = true
     private var overlayConfig = ReelCounterOverlayConfig()
@@ -59,6 +58,7 @@ class ReelsCountTracker {
     fun setup(service: BaseBlockingService, overlayManager: ReelsOverlayManager) {
         this.service = service
         this.overlayManager = overlayManager
+        crashLogger = CrashLogger(service)
 
         ignored = listOf("com.android.systemui",
             service.packageName,
@@ -83,82 +83,42 @@ class ReelsCountTracker {
         }
     }
 
-    fun onEvent(event: AccessibilityEvent?) {
+    fun onEvent(event: AccessibilityEvent?, dynamicComparator: String?) {
 
         if (event == null || ignored.contains(event.packageName.toString())) return
 
         try {
             val pkg = event.packageName?.toString() ?: return
+            val data = reelData[pkg]
 
-            if (reelData.containsKey(pkg)) {
-                if((event.eventType and reelData[pkg]!!.eventType) == 0) return
+            if (data != null) {
+                if ((event.eventType and data.eventType) == 0) return
                 if (Settings.canDrawOverlays(service) && !overlayManager.isOverlayVisible) {
-                    overlayManager.reelsScrolledThisSession = todayCount
-                    overlayManager.startDisplaying(overlayConfig, isOnDisplayCounter)
+                    postOverlayUpdate {
+                        if (!overlayManager.isOverlayVisible) {
+                            overlayManager.reelsScrolledThisSession = todayCount
+                            overlayManager.startDisplaying(overlayConfig, isOnDisplayCounter)
+                        }
+                    }
                 }
 
-                checkForReelProgression(pkg, reelData[pkg]!!)
+                checkForReelProgression(pkg, dynamicComparator)
             } else if (overlayManager.isOverlayVisible) {
-                overlayManager.removeOverlay()
+                postOverlayUpdate { overlayManager.removeOverlay() }
                 return
             }
 
 
-        } catch (_: Exception) { }
+        } catch (error: Exception) {
+            crashLogger.logNonFatalError(error)
+        }
     }
 
-    private fun checkForReelProgression(pkg: String, data: ReelAppData) {
-        val root = service.rootInActiveWindow ?: return
-
-        Log.d("reel","searchin view $data")
-
-        val viewNode = NodeFinder.findFirst(root, data.viewId)
-        Log.d("reel",viewNode.toString())
-
-        if (viewNode == null || !isViewInBounds(viewNode)) {
-            viewNode?.let { NodeFinder.recycle(it) }
+    private fun checkForReelProgression(pkg: String, currentText: String?) {
+        if (currentText == null) {
             hideReelCounter()
             return
         }
-        NodeFinder.recycle(viewNode)
-        Log.d("reel","found view")
-
-        // Check if required views are present
-        for (req in data.requiresPresent) {
-            val node = NodeFinder.findFirst(root, req)
-            if (node == null || !isViewInBounds(node)) {
-                node?.let { NodeFinder.recycle(it) }
-                hideReelCounter()
-                return
-            }
-            NodeFinder.recycle(node)
-        }
-
-        Log.d("reel","all present")
-
-        // Check if requires absent views are found
-        for (req in data.requiresAbsent) {
-            val node = NodeFinder.findFirst(root, req)
-            if (node != null && isViewInBounds(node)) {
-                NodeFinder.recycle(node)
-                hideReelCounter()
-                return
-            }
-            node?.let { NodeFinder.recycle(it) }
-        }
-        Log.d("reel","all absent")
-
-        // Loop dynamic comparator viewgroups and extract text
-        var currentText = ""
-        for (compId in data.dynamicComparator) {
-            val compNode = NodeFinder.findFirst(root, compId)
-            if (compNode != null) {
-                currentText += data.comparsionResultCleanser( extractTextFromNode(compNode))
-                NodeFinder.recycle(compNode)
-            }
-        }
-
-        Log.d("reel_text",currentText)
 
         if (currentText.trim().isBlank()) return
 
@@ -180,29 +140,6 @@ class ReelsCountTracker {
         }
     }
 
-    private fun isViewInBounds(node: AccessibilityNodeInfo): Boolean {
-        val rect = Rect()
-        node.getBoundsInScreen(rect)
-        val displayMetrics = service.resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels
-        val screenHeight = displayMetrics.heightPixels
-        return rect.left < screenWidth && rect.right > 0 && rect.top < screenHeight && rect.bottom > 0
-    }
-
-    private fun extractTextFromNode(node: AccessibilityNodeInfo?): String {
-        if (node == null) return ""
-        var result = ""
-        val text = node.text?.toString()
-        val desc = node.contentDescription?.toString()
-        if (text != null) result += text
-        if (desc != null) result += desc
-
-        for (i in 0 until node.childCount) {
-            result += extractTextFromNode(node.getChild(i))
-        }
-        return result
-    }
-
     fun getTodayCount(): Int = todayCount
 
     private fun onReelCounted() {
@@ -214,13 +151,15 @@ class ReelsCountTracker {
         todayCount++
         overlayManager.reelsScrolledThisSession = todayCount
 
-        if (isOnDisplayCounter) {
-            overlayManager.binding?.reelCounter?.apply {
-                visibility = View.VISIBLE
-                text = todayCount.toString()
+        postOverlayUpdate {
+            if (isOnDisplayCounter) {
+                overlayManager.binding?.reelCounter?.apply {
+                    visibility = View.VISIBLE
+                    text = todayCount.toString()
+                }
+            } else {
+                overlayManager.binding?.reelCounter?.visibility = View.GONE
             }
-        } else {
-            overlayManager.binding?.reelCounter?.visibility = View.GONE
         }
 
         scope.launch {
@@ -253,12 +192,25 @@ class ReelsCountTracker {
     }
 
     fun onDestroy() {
-        overlayManager.binding = null
+        postOverlayUpdate {
+            overlayManager.removeOverlay()
+            overlayManager.binding = null
+        }
         try { service.unregisterReceiver(refreshReceiver) } catch (_: Exception) {}
     }
 
     private fun hideReelCounter() {
-        overlayManager.binding?.reelCounter?.visibility = View.GONE
+        postOverlayUpdate { overlayManager.binding?.reelCounter?.visibility = View.GONE }
+    }
+
+    private fun postOverlayUpdate(block: () -> Unit) {
+        mainHandler.post {
+            try {
+                block()
+            } catch (error: Exception) {
+                crashLogger.logNonFatalError(error)
+            }
+        }
     }
 
     private fun isSubstantialTextChange(currentText: String, previousText: String): Boolean {
