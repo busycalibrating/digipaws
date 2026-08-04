@@ -190,9 +190,11 @@ class AccountController(
 
         // Sync is the one paid feature. When this build sells it and there is no
         // active subscription, the paywall replaces the whole account flow.
-        val needsSubscription = lastBilling.required && !lastBilling.entitled
+        val needsSubscription = signedIn && lastBilling.required && !lastBilling.entitled
         sectionPaywall.visibility = vis(needsSubscription)
         if (needsSubscription) {
+            title.text = fragment.getString(R.string.sync_paywall_title)
+            subtitle.text = fragment.getString(R.string.sync_paywall_subtitle)
             paywallPrice.text = fragment.getString(
                 R.string.sync_paywall_price,
                 lastBilling.price ?: fragment.getString(R.string.sync_paywall_price_fallback),
@@ -205,6 +207,9 @@ class AccountController(
             pairingBlock.visibility = View.GONE
             sectionUnlocked.visibility = View.GONE
             qr.visibility = View.GONE
+            val billingError = lastBilling.error
+            message.visibility = vis(billingError != null)
+            if (billingError != null) message.text = billingError
             return
         }
 

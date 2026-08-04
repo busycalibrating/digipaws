@@ -50,6 +50,13 @@ class SupabaseRest(
 
     data class PullPosition(val updatedAt: String, val id: String)
 
+    data class BillingEntitlement(
+        val entitled: Boolean,
+        val provider: String?,
+        val validUntil: String?,
+        val price: String?,
+    )
+
     private fun parseSession(body: JsonObject, fallbackRefreshToken: String? = null): Session? {
         val token = body.get("access_token")?.takeIf { !it.isJsonNull }?.asString ?: return null
         val user = body.get("user")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
@@ -202,6 +209,56 @@ class SupabaseRest(
                 throw RestHttpException(resp.code, "write failed (${resp.code}): ${resp.body?.string()}")
             }
         }
+    }
+
+    private fun authedFunction(session: Session, name: String, body: JsonObject = JsonObject()): JsonObject {
+        val request = Request.Builder()
+            .url("$baseUrl/functions/v1/$name")
+            .header("apikey", anonKey)
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .header("Content-Type", "application/json")
+            .post(body.toString().toRequestBody(jsonType))
+            .build()
+        client.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            val parsed = runCatching { gson.fromJson(text, JsonObject::class.java) }.getOrNull() ?: JsonObject()
+            if (!response.isSuccessful) {
+                val message = parsed.get("error")?.takeIf { !it.isJsonNull }?.asString
+                    ?: "billing request failed (${response.code})"
+                throw RestHttpException(response.code, message)
+            }
+            return parsed
+        }
+    }
+
+    fun billingEntitlement(session: Session): BillingEntitlement {
+        val result = authedFunction(session, "sync-entitlement")
+        return BillingEntitlement(
+            entitled = result.get("entitled")?.asBoolean == true,
+            provider = result.get("provider")?.takeIf { !it.isJsonNull }?.asString,
+            validUntil = result.get("validUntil")?.takeIf { !it.isJsonNull }?.asString,
+            price = result.get("price")?.takeIf { !it.isJsonNull }?.asString,
+        )
+    }
+
+    fun polarBillingUrl(session: Session, manage: Boolean = false): String {
+        val result = authedFunction(session, "polar-checkout", JsonObject().apply {
+            addProperty("action", if (manage) "manage" else "checkout")
+        })
+        return result.get("url")?.takeIf { !it.isJsonNull }?.asString
+            ?: throw IOException("billing did not return a checkout link")
+    }
+
+    fun verifyPlayPurchase(session: Session, purchaseToken: String): BillingEntitlement {
+        val result = authedFunction(session, "play-verify", JsonObject().apply {
+            addProperty("purchaseToken", purchaseToken)
+        })
+        return BillingEntitlement(
+            entitled = result.get("entitled")?.asBoolean == true,
+            provider = result.get("provider")?.takeIf { !it.isJsonNull }?.asString,
+            validUntil = result.get("validUntil")?.takeIf { !it.isJsonNull }?.asString,
+            price = result.get("price")?.takeIf { !it.isJsonNull }?.asString,
+        )
     }
 
     fun getVault(session: Session): VaultRow? {

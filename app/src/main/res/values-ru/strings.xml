@@ -308,10 +308,10 @@
     <string name="onboarding_shizuku_grant">Предоставить все разрешения через Shizuku</string>
     <string name="sync_paywall_body">Всё в Curbox бесплатно. Синхронизация данных между устройствами — единственная платная функция, потому что для неё нужен сервер, содержание которого стоит денег. Ваши данные остаются зашифрованными, так что даже я не могу их прочитать.</string>
     <string name="sync_paywall_price">Синхронизация стоит %1$s в год.</string>
-    <string name="sync_paywall_price_fallback">$30</string>
+    <string name="sync_paywall_price_fallback">$25</string>
     <string name="sync_paywall_subscribe">Подписаться</string>
     <string name="sync_paywall_restore">Я уже подписан</string>
-    <string name="sync_paywall_checking">Проверяю вашу подписку через Google Play</string>
+    <string name="sync_paywall_checking">Проверяю вашу подписку</string>
     <string name="pairing_code_warning_title">Держите этот код в тайне</string>
     <string name="pairing_code_warning_message">Этот код содержит секретный ключ, который открывает все ваши синхронизированные данные. Любой, кто сфотографирует его, сможет прочитать ваши данные. Пожалуйста, не делайте скриншот и не делитесь им. Код скрывается сам через минуту.</string>
     <string name="pairing_code_show">Показать код</string>

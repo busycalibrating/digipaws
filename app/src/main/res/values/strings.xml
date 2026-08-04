@@ -369,12 +369,14 @@
     <string name="onboarding_restricted_settings_desc">Android 13+ restricts Accessibility services for apps installed outside of app stores (like F-Droid or Play Store). To enable permissions, you\'ll need to manually allow \'Restricted settings\' for Curbox. Alternatively, install via the F-Droid app(not website) to avoid this.</string>
     <string name="onboarding_show_tutorial">Show tutorial to enable permissions</string>
     <string name="onboarding_shizuku_grant">Grant all permissions with Shizuku</string>
-    <string name="sync_paywall_body">Everything in Curbox is free. Syncing your data across devices is the one paid feature, because it needs a server that costs money to run. Your data stays encrypted so even I cannot read it.</string>
-    <string name="sync_paywall_price">Sync costs %1$s a year.</string>
-    <string name="sync_paywall_price_fallback">$30</string>
+    <string name="sync_paywall_title">Sync Premium</string>
+    <string name="sync_paywall_subtitle">Keep your Curbox data in step on every device.</string>
+    <string name="sync_paywall_body">Sync your settings, focus sessions, and time stats across browsers and phones. Your data stays end to end encrypted.</string>
+    <string name="sync_paywall_price">%1$s/year</string>
+    <string name="sync_paywall_price_fallback">$25</string>
     <string name="sync_paywall_subscribe">Subscribe</string>
     <string name="sync_paywall_restore">I already subscribed</string>
-    <string name="sync_paywall_checking">Checking your subscription with Google Play</string>
+    <string name="sync_paywall_checking">Checking your subscription</string>
     <string name="pairing_code_warning_title">Keep this code private</string>
     <string name="pairing_code_warning_message">This code holds the secret key that unlocks all your synced data. Anyone who snaps a photo of it can read your data. Please do not screenshot or share it. The code hides itself after one minute.</string>
     <string name="pairing_code_show">Show code</string>
@@ -1222,46 +1224,46 @@
     <string name="api_enable_title">Allow other apps</string>
     <string name="api_enable_subtitle">When this is off, no app can control Curbox, even ones you allowed before.</string>
     <string name="api_connected_title">Connected apps</string>
-    <string name="api_no_apps">No apps yet. When an app asks for access, I will check with you first, then show it here.</string>
+    <string name="api_no_apps">No apps are connected. Curbox will ask for your approval when an app requests access, then list approved apps here.</string>
     <string name="api_revoke">Remove</string>
     <string name="api_how_title">How it works</string>
-    <string name="api_how_body">When another app wants to control Curbox, I show you a screen with its name and ask if you want to allow it. If you say yes, it shows up here and can run commands until you remove it. Removing an app cuts off its access right away.</string>
+    <string name="api_how_body">When another app requests access, Curbox shows its name and asks for your approval. An approved app can run commands until you remove it. Removing an app ends its access immediately.</string>
     <string name="api_help_popup">Other apps can ask to control Curbox. You allow or deny each one, and you can remove access any time.</string>
 
     <!-- Service protection (keep alive) -->
-    <string name="service_protection_title">Keep my service alive</string>
-    <string name="service_protection_card_subtitle">Stop my blockers from being killed</string>
-    <string name="service_protection_subtitle">Some phones shut my service down to save battery. This turns on a few layers that keep it running and bring it back fast if it stops. It cannot make it impossible to stop, but it gets very close.</string>
+    <string name="service_protection_title">Keep Curbox running</string>
+    <string name="service_protection_card_subtitle">Help Curbox blockers keep working</string>
+    <string name="service_protection_subtitle">Some phones stop Curbox in the background to save battery. These options help keep its blockers running and restart them if they stop. No option can guarantee that Curbox will always run.</string>
     <string name="service_protection_master_title">Protection</string>
     <string name="service_protection_master_desc">Turn on all the layers below</string>
     <string name="service_protection_status_header">What is working now</string>
-    <string name="service_protection_row_services_title">My service</string>
-    <string name="service_protection_services_on">It is running</string>
-    <string name="service_protection_services_off">It is off right now</string>
+    <string name="service_protection_row_services_title">Curbox blockers</string>
+    <string name="service_protection_services_on">Blockers are running</string>
+    <string name="service_protection_services_off">Blockers are not running</string>
     <string name="service_protection_row_battery_title">Battery freedom</string>
-    <string name="service_protection_battery_ok">My phone will not sleep my service</string>
-    <string name="service_protection_battery_bad">My phone may stop my service to save power</string>
+    <string name="service_protection_battery_ok">Battery settings allow Curbox to stay active</string>
+    <string name="service_protection_battery_bad">Battery settings may stop Curbox to save power</string>
     <string name="service_protection_row_autostart_title">Auto start</string>
-    <string name="service_protection_row_autostart_desc">Your phone brand hides a setting that lets me start on my own. Please allow it.</string>
+    <string name="service_protection_row_autostart_desc">Some phones require a separate setting to let Curbox start automatically. Please allow auto start.</string>
     <string name="service_protection_row_shizuku_title">Auto repair</string>
-    <string name="service_protection_shizuku_on">I can turn my service back on by myself</string>
-    <string name="service_protection_shizuku_off">Set up Shizuku to let me repair myself</string>
+    <string name="service_protection_shizuku_on">Curbox can restart its blockers automatically</string>
+    <string name="service_protection_shizuku_off">Set up Shizuku so Curbox can restart its blockers</string>
     <string name="service_protection_fix">Fix</string>
     <string name="service_protection_open">Open</string>
     <string name="service_protection_setup">Set up</string>
     <string name="service_protection_shizuku_not_installed">Shizuku is not running. Opening its website.</string>
     <string name="service_protection_repair_now">Repair now</string>
-    <string name="service_protection_repair_started">Trying to repair my service</string>
-    <string name="service_protection_no_screen">I could not open that screen on this phone</string>
+    <string name="service_protection_repair_started">Trying to restart Curbox blockers</string>
+    <string name="service_protection_no_screen">This settings screen is not available on this phone</string>
     <string name="service_protection_autostart_manual">Please open your phone settings and allow Curbox to auto start.</string>
     <string name="service_protection_advanced_header">Advanced</string>
     <string name="service_protection_device_owner">Make Curbox a device owner</string>
     <string name="service_protection_device_owner_warning">This is the strongest option. It stays on even after a force stop and blocks uninstall fully. It only works on a phone with no accounts added, and it is hard to undo later. Only do this if you are sure.</string>
     <string name="service_protection_cancel">Cancel</string>
     <string name="service_protection_continue">Continue</string>
-    <string name="service_protection_help_popup">Phones often kill background apps to save battery. This screen turns on battery freedom, auto start, a watchdog that checks on my service, and, if you set up Shizuku, the power to switch my service back on by myself. Nothing can make an app truly impossible to stop, but together these make it very hard.</string>
+    <string name="service_protection_help_popup">Phones often stop background apps to save battery. This screen helps Curbox stay active with battery access, auto start, regular checks, and optional recovery through Shizuku. These options make Curbox harder to stop, but cannot guarantee that it will always run.</string>
     <string name="service_protection_channel_name">Service protection</string>
-    <string name="service_protection_down_title">My blockers stopped</string>
+    <string name="service_protection_down_title">Curbox blockers stopped</string>
     <string name="service_protection_down_text">Tap to turn them back on so your blocks keep working.</string>
 
     <!-- Tamper protection -->
@@ -1272,7 +1274,7 @@
     <string name="anti_uninstall_disable_warning">Curbox keeps itself installed to protect your focus. Turn off tamper protection inside the app first.</string>
     <string name="anti_uninstall_setup_again">Something went wrong. Please choose your unlock method again.</string>
     <string name="anti_uninstall_admin_explanation">Curbox uses this to stop itself from being uninstalled while protection is on.</string>
-    <string name="anti_uninstall_admin_needed">I need this permission to keep Curbox installed.</string>
+    <string name="anti_uninstall_admin_needed">This permission is required to keep Curbox installed.</string>
     <string name="anti_uninstall_help_popup">When this is on, Curbox cannot be uninstalled and its services cannot be switched off until you turn it off using the method you picked: a password, a wait of a few days, or a one day cooldown you can stop anytime.</string>
 
     <string name="anti_uninstall_status_off_title">Protection is off</string>
@@ -1281,20 +1283,20 @@
     <string name="anti_uninstall_status_unlocking_title">Turning off soon</string>
     <string name="anti_uninstall_status_unlocking_body">Protection turns off in %1$s.</string>
 
-    <string name="anti_uninstall_summary_password">I will need my password to turn this off.</string>
+    <string name="anti_uninstall_summary_password">Your password is required to turn off protection.</string>
     <plurals name="anti_uninstall_summary_timed">
-        <item quantity="one">This turns off %1$d day after I ask.</item>
-        <item quantity="other">This turns off %1$d days after I ask.</item>
+        <item quantity="one">After you request it, protection turns off in %1$d day.</item>
+        <item quantity="other">After you request it, protection turns off in %1$d days.</item>
     </plurals>
-    <string name="anti_uninstall_summary_cooldown">I can turn this off after a one day wait, and stop the wait anytime.</string>
+    <string name="anti_uninstall_summary_cooldown">A one day wait is required to turn off protection. The request can be cancelled at any time.</string>
 
-    <string name="anti_uninstall_pick_mode">How do I turn it off later?</string>
+    <string name="anti_uninstall_pick_mode">How should protection be turned off?</string>
     <string name="anti_uninstall_mode_password_title">Password</string>
-    <string name="anti_uninstall_mode_password_desc">Turn off right away with a password only I know.</string>
+    <string name="anti_uninstall_mode_password_desc">Turn off protection immediately with a password.</string>
     <string name="anti_uninstall_mode_timed_title">Timed</string>
     <string name="anti_uninstall_mode_timed_desc">Turn off on its own after a set number of days.</string>
-    <string name="anti_uninstall_mode_cooldown_title">As long as I am able</string>
-    <string name="anti_uninstall_mode_cooldown_desc">Ask to turn off and it lifts after one day. I can stop the wait anytime.</string>
+    <string name="anti_uninstall_mode_cooldown_title">One day wait</string>
+    <string name="anti_uninstall_mode_cooldown_desc">Request to turn off protection, then wait one day. The request can be cancelled at any time.</string>
     <string name="anti_uninstall_days_hint">Days to wait</string>
     <string name="anti_uninstall_days_error">Enter at least one day.</string>
 
@@ -1326,11 +1328,11 @@
     <!-- Settings change delay -->
     <string name="change_delay_title">Settings change delay</string>
     <string name="change_delay_card_subtitle">Weaker settings wait before they apply</string>
-    <string name="change_delay_subtitle">This stops me from weakening my rules on impulse. Stricter changes work right away. Weaker changes wait for the timer, and I can cancel them while they wait.</string>
+    <string name="change_delay_subtitle">This helps prevent impulsive changes that weaken your rules. Stricter changes apply immediately. Weaker changes wait for the timer and can be cancelled before they apply.</string>
     <string name="change_delay_master_title">Turn on change delay</string>
     <string name="change_delay_master_desc">Turning this off or picking a shorter wait also has to wait out the full delay.</string>
     <string name="change_delay_tamper_lock_title">Also require tamper protection off</string>
-    <string name="change_delay_tamper_lock_desc">While tamper protection is on, weaker changes stay off no matter how long they have waited. I have to turn tamper protection off first.</string>
+    <string name="change_delay_tamper_lock_desc">Weaker changes stay pending while tamper protection is on, even after the timer ends. Turn off tamper protection to apply them.</string>
     <string name="change_delay_duration_header">How long do weaker changes wait?</string>
     <string name="change_delay_none">None</string>
     <string name="change_delay_10m">10 minutes</string>
@@ -1343,11 +1345,11 @@
     <string name="change_delay_pending_empty">Nothing is waiting right now.</string>
     <string name="change_delay_applies_in">Starts working in %1$s</string>
     <string name="change_delay_blocked_by_tamper">Waiting for tamper protection to turn off</string>
-    <string name="change_delay_deferred_toast">Saved for later. This change starts working in %1$s. I can cancel it under Settings change delay.</string>
-    <string name="change_delay_tamper_gated_toast">Saved for later. This change will not start working until I turn off tamper protection.</string>
+    <string name="change_delay_deferred_toast">Saved for later. This change starts working in %1$s. You can cancel it under Settings change delay.</string>
+    <string name="change_delay_tamper_gated_toast">Saved for later. This change will not apply until tamper protection is off.</string>
     <string name="change_delay_cancelled_toast">The waiting change was cancelled. Nothing changed.</string>
-    <string name="change_delay_pending_note">If I make a stricter change to the same tool while one is waiting, the waiting change is dropped.</string>
-    <string name="change_delay_help_popup">When this is on, any change that weakens a rule waits before it starts working. That gives me time to change my mind.</string>
+    <string name="change_delay_pending_note">If you make a stricter change to the same tool while a change is waiting, the waiting change is removed.</string>
+    <string name="change_delay_help_popup">When enabled, changes that weaken a rule wait before they apply. This gives you time to reconsider them.</string>
     <string name="change_delay_field_app_groups">App blocker</string>
     <string name="change_delay_field_auto_dnd">Auto DND</string>
     <string name="change_delay_field_reel_blocker">Reel blocker</string>
@@ -1358,24 +1360,24 @@
     <string name="change_delay_field_ui_hider">UI hider</string>
     <string name="change_delay_field_change_delay">Settings change delay</string>
     <string name="change_delay_review_title">Hold on</string>
-    <string name="change_delay_review_message">This change weakens my %1$s rules, so it waits before it starts working. It applies in %2$s. Until then my old rules stay on.</string>
-    <string name="change_delay_review_message_no_timer">This change weakens my %1$s rules, so it does not start working right away. Until then my old rules stay on.</string>
-    <string name="change_delay_review_tamper_note">It will not start working until I turn off tamper protection.</string>
+    <string name="change_delay_review_message">This change weakens the %1$s rules, so it will not apply immediately. It applies in %2$s. The current rules stay active until then.</string>
+    <string name="change_delay_review_message_no_timer">This change weakens the %1$s rules, so it will not apply immediately. The current rules stay active until the change is allowed.</string>
+    <string name="change_delay_review_tamper_note">It will not apply until tamper protection is off.</string>
     <string name="change_delay_review_replaced_note">A change for this tool was already waiting. This new one takes its place and the timer starts over.</string>
     <string name="change_delay_review_keep">Keep it waiting</string>
     <string name="change_delay_review_undo">Undo this change</string>
-    <string name="change_delay_dropped_toast">My stricter change works now. The change that was waiting for %1$s was dropped.</string>
+    <string name="change_delay_dropped_toast">The stricter change is active. The pending change for %1$s was removed.</string>
     <string name="temporary_disable_title">Temporarily disable %1$s</string>
     <string name="temporary_disable_5m">5 minutes</string>
     <string name="temporary_disable_15m">15 minutes</string>
     <string name="temporary_disable_1h">1 hour</string>
-    <string name="temporary_disable_until_enabled">Until I turn it back on</string>
+    <string name="temporary_disable_until_enabled">Until you turn it back on</string>
     <string name="temporary_disable_custom">Custom minutes</string>
     <string name="temporary_disable_custom_hint">Minutes</string>
     <string name="temporary_disable_action">Disable temporarily</string>
     <string name="temporary_disable_invalid">Enter a duration from 1 to 43,200 minutes.</string>
     <string name="temporary_disable_until">Temporarily disabled for %1$s</string>
-    <string name="temporary_disable_until_manually_enabled">Disabled until I turn it back on</string>
+    <string name="temporary_disable_until_manually_enabled">Disabled until you turn it back on</string>
 
     <!-- Curbox API permission screen -->
     <string name="api_permission_title">Allow access?</string>

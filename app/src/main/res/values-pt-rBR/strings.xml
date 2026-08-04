@@ -308,10 +308,10 @@
     <string name="onboarding_shizuku_grant">Conceder todas as permissões com o Shizuku</string>
     <string name="sync_paywall_body">Tudo no Curbox é gratuito. Sincronizar seus dados entre dispositivos é o único recurso pago, porque precisa de um servidor que custa dinheiro para manter. Seus dados continuam criptografados, então nem eu consigo lê-los.</string>
     <string name="sync_paywall_price">A sincronização custa %1$s por ano.</string>
-    <string name="sync_paywall_price_fallback">$30</string>
+    <string name="sync_paywall_price_fallback">$25</string>
     <string name="sync_paywall_subscribe">Assinar</string>
     <string name="sync_paywall_restore">Já assinei</string>
-    <string name="sync_paywall_checking">Verificando sua assinatura com o Google Play</string>
+    <string name="sync_paywall_checking">Verificando sua assinatura</string>
     <string name="pairing_code_warning_title">Mantenha esse código em sigilo</string>
     <string name="pairing_code_warning_message">Esse código contém a chave secreta que desbloqueia todos os seus dados sincronizados. Qualquer pessoa que tirar uma foto dele pode ler seus dados. Não faça captura de tela nem compartilhe. O código se esconde sozinho depois de um minuto.</string>
     <string name="pairing_code_show">Mostrar código</string>

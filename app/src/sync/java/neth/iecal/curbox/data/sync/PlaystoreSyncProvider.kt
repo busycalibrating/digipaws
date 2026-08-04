@@ -44,9 +44,8 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     private val rest by lazy { SupabaseRest() }
     private val keys by lazy { SecureKeyStore(context) }
 
-    // Flavor specific: the Play Store build answers with a real subscription
-    // check, the full build always says yes.
-    private val entitlement by lazy { SyncEntitlement(context) }
+    // Flavor specific billing: Polar in full, Google Play in playstore.
+    private val entitlement by lazy { SyncEntitlement(context, rest) { billingSession() } }
     private val entitled get() = entitlement.billing.value.entitled
     private val db by lazy { AppDatabase.getInstance(context) }
     private val dataStoreManager by lazy { DataStoreManager(context) }
@@ -156,11 +155,11 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
 
     private suspend fun ensureStarted() = startMutex.withLock {
         if (session != null) {
-            if (!signedInInitialised) onSignedIn()
-            return
-        }
-        runCatching { SyncWorker.schedule(context) }
-        if (!entitled) {
+            entitlement.refreshNow()
+            if (entitled) {
+                runCatching { SyncWorker.schedule(context) }
+                if (!signedInInitialised) onSignedIn()
+            }
             publishStatus()
             return
         }
@@ -169,7 +168,13 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             session = rest.refresh(refresh).also { persistSession(it) }
             signedInInitialised = false
             keys.dekB64?.let { dek = CryptoBox.fromBase64Url(it) }
-            onSignedIn()
+            entitlement.refreshNow()
+            if (entitled) {
+                runCatching { SyncWorker.schedule(context) }
+                onSignedIn()
+            } else {
+                publishStatus()
+            }
         } catch (e: Exception) {
             if (isRejectedToken(e)) {
                 clearLocalAccount()
@@ -220,7 +225,8 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             signedInInitialised = false
             persistSession(s)
             pendingEmail = null
-            onSignedIn()
+            entitlement.refreshNow()
+            if (entitled) onSignedIn() else publishStatus()
         }
     }
 
@@ -239,7 +245,8 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         signedInInitialised = false
         persistSession(s)
         pendingEmail = null
-        onSignedIn()
+        entitlement.refreshNow()
+        if (entitled) onSignedIn() else publishStatus()
     }
 
     override suspend fun verifySignupCode(email: String, code: String) = withContext(Dispatchers.IO) {
@@ -248,7 +255,8 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         signedInInitialised = false
         persistSession(s)
         pendingEmail = null
-        onSignedIn()
+        entitlement.refreshNow()
+        if (entitled) onSignedIn() else publishStatus()
     }
 
     override suspend fun resendSignupCode(email: String) = withContext(Dispatchers.IO) {
@@ -266,7 +274,8 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         signedInInitialised = false
         persistSession(s)
         pendingEmail = null
-        onSignedIn()
+        entitlement.refreshNow()
+        if (entitled) onSignedIn() else publishStatus()
     }
 
     override suspend fun signOut() = withContext(Dispatchers.IO) {
@@ -286,6 +295,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     override suspend fun setPassphrase(passphrase: String) = withContext(Dispatchers.IO) {
+        require(entitled) { "Sync Premium is required" }
         require(passphrase.length >= 8) { context.getString(neth.iecal.curbox.R.string.account_msg_phrase_too_short) }
         require(passphrase.length <= 1024) { context.getString(neth.iecal.curbox.R.string.account_msg_phrase_too_long) }
         val s = requireSession()
@@ -300,6 +310,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     override suspend fun unlock(passphrase: String) = withContext(Dispatchers.IO) {
+        require(entitled) { "Sync Premium is required" }
         require(passphrase.length <= 1024) { context.getString(neth.iecal.curbox.R.string.account_msg_phrase_too_long) }
         val s = requireSession()
         val vault = rest.getVault(s) ?: throw IllegalStateException("no passphrase set yet")
@@ -324,12 +335,14 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     override suspend fun makePairingCode(): String {
+        require(entitled) { "Sync Premium is required" }
         val s = requireSession()
         val d = dek ?: throw IllegalStateException("unlock first")
         return CryptoBox.buildPairingPayload(s.userId, d)
     }
 
     override suspend fun pairWithCode(payload: String) = withContext(Dispatchers.IO) {
+        require(entitled) { "Sync Premium is required" }
         val s = requireSession()
         val pairing = CryptoBox.parsePairingPayload(payload)
         if (pairing.userId != s.userId) throw IllegalStateException("this code is for a different account")
@@ -363,7 +376,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     override suspend fun remoteWebsiteUsage(dateIso: String): Map<String, Long> = withContext(Dispatchers.IO) {
-        if (!keys.syncUsageStats || session == null || dek == null) {
+        if (!entitled || !keys.syncUsageStats || session == null || dek == null) {
             emptyMap()
         } else {
             RemoteUsageStore(context).websiteTotals(dateIso, keys.usageDeviceIds)
@@ -371,7 +384,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     override suspend fun remoteAppUsage(dateIso: String): Map<String, Long> = withContext(Dispatchers.IO) {
-        if (!keys.syncUsageStats || session == null || dek == null) {
+        if (!entitled || !keys.syncUsageStats || session == null || dek == null) {
             emptyMap()
         } else {
             RemoteUsageStore(context).appTotals(dateIso, keys.usageDeviceIds)
@@ -391,6 +404,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     override suspend fun setDeviceName(name: String) = withContext(Dispatchers.IO) {
+        require(entitled) { "Sync Premium is required" }
         val label = name.trim().take(60)
         require(label.isNotEmpty()) { "Enter a device name" }
         keys.deviceName = label
@@ -403,6 +417,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     override suspend fun setPreferences(preferences: SyncPreferences) = withContext(Dispatchers.IO) {
+        require(entitled) { "Sync Premium is required" }
         keys.syncUsageStats = preferences.usageStats
         keys.syncReducerConfigs = preferences.reducerConfigs
         keys.usageDeviceIds = preferences.usageDeviceIds - keys.deviceId
@@ -430,6 +445,12 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     }
 
     private fun requireSession(): SupabaseRest.Session = session ?: throw IllegalStateException("sign in first")
+
+    private suspend fun billingSession(): SupabaseRest.Session? {
+        if (session == null) return null
+        ensureFreshToken()
+        return session
+    }
 
     /**
      * Only a definitive auth rejection may wipe the stored keys, because clearing them also
@@ -471,6 +492,10 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
 
     private suspend fun onSignedIn() {
         val s = session ?: return
+        if (!entitled) {
+            publishStatus()
+            return
+        }
         rest.upsertDevice(s, keys.deviceId, "android", keys.deviceName, keys.fcmToken)
         runCatching { refreshDevices(s) }
         registerFcmToken()
@@ -1154,7 +1179,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             signedIn = s != null,
             email = s?.email,
             hasVault = vaultExists || dek != null,
-            unlocked = dek != null,
+            unlocked = dek != null && entitled,
             deviceId = if (s != null) keys.deviceId else null,
             lastSync = lastSync,
             error = error,

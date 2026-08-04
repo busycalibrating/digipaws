@@ -17,6 +17,9 @@ data class SyncBillingStatus(
     val entitled: Boolean = true,
     /** Localized yearly price from the store, when known. */
     val price: String? = null,
+    val provider: String? = null,
+    val validUntil: String? = null,
+    val error: String? = null,
 )
 
 private val FreeBilling = MutableStateFlow(SyncBillingStatus())

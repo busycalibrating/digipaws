@@ -193,6 +193,9 @@ dependencies {
     "playstoreImplementation"(libs.okhttp)
     "playstoreImplementation"(libs.androidx.security.crypto)
     "playstoreImplementation"(libs.androidx.work.runtime.ktx)
+    // Play Store flavor sells the yearly Sync Premium subscription through
+    // Google Play. The directly distributed full flavor uses Polar instead.
+    "playstoreImplementation"("com.android.billingclient:billing:9.1.0")
 
     // FCM push, sync flavors ONLY, so the phone can sync instantly in the
     // background without holding a websocket open. F-Droid never pulls in Firebase

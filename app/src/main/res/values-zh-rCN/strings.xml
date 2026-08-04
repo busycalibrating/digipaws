@@ -308,10 +308,10 @@
     <string name="onboarding_shizuku_grant">用 Shizuku 授予全部权限</string>
     <string name="sync_paywall_body">Curbox 里的一切都是免费的。跨设备同步数据是唯一的付费功能，因为它需要用到一台需要付费维护的服务器。你的数据始终保持加密，就连我也无法读取。</string>
     <string name="sync_paywall_price">同步费用为每年 %1$s。</string>
-    <string name="sync_paywall_price_fallback">$30</string>
+    <string name="sync_paywall_price_fallback">$25</string>
     <string name="sync_paywall_subscribe">订阅</string>
     <string name="sync_paywall_restore">我已经订阅过了</string>
-    <string name="sync_paywall_checking">正在向 Google Play 核实你的订阅状态</string>
+    <string name="sync_paywall_checking">正在核实你的订阅状态</string>
     <string name="pairing_code_warning_title">请对这个代码保密</string>
     <string name="pairing_code_warning_message">这个代码包含解锁你全部同步数据的密钥。任何拍下它的人都能读取你的数据。请不要截图或分享它。这个代码会在一分钟后自动隐藏。</string>
     <string name="pairing_code_show">显示代码</string>

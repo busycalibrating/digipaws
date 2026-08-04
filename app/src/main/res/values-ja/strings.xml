@@ -308,10 +308,10 @@
     <string name="onboarding_shizuku_grant">Shizukuですべての権限を許可する</string>
     <string name="sync_paywall_body">Curboxの機能はすべて無料です。デバイス間でのデータ同期だけが唯一の有料機能です。維持に費用がかかるサーバーが必要になるためです。あなたのデータは常に暗号化されているので、私でさえ読むことはできません。</string>
     <string name="sync_paywall_price">同期の料金は年間%1$sです。</string>
-    <string name="sync_paywall_price_fallback">$30</string>
+    <string name="sync_paywall_price_fallback">$25</string>
     <string name="sync_paywall_subscribe">登録する</string>
     <string name="sync_paywall_restore">すでに登録済みです</string>
-    <string name="sync_paywall_checking">Google Playであなたの登録状況を確認しています</string>
+    <string name="sync_paywall_checking">登録状況を確認しています</string>
     <string name="pairing_code_warning_title">このコードは他人に見せないでください</string>
     <string name="pairing_code_warning_message">このコードには、同期されたすべてのデータを解除する秘密鍵が含まれています。写真を撮られると、あなたのデータを読み取られる可能性があります。スクリーンショットを撮ったり共有したりしないでください。このコードは1分後に自動的に隠れます。</string>
     <string name="pairing_code_show">コードを表示</string>

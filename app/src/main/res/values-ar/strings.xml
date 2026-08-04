@@ -308,10 +308,10 @@
     <string name="onboarding_shizuku_grant">منح كل الأذونات باستخدام Shizuku</string>
     <string name="sync_paywall_body">كل ما في Curbox مجاني. مزامنة بياناتك بين الأجهزة هي الميزة المدفوعة الوحيدة، لأنها تحتاج إلى خادم تكلفة تشغيله مالية. تبقى بياناتك مشفّرة بحيث لا أستطيع قراءتها حتى أنا.</string>
     <string name="sync_paywall_price">تكلفة المزامنة %1$s سنويًا.</string>
-    <string name="sync_paywall_price_fallback">$30</string>
+    <string name="sync_paywall_price_fallback">$25</string>
     <string name="sync_paywall_subscribe">اشترك</string>
     <string name="sync_paywall_restore">اشتركت بالفعل</string>
-    <string name="sync_paywall_checking">جارٍ التحقق من اشتراكك عبر Google Play</string>
+    <string name="sync_paywall_checking">جارٍ التحقق من اشتراكك</string>
     <string name="pairing_code_warning_title">حافظ على سرية هذا الرمز</string>
     <string name="pairing_code_warning_message">يحمل هذا الرمز المفتاح السري الذي يفتح كل بياناتك المتزامنة. أي شخص يلتقط صورة له يستطيع قراءة بياناتك. يُرجى عدم أخذ لقطة شاشة له أو مشاركته. يختفي الرمز تلقائيًا بعد دقيقة واحدة.</string>
     <string name="pairing_code_show">عرض الرمز</string>
