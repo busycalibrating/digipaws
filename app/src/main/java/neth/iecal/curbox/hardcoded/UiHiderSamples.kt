@@ -124,6 +124,27 @@ val DEFAULT_UIHIDER_SCRIPTS: List<UiHiderScript> = listOf(
                 back()
             }
         """.trimIndent()
+    ),
+
+    UiHiderScript(
+        id = "pinterest_home_feed",
+        packageName = "com.pinterest",
+        label = "Pinterest: hide home feed",
+        isEnabled = false,
+        source = """
+            if app != "com.pinterest" {
+                return
+            }
+
+            home = find(id="com.pinterest:id/bottom_nav_home_icon", selected=true)
+            feed = find(id="com.pinterest:id/home_feed_container")
+            if home != null and home.visible and feed != null and feed.visible {
+                height = home.top - feed.top
+                if height > 0 {
+                    draw(0, feed.top, screen.width, height)
+                }
+            }
+        """.trimIndent()
     )
 )
 
