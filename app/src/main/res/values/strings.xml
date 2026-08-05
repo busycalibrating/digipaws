@@ -113,6 +113,7 @@
     <string name="group_limits">LIMITS</string>
     <string name="configure_group_schedule">Active Hours</string>
     <string name="configure_group_usage">Usage Limit during active hours</string>
+    <string name="configure_reel_count_limit">Configure reel count limit</string>
     <string name="schedule_section_title">SCHEDULE</string>
     <string name="schedule_mode_title">Active hours</string>
     <string name="schedule_mode_all_day">All day</string>
@@ -396,6 +397,8 @@
     <string name="dialog_selected_count">Selected: %1$d</string>
     <string name="dialog_turn_on_dnd">Turn on do not disturb</string>
     <string name="reel_blocker_title">Block Short Form Content</string>
+    <string name="reel_blocker_allowed_apps_zero">Allowed apps (0)</string>
+    <string name="reel_blocker_allowed_apps_count">Allowed apps (%1$d)</string>
     <string name="label_show_more">Show More</string>
     <string name="label_all_time">All Time</string>
     <string name="btn_clear_filters">Clear Filters</string>

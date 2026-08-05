@@ -331,6 +331,8 @@
     <string name="dialog_selected_count">選択済み：%1$d</string>
     <string name="dialog_turn_on_dnd">おやすみモードをオンにする</string>
     <string name="reel_blocker_title">ショート動画をブロック</string>
+    <string name="reel_blocker_allowed_apps_zero">許可するアプリ（0）</string>
+    <string name="reel_blocker_allowed_apps_count">許可するアプリ（%1$d）</string>
     <string name="label_show_more">もっと見る</string>
     <string name="label_all_time">すべての期間</string>
     <string name="btn_clear_filters">フィルターをクリア</string>

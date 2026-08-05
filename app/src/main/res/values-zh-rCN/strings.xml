@@ -331,6 +331,8 @@
     <string name="dialog_selected_count">已选择：%1$d</string>
     <string name="dialog_turn_on_dnd">开启勿扰模式</string>
     <string name="reel_blocker_title">拦截短视频内容</string>
+    <string name="reel_blocker_allowed_apps_zero">允许的应用 (0)</string>
+    <string name="reel_blocker_allowed_apps_count">允许的应用 (%1$d)</string>
     <string name="label_show_more">显示更多</string>
     <string name="label_all_time">全部时间</string>
     <string name="btn_clear_filters">清除筛选</string>

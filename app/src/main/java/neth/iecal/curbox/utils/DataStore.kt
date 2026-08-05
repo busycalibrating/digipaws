@@ -23,6 +23,7 @@ import neth.iecal.curbox.data.models.SettingsChangeDelayConfig
 import neth.iecal.curbox.data.models.SettingsChangeDelayPrefs
 import neth.iecal.curbox.data.models.upgradeLegacyAppGroupConfigs
 import neth.iecal.curbox.data.models.upgradeLegacyKeywordGroupConfigs
+import neth.iecal.curbox.data.models.upgradeLegacyConfig
 import neth.iecal.curbox.hardcoded.normalized
 import neth.iecal.curbox.services.TemporaryGroupDisableJob
 import java.io.File
@@ -273,7 +274,7 @@ class DataStoreManager(private val context: Context) {
     }
 
     suspend fun updateReelBlockerConfig(config: neth.iecal.curbox.data.models.ReelBlocker) {
-        updateGated(GatedSettingsField.REEL_BLOCKER) { config }
+        updateGated(GatedSettingsField.REEL_BLOCKER) { config.upgradeLegacyConfig(gson) }
     }
 
     suspend fun updateKeywordBlockerConfig(transform: (neth.iecal.curbox.data.models.KeywordBlocker) -> neth.iecal.curbox.data.models.KeywordBlocker) {
@@ -603,6 +604,7 @@ class DataStoreManager(private val context: Context) {
                 )
                 GatedSettingsField.REEL_BLOCKER -> settings.copy(
                     reelBlockerConfig = gson.fromJson(valueJson, neth.iecal.curbox.data.models.ReelBlocker::class.java)
+                        .upgradeLegacyConfig(gson)
                 )
                 GatedSettingsField.KEYWORD_BLOCKER -> settings.copy(
                     keywordBlockerConfig = gson.fromJson(

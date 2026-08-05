@@ -331,6 +331,8 @@
     <string name="dialog_selected_count">Выбрано: %1$d</string>
     <string name="dialog_turn_on_dnd">Включить «Не беспокоить»</string>
     <string name="reel_blocker_title">Блокировать короткие видео</string>
+    <string name="reel_blocker_allowed_apps_zero">Разрешённые приложения (0)</string>
+    <string name="reel_blocker_allowed_apps_count">Разрешённые приложения (%1$d)</string>
     <string name="label_show_more">Показать больше</string>
     <string name="label_all_time">За всё время</string>
     <string name="btn_clear_filters">Очистить фильтры</string>

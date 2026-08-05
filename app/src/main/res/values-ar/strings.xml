@@ -331,6 +331,8 @@
     <string name="dialog_selected_count">المحدد: %1$d</string>
     <string name="dialog_turn_on_dnd">تفعيل عدم الإزعاج</string>
     <string name="reel_blocker_title">حجب الفيديوهات القصيرة</string>
+    <string name="reel_blocker_allowed_apps_zero">التطبيقات المسموح بها (0)</string>
+    <string name="reel_blocker_allowed_apps_count">التطبيقات المسموح بها (%1$d)</string>
     <string name="label_show_more">عرض المزيد</string>
     <string name="label_all_time">كل الأوقات</string>
     <string name="btn_clear_filters">مسح الفلاتر</string>

@@ -15,17 +15,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import neth.iecal.curbox.Constants
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.ReelBlocker
-import neth.iecal.curbox.data.models.ReelBlockingType
 import neth.iecal.curbox.data.models.ReelTimeConfig
 import neth.iecal.curbox.data.models.ReelCountConfig
+import neth.iecal.curbox.data.models.upgradeLegacyConfig
 import neth.iecal.curbox.data.db.AppDatabase
+import neth.iecal.curbox.hardcoded.ReelAppConfig
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.ui.activity.WarningActivity
 import neth.iecal.curbox.utils.TimeTools
 import neth.iecal.curbox.utils.TimerNotification
+import neth.iecal.curbox.utils.UsageStatsHelper
 import java.util.Calendar
 
 class ReelBlocker : BaseBlocker() {
@@ -56,6 +59,7 @@ class ReelBlocker : BaseBlocker() {
     private var lastEventTimeStamp = 0L
 
     private lateinit var notificationManager: TimerNotification
+    private lateinit var usageStats: UsageStatsHelper
 
     fun doViewBlockerCheck(
         event: AccessibilityEvent?,
@@ -85,6 +89,8 @@ class ReelBlocker : BaseBlocker() {
         }
 
         val pkg = event.packageName?.toString() ?: return
+        if (pkg in reelBlockerConfig.excludedPackages) return
+
         val viewId = pkg
 
         if (dynamicComparator != null) {
@@ -92,21 +98,22 @@ class ReelBlocker : BaseBlocker() {
                 return
             }
 
-            when(reelBlockerConfig.blockingType) {
-                ReelBlockingType.TIMED -> {
-                    val endAllowedMillis = getEndTimeInMillis()
-                    if(endAllowedMillis==null) {
-                        showWarningScreen(viewId)
-                    }
-                }
-                ReelBlockingType.USAGE -> TODO()
-                ReelBlockingType.REEL_COUNT -> {
-                    ensureCountFlowForToday()
-                    val limit = getDailyReelCountLimit()
-                    if (limit != null && limit > 0 && currentDailyCount >= limit) {
-                        showWarningScreen(viewId)
-                    }
-                }
+            val endAllowedMillis = getEndTimeInMillis()
+            if (endAllowedMillis == null) {
+                showWarningScreen(viewId)
+                return
+            }
+
+            val usageLimit = getDailyReelUsageLimit()
+            if (usageLimit > 0 && getTodayReelUsageMillis() >= usageLimit * 60_000L) {
+                showWarningScreen(viewId)
+                return
+            }
+
+            ensureCountFlowForToday()
+            val limit = getDailyReelCountLimit()
+            if (limit != null && limit > 0 && currentDailyCount >= limit) {
+                showWarningScreen(viewId)
             }
         }
         
@@ -125,24 +132,17 @@ class ReelBlocker : BaseBlocker() {
         this.service = service
 
         notificationManager = TimerNotification(service)
+        usageStats = UsageStatsHelper(service)
 
         settingsJob?.cancel()
         countJob?.cancel()
 
         settingsJob = CoroutineScope(Dispatchers.IO).launch {
             service.dataStoreManager.settings.collectLatest { settings ->
-                reelBlockerConfig = settings.reelBlockerConfig
-                when(reelBlockerConfig.blockingType) {
-                    ReelBlockingType.TIMED -> {
-                        timeBAsedConfig = Gson().fromJson<ReelTimeConfig>(settings.reelBlockerConfig.settings,
-                            ReelTimeConfig::class.java)
-                    }
-                    ReelBlockingType.USAGE -> TODO()
-                    ReelBlockingType.REEL_COUNT -> {
-                        countBasedConfig = Gson().fromJson<ReelCountConfig>(settings.reelBlockerConfig.settings,
-                            ReelCountConfig::class.java)
-                    }
-                }
+                reelBlockerConfig = settings.reelBlockerConfig.upgradeLegacyConfig()
+                val config = reelBlockerConfig.config
+                timeBAsedConfig = config?.schedule
+                countBasedConfig = config?.reelCount
             }
         }
 
@@ -237,6 +237,27 @@ class ReelBlocker : BaseBlocker() {
             val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1 // 0=Sunday, 1=Monday...
             return config.dailyLimits[dayOfWeek]
         }
+    }
+
+    private fun getDailyReelUsageLimit(): Long {
+        val config = reelBlockerConfig.config?.usage ?: return 0
+        if (config.isDailyUniform) return config.uniformLimit
+        val dayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1
+        return config.dailyLimits[dayOfWeek]
+    }
+
+    private fun getTodayReelUsageMillis(): Long = runBlocking {
+        val dayStart = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        usageStats.getForegroundUsageBetween(
+            ReelAppConfig.reelData.keys - reelBlockerConfig.excludedPackages.toSet(),
+            dayStart,
+            System.currentTimeMillis()
+        )
     }
 
     /**

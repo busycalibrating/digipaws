@@ -5,7 +5,6 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -15,14 +14,13 @@ import neth.iecal.curbox.data.models.ReelBlocker
 import neth.iecal.curbox.data.models.ReelCountConfig
 import neth.iecal.curbox.data.models.ReelTimeConfig
 import neth.iecal.curbox.data.models.ReelUsageConfig
-import neth.iecal.curbox.data.models.ReelBlockingType
+import neth.iecal.curbox.data.models.ReelBlockerConfig
+import neth.iecal.curbox.data.models.upgradeLegacyConfig
 import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
 import neth.iecal.curbox.utils.DataStoreManager
 
 class ReelBlockerViewModel(application: Application) : AndroidViewModel(application) {
     private val dataStoreManager = DataStoreManager(application)
-    private val gson = Gson()
-
     private val _reelBlockerConfig = MutableStateFlow(ReelBlocker())
     val reelBlockerConfig: StateFlow<ReelBlocker> = _reelBlockerConfig
     private val _temporaryDisableAvailable = MutableStateFlow(true)
@@ -30,8 +28,8 @@ class ReelBlockerViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         viewModelScope.launch {
-            dataStoreManager.settings.collectLatest { settings ->
-                _reelBlockerConfig.value = settings.reelBlockerConfig
+            dataStoreManager.settingsForEditing.collectLatest { settings ->
+                _reelBlockerConfig.value = settings.reelBlockerConfig.upgradeLegacyConfig()
                 _temporaryDisableAvailable.value = !settings.settingsChangeDelayConfig.isEnabled
             }
         }
@@ -66,44 +64,38 @@ class ReelBlockerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun setBlockingType(type: ReelBlockingType) {
-        updateConfig(_reelBlockerConfig.value.copy(blockingType = type))
-    }
-
     fun updateWarningConfig(config: AppBlockerWarningScreenConfig) {
         updateConfig(_reelBlockerConfig.value.copy(warningScreenConfig = config))
     }
 
+    fun updateExcludedPackages(packages: List<String>) {
+        updateConfig(_reelBlockerConfig.value.copy(excludedPackages = packages.distinct()))
+    }
+
     fun getReelTimeConfig(): ReelTimeConfig {
-        return try {
-            if (_reelBlockerConfig.value.settings.isEmpty()) ReelTimeConfig()
-            else gson.fromJson(_reelBlockerConfig.value.settings, ReelTimeConfig::class.java)
-        } catch(e: Exception) { ReelTimeConfig() }
+        return _reelBlockerConfig.value.config?.schedule ?: ReelTimeConfig()
     }
 
     fun saveReelTimeConfig(config: ReelTimeConfig) {
-        updateConfig(_reelBlockerConfig.value.copy(settings = gson.toJson(config)))
+        val current = _reelBlockerConfig.value.config ?: ReelBlockerConfig()
+        updateConfig(_reelBlockerConfig.value.copy(config = current.copy(schedule = config)))
     }
 
     fun getReelUsageConfig(): ReelUsageConfig {
-        return try {
-            if (_reelBlockerConfig.value.settings.isEmpty()) ReelUsageConfig()
-            else gson.fromJson(_reelBlockerConfig.value.settings, ReelUsageConfig::class.java)
-        } catch(e: Exception) { ReelUsageConfig() }
+        return _reelBlockerConfig.value.config?.usage ?: ReelUsageConfig(uniformLimit = 0)
     }
 
     fun saveReelUsageConfig(config: ReelUsageConfig) {
-        updateConfig(_reelBlockerConfig.value.copy(settings = gson.toJson(config)))
+        val current = _reelBlockerConfig.value.config ?: ReelBlockerConfig()
+        updateConfig(_reelBlockerConfig.value.copy(config = current.copy(usage = config)))
     }
 
     fun getReelCountConfig(): ReelCountConfig {
-        return try {
-            if (_reelBlockerConfig.value.settings.isEmpty()) ReelCountConfig()
-            else gson.fromJson(_reelBlockerConfig.value.settings, ReelCountConfig::class.java)
-        } catch(e: Exception) { ReelCountConfig() }
+        return _reelBlockerConfig.value.config?.reelCount ?: ReelCountConfig(uniformLimit = 0)
     }
 
     fun saveReelCountConfig(config: ReelCountConfig) {
-        updateConfig(_reelBlockerConfig.value.copy(settings = gson.toJson(config)))
+        val current = _reelBlockerConfig.value.config ?: ReelBlockerConfig()
+        updateConfig(_reelBlockerConfig.value.copy(config = current.copy(reelCount = config)))
     }
 }

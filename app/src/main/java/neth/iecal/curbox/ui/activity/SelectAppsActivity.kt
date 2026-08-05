@@ -92,6 +92,10 @@ class SelectAppsActivity : AppCompatActivity() {
 
         Log.d("pre-selected-apps", selectedAppList.toString())
 
+        binding.selectAppsMagic.visibility = if (
+            intent.getBooleanExtra("ALLOW_CUSTOM_APPS", true)
+        ) View.VISIBLE else View.GONE
+
         binding.appList.layoutManager = LinearLayoutManager(this)
 
         binding.selectAppsMagic.setOnClickListener {
@@ -197,7 +201,9 @@ class SelectAppsActivity : AppCompatActivity() {
                         )
                     )
                 } catch (e: Exception) {
-                    appItemList.add(AppItem(packageName))
+                    if (selectedAppList.contains(packageName)) {
+                        appItemList.add(AppItem(packageName))
+                    }
                 }
             }
         } else {

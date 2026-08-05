@@ -331,6 +331,8 @@
     <string name="dialog_selected_count">Selecionados: %1$d</string>
     <string name="dialog_turn_on_dnd">Ativar não perturbe</string>
     <string name="reel_blocker_title">Bloquear vídeos curtos</string>
+    <string name="reel_blocker_allowed_apps_zero">Apps permitidos (0)</string>
+    <string name="reel_blocker_allowed_apps_count">Apps permitidos (%1$d)</string>
     <string name="label_show_more">Mostrar mais</string>
     <string name="label_all_time">Todo o período</string>
     <string name="btn_clear_filters">Limpar filtros</string>

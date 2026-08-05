@@ -331,6 +331,8 @@
     <string name="dialog_selected_count">Seleccionados: %1$d</string>
     <string name="dialog_turn_on_dnd">Activar no molestar</string>
     <string name="reel_blocker_title">Bloquear contenido de formato corto</string>
+    <string name="reel_blocker_allowed_apps_zero">Apps permitidas (0)</string>
+    <string name="reel_blocker_allowed_apps_count">Apps permitidas (%1$d)</string>
     <string name="label_show_more">Ver más</string>
     <string name="label_all_time">Todo el tiempo</string>
     <string name="btn_clear_filters">Borrar filtros</string>

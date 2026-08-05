@@ -13,7 +13,6 @@ import neth.iecal.curbox.data.models.KeywordBlocker
 import neth.iecal.curbox.data.models.KeywordGroup
 import neth.iecal.curbox.data.models.MindfulMessageConfig
 import neth.iecal.curbox.data.models.ReelBlocker
-import neth.iecal.curbox.data.models.ReelBlockingType
 import neth.iecal.curbox.data.models.ReelCountConfig
 import neth.iecal.curbox.data.models.ReelTimeConfig
 import neth.iecal.curbox.data.models.ReelUsageConfig
@@ -21,6 +20,7 @@ import neth.iecal.curbox.data.models.Settings
 import neth.iecal.curbox.data.models.SettingsChangeDelayConfig
 import neth.iecal.curbox.data.models.TimeInterval
 import neth.iecal.curbox.data.models.UiHiderConfig
+import neth.iecal.curbox.data.models.upgradeLegacyConfig
 import neth.iecal.curbox.hardcoded.allScripts
 
 /**
@@ -115,35 +115,23 @@ object RestrictionComparator {
     }
 
     fun reelBlocker(old: ReelBlocker, new: ReelBlocker): Boolean {
-        if (!old.isActive) return true
-        if (!new.isActive) return false
-        if (new.blockingType != old.blockingType) return false
-        if (!warningConfig(old.warningScreenConfig, new.warningScreenConfig)) return false
-        if (old.settings == new.settings) return true
-        return when (old.blockingType) {
-            ReelBlockingType.TIMED -> {
-                val o = parse<ReelTimeConfig>(old.settings) ?: return false
-                val n = parse<ReelTimeConfig>(new.settings) ?: return false
-                timeCoverageSameOrWider(
-                    oldFor = { day -> if (o.isEveryday) o.everydayIntervals else o.dailyIntervals[day] ?: mutableListOf() },
-                    newFor = { day -> if (n.isEveryday) n.everydayIntervals else n.dailyIntervals[day] ?: mutableListOf() }
-                )
-            }
-            ReelBlockingType.USAGE -> {
-                val o = parse<ReelUsageConfig>(old.settings) ?: return false
-                val n = parse<ReelUsageConfig>(new.settings) ?: return false
-                val oldLimits = if (o.isDailyUniform) List(7) { o.uniformLimit } else o.dailyLimits.toList()
-                val newLimits = if (n.isDailyUniform) List(7) { n.uniformLimit } else n.dailyLimits.toList()
-                newLimits.indices.all { newLimits[it] <= oldLimits[it] }
-            }
-            ReelBlockingType.REEL_COUNT -> {
-                val o = parse<ReelCountConfig>(old.settings) ?: return false
-                val n = parse<ReelCountConfig>(new.settings) ?: return false
-                val oldLimits = if (o.isDailyUniform) List(7) { o.uniformLimit } else o.dailyLimits.toList()
-                val newLimits = if (n.isDailyUniform) List(7) { n.uniformLimit } else n.dailyLimits.toList()
-                newLimits.indices.all { newLimits[it] <= oldLimits[it] }
-            }
-        }
+        val o = old.upgradeLegacyConfig(gson)
+        val n = new.upgradeLegacyConfig(gson)
+        if (!o.isActive) return true
+        if (!n.isActive) return false
+        if (!o.excludedPackages.containsAll(n.excludedPackages)) return false
+        if (!warningConfig(o.warningScreenConfig, n.warningScreenConfig)) return false
+        val oldConfig = o.config ?: return false
+        val newConfig = n.config ?: return false
+        val oldUsage = if (oldConfig.usage.isDailyUniform) List(7) { oldConfig.usage.uniformLimit } else oldConfig.usage.dailyLimits.toList()
+        val newUsage = if (newConfig.usage.isDailyUniform) List(7) { newConfig.usage.uniformLimit } else newConfig.usage.dailyLimits.toList()
+        val oldCount = if (oldConfig.reelCount.isDailyUniform) List(7) { oldConfig.reelCount.uniformLimit } else oldConfig.reelCount.dailyLimits.toList()
+        val newCount = if (newConfig.reelCount.isDailyUniform) List(7) { newConfig.reelCount.uniformLimit } else newConfig.reelCount.dailyLimits.toList()
+        return timeCoverageSameOrWider(
+            oldFor = { day -> if (oldConfig.schedule.isEveryday) oldConfig.schedule.everydayIntervals else oldConfig.schedule.dailyIntervals[day] ?: mutableListOf() },
+            newFor = { day -> if (newConfig.schedule.isEveryday) newConfig.schedule.everydayIntervals else newConfig.schedule.dailyIntervals[day] ?: mutableListOf() }
+        ) && newUsage.indices.all { newUsage[it] <= oldUsage[it] } &&
+            newCount.indices.all { newCount[it] <= oldCount[it] }
     }
 
     fun grayscaleGroups(old: List<GrayscaleGroup>, new: List<GrayscaleGroup>): Boolean {

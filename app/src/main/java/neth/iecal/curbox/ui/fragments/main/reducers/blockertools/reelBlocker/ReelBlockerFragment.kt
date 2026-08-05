@@ -1,23 +1,25 @@
 package neth.iecal.curbox.ui.fragments.main.reducers.blockertools.reelBlocker
 
-import android.R.attr.type
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import neth.iecal.curbox.R
-import neth.iecal.curbox.data.models.ReelBlockingType
 import neth.iecal.curbox.databinding.ReelBlockerFragmentBinding
-import neth.iecal.curbox.utils.ViewUtils
-import neth.iecal.curbox.utils.TemporaryDisableDialog
+import neth.iecal.curbox.hardcoded.ReelAppConfig
+import neth.iecal.curbox.ui.activity.SelectAppsActivity
 import neth.iecal.curbox.utils.SettingsChangeDelayUtils
-import androidx.core.view.isVisible
-import android.widget.RadioButton
+import neth.iecal.curbox.utils.TemporaryDisableDialog
+import neth.iecal.curbox.utils.ViewUtils
 
 class ReelBlockerFragment : Fragment() {
 
@@ -26,6 +28,17 @@ class ReelBlockerFragment : Fragment() {
     
     private val viewModel: ReelBlockerViewModel by activityViewModels()
     private var isUpdatingUi = false
+
+    private val selectExcludedAppsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == AppCompatActivity.RESULT_OK) {
+            result.data?.getStringArrayListExtra("SELECTED_APPS")?.let { packages ->
+                viewModel.updateExcludedPackages(packages)
+            }
+        }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -36,41 +49,8 @@ class ReelBlockerFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        setupBlockingTypeSelection()
         setupListeners()
         observeViewModel()
-    }
-
-    private fun setupBlockingTypeSelection() {
-        val radioButtons = listOf(binding.rbTypeTime, binding.rbTypeUsage, binding.rbTypeCount)
-        
-        radioButtons.forEach { rb ->
-            rb.setOnClickListener {
-                if (!isUpdatingUi) {
-                    radioButtons.forEach { it.isChecked = false }
-                    rb.isChecked = true
-                    
-                    val type = when (rb.id) {
-                        R.id.rb_type_time -> ReelBlockingType.TIMED
-                        R.id.rb_type_usage -> ReelBlockingType.USAGE
-                        R.id.rb_type_count -> ReelBlockingType.REEL_COUNT
-                        else -> ReelBlockingType.TIMED
-                    }
-                    viewModel.setBlockingType(type)
-                    updateConfigureButtonText(type)
-                }
-            }
-        }
-
-        binding.btnHelpTime.setOnClickListener {
-            ViewUtils.showHelpPopup(it, "Allow short videos during specific time intervals.", "https://curbox.app/docs/reducers/short-form-video/")
-        }
-        binding.btnHelpUsage.setOnClickListener {
-            ViewUtils.showHelpPopup(it, "Set a total time limit for watching short videos across all apps.", "https://curbox.app/docs/reducers/short-form-video/")
-        }
-        binding.btnHelpCount.setOnClickListener {
-            ViewUtils.showHelpPopup(it, "Limit the number of short videos you can scroll through per day.", "https://curbox.app/docs/reducers/video-counter/")
-        }
     }
 
     private fun setupListeners() {
@@ -109,12 +89,26 @@ class ReelBlockerFragment : Fragment() {
             }
         }
 
-        binding.btnConfigureLimits.setOnClickListener {
-            when (viewModel.reelBlockerConfig.value.blockingType) {
-                ReelBlockingType.TIMED -> ReelBlockerTimeSettingsFragment().show(childFragmentManager, ReelBlockerTimeSettingsFragment.FRAGMENT_ID)
-                ReelBlockingType.USAGE -> ReelBlockerUsageSettingsFragment().show(childFragmentManager, ReelBlockerUsageSettingsFragment.FRAGMENT_ID)
-                ReelBlockingType.REEL_COUNT -> ReelBlockerCountSettingsFragment().show(childFragmentManager, ReelBlockerCountSettingsFragment.FRAGMENT_ID)
+        binding.btnConfigureSchedule.setOnClickListener {
+            ReelBlockerTimeSettingsFragment().show(childFragmentManager, ReelBlockerTimeSettingsFragment.FRAGMENT_ID)
+        }
+
+        binding.btnConfigureUsage.setOnClickListener {
+            ReelBlockerUsageSettingsFragment().show(childFragmentManager, ReelBlockerUsageSettingsFragment.FRAGMENT_ID)
+        }
+
+        binding.btnConfigureCount.setOnClickListener {
+            ReelBlockerCountSettingsFragment().show(childFragmentManager, ReelBlockerCountSettingsFragment.FRAGMENT_ID)
+        }
+
+        binding.btnAllowedApps.setOnClickListener {
+            val config = viewModel.reelBlockerConfig.value
+            val intent = Intent(requireContext(), SelectAppsActivity::class.java).apply {
+                putStringArrayListExtra("PRE_SELECTED_APPS", ArrayList(config.excludedPackages))
+                putStringArrayListExtra("APP_LIST", ArrayList(ReelAppConfig.reelData.keys.sorted()))
+                putExtra("ALLOW_CUSTOM_APPS", false)
             }
+            selectExcludedAppsLauncher.launch(intent)
         }
     }
 
@@ -142,30 +136,15 @@ class ReelBlockerFragment : Fragment() {
                     )
                 }
 
-                val checkedId = when (config.blockingType) {
-                    ReelBlockingType.TIMED -> R.id.rb_type_time
-                    ReelBlockingType.USAGE -> R.id.rb_type_usage
-                    ReelBlockingType.REEL_COUNT -> R.id.rb_type_count
-                }
-                
-                listOf(binding.rbTypeTime, binding.rbTypeUsage, binding.rbTypeCount).forEach {
-                    it.isChecked = it.id == checkedId
-                }
-                
-                updateConfigureButtonText(config.blockingType)
+                binding.btnAllowedApps.text = getString(
+                    R.string.reel_blocker_allowed_apps_count,
+                    config.excludedPackages.size
+                )
                 isUpdatingUi = false
             }
         }
     }
     
-    private fun updateConfigureButtonText(type: ReelBlockingType) {
-        binding.btnConfigureLimits.text = when (type) {
-            ReelBlockingType.TIMED -> "Configure Allowed Schedule"
-            ReelBlockingType.USAGE -> "Configure Usage Limits"
-            ReelBlockingType.REEL_COUNT -> "Configure Reel Count Limit"
-        }
-    }
-
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
