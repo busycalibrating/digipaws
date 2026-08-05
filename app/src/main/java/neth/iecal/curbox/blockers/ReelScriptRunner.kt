@@ -58,7 +58,10 @@ class ReelScriptRunner {
                     "type" to eventTypeName(event.eventType),
                     "package" to packageName,
                     "text" to event.text.joinToString(" ").takeIf { it.isNotEmpty() },
-                    "class" to event.className?.toString()
+                    "class" to event.className?.toString(),
+                    "fromIndex" to event.fromIndex.toDouble(),
+                    "toIndex" to event.toIndex.toDouble(),
+                    "itemCount" to event.itemCount.toDouble()
                 )
             ),
             scriptId = "reel::$packageName",

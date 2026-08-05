@@ -48,6 +48,22 @@ class ReelAppConfig {
                 scriptSource = instagramScript("com.myinsta.android")
             ),
 
+            "com.instagram.lite" to ReelAppData(
+                scriptSource = """
+                    ${isOnScreenFunction()}
+
+                    reel = find(path="android.widget.FrameLayout[0]>androidx.recyclerview.widget.RecyclerView[0]>android.view.ViewGroup[0]>android.view.ViewGroup[0]")
+                    if not isOnScreen(reel) or reel.h < screen.height * 0.8 { return null }
+
+                    if event.fromIndex < 0 { return "" }
+                    return "position:" + str(event.fromIndex)
+                """.trimIndent(),
+                eventType = AccessibilityEvent.TYPE_VIEW_SCROLLED or
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
+                deduplicateComparators = false,
+                initialComparator = "position:0"
+            ),
+
             "com.google.android.youtube" to ReelAppData(
                 scriptSource = youtubeScript("com.google.android.youtube"),
                 comparisonResultCleanser = ::cleanYouTubeComparator,

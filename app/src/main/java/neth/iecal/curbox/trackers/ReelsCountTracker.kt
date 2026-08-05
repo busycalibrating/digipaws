@@ -92,6 +92,11 @@ class ReelsCountTracker {
             val data = reelData[pkg]
 
             if (data != null) {
+                if (dynamicComparator == null) {
+                    lastDynamicText.remove(pkg)
+                    hideReelCounter()
+                    return
+                }
                 if ((event.eventType and data.eventType) == 0) return
                 if (Settings.canDrawOverlays(service) && !overlayManager.isOverlayVisible) {
                     postOverlayUpdate {
@@ -102,7 +107,12 @@ class ReelsCountTracker {
                     }
                 }
 
-                checkForReelProgression(pkg, dynamicComparator)
+                checkForReelProgression(
+                    pkg,
+                    dynamicComparator,
+                    data.deduplicateComparators,
+                    data.initialComparator
+                )
             } else if (overlayManager.isOverlayVisible) {
                 postOverlayUpdate { overlayManager.removeOverlay() }
                 return
@@ -114,23 +124,32 @@ class ReelsCountTracker {
         }
     }
 
-    private fun checkForReelProgression(pkg: String, currentText: String?) {
-        if (currentText == null) {
-            hideReelCounter()
+    private fun checkForReelProgression(
+        pkg: String,
+        currentText: String,
+        deduplicateComparators: Boolean,
+        initialComparator: String?
+    ) {
+        if (currentText.trim().isBlank()) {
+            if (!initialComparator.isNullOrBlank() && lastDynamicText[pkg].isNullOrEmpty()) {
+                lastDynamicText[pkg] = initialComparator
+            }
             return
         }
-
-        if (currentText.trim().isBlank()) return
 
         val previousText = lastDynamicText[pkg] ?: ""
         if (currentText != previousText) {
             val isSubstantialChange = isSubstantialTextChange(currentText, previousText)
 
             if (previousText.isNotEmpty() && isSubstantialChange) {
-                val appCache = seenReelsCache.getOrPut(pkg) { LruCache(50) }
-                if (appCache.get(currentText) == null) {
+                if (!deduplicateComparators) {
                     onReelCounted()
-                    appCache.put(currentText, true)
+                } else {
+                    val appCache = seenReelsCache.getOrPut(pkg) { LruCache(50) }
+                    if (appCache.get(currentText) == null) {
+                        onReelCounted()
+                        appCache.put(currentText, true)
+                    }
                 }
             }
             
