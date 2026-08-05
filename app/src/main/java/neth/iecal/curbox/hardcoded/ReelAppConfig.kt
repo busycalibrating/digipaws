@@ -105,6 +105,39 @@ class ReelAppConfig {
                     return comparator.subtreeText(32, 20000)
                 """.trimIndent(),
                 eventType = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
+            ),
+
+            "com.zhiliaoapp.musically" to ReelAppData(
+                scriptSource = """
+                    ${isOnScreenFunction()}
+
+                    viewer = find(id="com.zhiliaoapp.musically:id/view_pager_layout_wrapper")
+                    video = find(id="com.zhiliaoapp.musically:id/long_press_layout")
+                    # TikTok reports the video node as hidden even while its full screen viewer is visible.
+                    if not isOnScreen(viewer) or video == null { return null }
+                    if viewer.w < screen.width * 0.9 or viewer.h < screen.height * 0.75 {
+                        return null
+                    }
+
+                    commentEditor = find(class="android.widget.EditText")
+                    if isOnScreen(commentEditor) and commentEditor.top > screen.height * 0.6 {
+                        return null
+                    }
+
+                    comparator = ""
+                    author = find(id="com.zhiliaoapp.musically:id/title")
+                    if isOnScreen(author) {
+                        comparator = comparator + author.subtreeText(2, 1000)
+                    }
+
+                    sound = find(id="com.zhiliaoapp.musically:id/p89")
+                    if isOnScreen(sound) {
+                        comparator = comparator + sound.subtreeText(4, 2000)
+                    }
+                    return comparator
+                """.trimIndent(),
+                eventType = AccessibilityEvent.TYPE_VIEW_SCROLLED or
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             )
         )
 
