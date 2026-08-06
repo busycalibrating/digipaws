@@ -44,6 +44,7 @@ import kotlinx.coroutines.withContext
 import neth.iecal.curbox.utils.ViewUtils
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.db.WebsiteStatsEntity
+import neth.iecal.curbox.data.db.ReelUsageStatsEntity
 import neth.iecal.curbox.databinding.AppUsageItemBinding
 
 import neth.iecal.curbox.databinding.FragmentAllAppUsageBinding
@@ -348,12 +349,29 @@ class AllAppsUsageFragment : Fragment() {
 
             viewModel.selectedDayStats.observe(viewLifecycleOwner) { stats ->
                 if (_binding == null) return@observe
-                adapter.updateData(stats, viewModel.selectedDayWebsiteStats.value ?: emptyList())
+                adapter.updateData(
+                    stats,
+                    viewModel.selectedDayWebsiteStats.value ?: emptyList(),
+                    viewModel.selectedDayReelUsageStats.value ?: emptyList()
+                )
             }
 
             viewModel.selectedDayWebsiteStats.observe(viewLifecycleOwner) { websiteStats ->
                 if (_binding == null) return@observe
-                adapter.updateData(viewModel.selectedDayStats.value ?: emptyList(), websiteStats)
+                adapter.updateData(
+                    viewModel.selectedDayStats.value ?: emptyList(),
+                    websiteStats,
+                    viewModel.selectedDayReelUsageStats.value ?: emptyList()
+                )
+            }
+
+            viewModel.selectedDayReelUsageStats.observe(viewLifecycleOwner) { reelStats ->
+                if (_binding == null) return@observe
+                adapter.updateData(
+                    viewModel.selectedDayStats.value ?: emptyList(),
+                    viewModel.selectedDayWebsiteStats.value ?: emptyList(),
+                    reelStats
+                )
             }
 
             viewModel.totalTime.observe(viewLifecycleOwner) { totalMs ->
@@ -562,7 +580,11 @@ class AllAppsUsageFragment : Fragment() {
         inner class AppUsageViewHolder(private val binding: AppUsageItemBinding) :
             RecyclerView.ViewHolder(binding.root) {
 
-            fun bind(stats: Stat, websiteStats: List<WebsiteStatsEntity>) {
+            fun bind(
+                stats: Stat,
+                websiteStats: List<WebsiteStatsEntity>,
+                reelUsageStats: List<ReelUsageStatsEntity>
+            ) {
                 val metadata = viewModel.getAppMetadata(stats.packageName)
                 binding.appIcon.setImageDrawable(
                     metadata.icon ?: ContextCompat.getDrawable(
@@ -623,6 +645,9 @@ class AllAppsUsageFragment : Fragment() {
                         domain to stats.sumOf { it.totalTime }
                     }
                     .sortedByDescending { it.second }
+                val reelUsage = reelUsageStats.find {
+                    it.packageName == stats.packageName && (it.totalTime > 0L || it.reelCount > 0)
+                }
 
                 Log.d("website stats", browserWebsites.toString())
                 if (browserWebsites.isNotEmpty()) {
@@ -631,7 +656,7 @@ class AllAppsUsageFragment : Fragment() {
                     for (i in top5.indices) {
                         val (domain, time) = top5[i]
                         val prefix =
-                            if (i == top5.size - 1 && browserWebsites.size <= 5) "└" else "├"
+                            if (i == top5.size - 1 && browserWebsites.size <= 5 && reelUsage == null) "└" else "├"
                         val tv = TextView(binding.root.context).apply {
                             text = "$prefix  $domain • ${TimeTools.formatDuration(time)}"
                             textSize = 12f
@@ -650,7 +675,11 @@ class AllAppsUsageFragment : Fragment() {
 
                     if (browserWebsites.size > 5) {
                         val seeMoreTv = TextView(binding.root.context).apply {
-                            text = "└  See more websites..."
+                            text = if (reelUsage == null) {
+                                "└  See more websites..."
+                            } else {
+                                "├  See more websites..."
+                            }
                             textSize = 12f
                             setTextColor(
                                 MaterialColors.getColor(
@@ -672,15 +701,52 @@ class AllAppsUsageFragment : Fragment() {
                         }
                         binding.threadContainer.addView(seeMoreTv)
                     }
-                } else {
+                } else if (reelUsage == null) {
                     binding.threadContainer.visibility = View.GONE
+                }
+
+                if (reelUsage != null) {
+                    binding.threadContainer.visibility = View.VISIBLE
+                    val averageAttentionSpan = reelUsage.totalTime / maxOf(reelUsage.reelCount, 1)
+                    val shortFormVideoRows = listOf(
+                        binding.root.context.getString(
+                            R.string.usage_short_form_videos_scrolled,
+                            reelUsage.reelCount
+                        ),
+                        binding.root.context.getString(
+                            R.string.usage_short_form_video_duration,
+                            TimeTools.formatDuration(reelUsage.totalTime)
+                        ),
+                        binding.root.context.getString(
+                            R.string.usage_short_form_video_average_attention,
+                            TimeTools.formatTimeInHHMM(averageAttentionSpan)
+                        )
+                    )
+                    shortFormVideoRows.forEachIndexed { index, row ->
+                        val prefix = if (index == shortFormVideoRows.lastIndex) "└" else "├"
+                        val reelText = TextView(binding.root.context).apply {
+                            text = "$prefix  $row"
+                            textSize = 12f
+                            setTextColor(
+                                MaterialColors.getColor(
+                                    binding.root,
+                                    com.google.android.material.R.attr.colorOnSurfaceVariant
+                                )
+                            )
+                            setPadding(0, 4, 0, 4)
+                            maxLines = 1
+                            ellipsize = TextUtils.TruncateAt.END
+                        }
+                        binding.threadContainer.addView(reelText)
+                    }
                 }
             }
         }
 
         inner class AppUsageAdapter(
             private var appUsageStats: List<Stat>,
-            private var websiteStats: List<WebsiteStatsEntity> = emptyList()
+            private var websiteStats: List<WebsiteStatsEntity> = emptyList(),
+            private var reelUsageStats: List<ReelUsageStatsEntity> = emptyList()
         ) : RecyclerView.Adapter<AppUsageViewHolder>() {
 
             override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AppUsageViewHolder {
@@ -690,16 +756,18 @@ class AllAppsUsageFragment : Fragment() {
             }
 
             override fun onBindViewHolder(holder: AppUsageViewHolder, position: Int) {
-                holder.bind(appUsageStats[position], websiteStats)
+                holder.bind(appUsageStats[position], websiteStats, reelUsageStats)
             }
 
             @SuppressLint("NotifyDataSetChanged")
             fun updateData(
                 newAppUsageStats: List<Stat>,
-                newWebsiteStats: List<WebsiteStatsEntity> = emptyList()
+                newWebsiteStats: List<WebsiteStatsEntity> = emptyList(),
+                newReelUsageStats: List<ReelUsageStatsEntity> = emptyList()
             ) {
                 appUsageStats = newAppUsageStats
                 websiteStats = newWebsiteStats
+                reelUsageStats = newReelUsageStats
                 notifyDataSetChanged()
             }
 

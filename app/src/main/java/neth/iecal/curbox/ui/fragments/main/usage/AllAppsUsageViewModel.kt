@@ -21,6 +21,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import neth.iecal.curbox.data.db.WebsiteStatsEntity
+import neth.iecal.curbox.data.db.ReelUsageStatsEntity
 import neth.iecal.curbox.data.db.AppDatabase
 import neth.iecal.curbox.utils.DataStoreManager
 import java.text.SimpleDateFormat
@@ -32,6 +33,7 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
     private val usageStatsHelper = UsageStatsHelper(application)
     private val packageManager = application.packageManager
     private val websiteStatsDao = AppDatabase.getInstance(application).websiteStatsDao()
+    private val reelUsageStatsDao = AppDatabase.getInstance(application).reelUsageStatsDao()
 
     // Search keywords typed in the URL bar get stored with the raw text as the domain.
     // A real website domain has no spaces and contains at least one dot (e.g. "youtube.com").
@@ -79,6 +81,9 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
 
     private val _selectedDayWebsiteStats = MutableLiveData<List<WebsiteStatsEntity>>()
     val selectedDayWebsiteStats: LiveData<List<WebsiteStatsEntity>> = _selectedDayWebsiteStats
+
+    private val _selectedDayReelUsageStats = MutableLiveData<List<ReelUsageStatsEntity>>()
+    val selectedDayReelUsageStats: LiveData<List<ReelUsageStatsEntity>> = _selectedDayReelUsageStats
 
     // Total usage time in millis for selected day
     private val _totalTime = MutableLiveData<Long>(0L)
@@ -252,8 +257,9 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
             "TOTAL · ${date.format(dayLabelFormatter)}"
         }
 
-        val dateString = date.format(DateTimeFormatter.ofPattern("dd MMMM yyyy", Locale.getDefault()))
+        val dateString = neth.iecal.curbox.utils.TimeTools.dayKey(date)
         val websiteStats = websiteStatsDao.getStatsForDate(dateString).filter { it.isWebsite() }
+        val reelUsageStats = reelUsageStatsDao.getForDate(dateString)
 
         // Fold in website usage synced from other devices (e.g. the browser
         // extension) as a single "Synced browsing" row. Empty on F-Droid.
@@ -286,6 +292,7 @@ class AllAppsUsageViewModel(application: Application) : AndroidViewModel(applica
         withContext(Dispatchers.Main) {
             _selectedDayStats.value = statsOut
             _selectedDayWebsiteStats.value = websiteOut
+            _selectedDayReelUsageStats.value = reelUsageStats
             _totalTime.value = total
             _dateSublabel.value = sublabel
         }

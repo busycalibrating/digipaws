@@ -1654,6 +1654,9 @@
     <string name="usage_export_format_title">Select Data Format</string>
     <string name="usage_widget_screentime">Screentime Stats</string>
     <string name="usage_widget_reels">Reels Stats</string>
+    <string name="usage_short_form_videos_scrolled">Short form videos scrolled • %1$d</string>
+    <string name="usage_short_form_video_duration">Duration • %1$s</string>
+    <string name="usage_short_form_video_average_attention">Average attention span • %1$s</string>
     <string name="usage_widget_pin_title">Select Widget to Pin</string>
     <string name="usage_ignore_title">Add to ignored packages?</string>
     <string name="usage_ignore_message">This action will cause the tracker to not display any stats from this app.</string>

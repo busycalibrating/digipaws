@@ -8,13 +8,14 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [ReelStatsEntity::class, ScrollPatternEntity::class, FocusStatsEntity::class, WebsiteStatsEntity::class, IntentLogEntity::class, AppUsageEntity::class],
-    version = 9,
+    entities = [ReelStatsEntity::class, ReelUsageStatsEntity::class, ScrollPatternEntity::class, FocusStatsEntity::class, WebsiteStatsEntity::class, IntentLogEntity::class, AppUsageEntity::class],
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun reelStatsDao(): ReelStatsDao
+    abstract fun reelUsageStatsDao(): ReelUsageStatsDao
     abstract fun scrollPatternDao(): ScrollPatternDao
     abstract fun focusStatsDao(): FocusStatsDao
     abstract fun websiteStatsDao(): WebsiteStatsDao
@@ -33,13 +34,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `reel_usage_stats` (
+                        `date` TEXT NOT NULL,
+                        `packageName` TEXT NOT NULL,
+                        `totalTime` INTEGER NOT NULL,
+                        `reelCount` INTEGER NOT NULL,
+                        `lastUpdated` INTEGER NOT NULL,
+                        PRIMARY KEY(`date`, `packageName`)
+                    )""".trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "curbox_db"
-                ).addMigrations(MIGRATION_8_9)
+                ).addMigrations(MIGRATION_8_9, MIGRATION_9_10)
                     .enableMultiInstanceInvalidation()
                     .fallbackToDestructiveMigration()
                     .build()

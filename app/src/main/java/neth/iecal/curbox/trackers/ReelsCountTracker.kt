@@ -49,16 +49,22 @@ class ReelsCountTracker {
     private var overlayConfig = ReelCounterOverlayConfig()
     private var todayCount = 0
     private var lastDateStr = TimeTools.getCurrentDate()
+    private var reelCountedCallback: (String) -> Unit = {}
 
 
     private val lastDynamicText = mutableMapOf<String, String>()
     private val seenReelsCache = mutableMapOf<String, LruCache<String, Boolean>>()
 
     private var ignored = listOf<String>()
-    fun setup(service: BaseBlockingService, overlayManager: ReelsOverlayManager) {
+    fun setup(
+        service: BaseBlockingService,
+        overlayManager: ReelsOverlayManager,
+        onReelCounted: (String) -> Unit
+    ) {
         this.service = service
         this.overlayManager = overlayManager
         crashLogger = CrashLogger(service)
+        reelCountedCallback = onReelCounted
 
         ignored = listOf("com.android.systemui",
             service.packageName,
@@ -143,11 +149,11 @@ class ReelsCountTracker {
 
             if (previousText.isNotEmpty() && isSubstantialChange) {
                 if (!deduplicateComparators) {
-                    onReelCounted()
+                    onReelCounted(pkg)
                 } else {
                     val appCache = seenReelsCache.getOrPut(pkg) { LruCache(50) }
                     if (appCache.get(currentText) == null) {
-                        onReelCounted()
+                        onReelCounted(pkg)
                         appCache.put(currentText, true)
                     }
                 }
@@ -161,13 +167,14 @@ class ReelsCountTracker {
 
     fun getTodayCount(): Int = todayCount
 
-    private fun onReelCounted() {
+    private fun onReelCounted(packageName: String) {
         val date = TimeTools.getCurrentDate()
         if (date != lastDateStr) {
             todayCount = 0
             lastDateStr = date
         }
         todayCount++
+        reelCountedCallback(packageName)
         overlayManager.reelsScrolledThisSession = todayCount
 
         postOverlayUpdate {
@@ -193,7 +200,11 @@ class ReelsCountTracker {
     private val refreshReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                INTENT_ACTION_REFRESH_REEL_COUNTER -> setup(service, overlayManager)
+                INTENT_ACTION_REFRESH_REEL_COUNTER -> setup(
+                    service,
+                    overlayManager,
+                    reelCountedCallback
+                )
             }
         }
     }

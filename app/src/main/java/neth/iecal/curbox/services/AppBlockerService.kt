@@ -30,6 +30,7 @@ import neth.iecal.curbox.blockers.uihider.NodePicker
 import neth.iecal.curbox.blockers.uihider.UiHider
 import neth.iecal.curbox.trackers.AppUsageTracker
 import neth.iecal.curbox.trackers.ReelsCountTracker
+import neth.iecal.curbox.trackers.ReelUsageTracker
 import neth.iecal.curbox.trackers.WebsiteObservation
 import neth.iecal.curbox.trackers.WebsiteUsageTracker
 import neth.iecal.curbox.ui.overlay.ReelsOverlayManager
@@ -53,6 +54,7 @@ class AppBlockerService : BaseBlockingService() {
     // runs here so the user only has to grant one service.
     private val reelsOverlayManager by lazy { ReelsOverlayManager(this) }
     private val reelsCountTracker = ReelsCountTracker()
+    private val reelUsageTracker = ReelUsageTracker()
     private val mindfulMessage = MindfulMessage()
     private val websiteUsageTracker = WebsiteUsageTracker()
     private val appUsageTracker = AppUsageTracker()
@@ -123,6 +125,7 @@ class AppBlockerService : BaseBlockingService() {
                 try {
                     websiteUsageTracker.onEvent(event)
                     val reelComparator = reelScriptRunner.detect(event)
+                    reelUsageTracker.onEvent(event, reelComparator)
                     reelsCountTracker.onEvent(event, reelComparator)
                     reelBlocker.doViewBlockerCheck(event, reelComparator)
                     keywordBlocker.checkIfUnsupportedBrowser(event)
@@ -172,7 +175,8 @@ class AppBlockerService : BaseBlockingService() {
             antiUninstallBlocker.setupBlocker(this)
         }
 
-        reelsCountTracker.setup(this, reelsOverlayManager)
+        reelUsageTracker.setup(this)
+        reelsCountTracker.setup(this, reelsOverlayManager, reelUsageTracker::onReelCounted)
         mindfulMessage.setup(this)
         websiteUsageTracker.setup(this) { observation ->
             websiteObservationChannel.trySend(observation)
@@ -230,6 +234,7 @@ class AppBlockerService : BaseBlockingService() {
             }
             mindfulMessage.onDestroy()
             reelsCountTracker.onDestroy()
+            reelUsageTracker.onDestroy()
             websiteUsageTracker.onDestroy()
             appUsageTracker.onDestroy()
 

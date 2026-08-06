@@ -23,12 +23,10 @@ import neth.iecal.curbox.data.models.ReelTimeConfig
 import neth.iecal.curbox.data.models.ReelCountConfig
 import neth.iecal.curbox.data.models.upgradeLegacyConfig
 import neth.iecal.curbox.data.db.AppDatabase
-import neth.iecal.curbox.hardcoded.ReelAppConfig
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.ui.activity.WarningActivity
 import neth.iecal.curbox.utils.TimeTools
 import neth.iecal.curbox.utils.TimerNotification
-import neth.iecal.curbox.utils.UsageStatsHelper
 import java.util.Calendar
 
 class ReelBlocker : BaseBlocker() {
@@ -59,7 +57,6 @@ class ReelBlocker : BaseBlocker() {
     private var lastEventTimeStamp = 0L
 
     private lateinit var notificationManager: TimerNotification
-    private lateinit var usageStats: UsageStatsHelper
 
     fun doViewBlockerCheck(
         event: AccessibilityEvent?,
@@ -132,7 +129,6 @@ class ReelBlocker : BaseBlocker() {
         this.service = service
 
         notificationManager = TimerNotification(service)
-        usageStats = UsageStatsHelper(service)
 
         settingsJob?.cancel()
         countJob?.cancel()
@@ -247,17 +243,10 @@ class ReelBlocker : BaseBlocker() {
     }
 
     private fun getTodayReelUsageMillis(): Long = runBlocking {
-        val dayStart = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        usageStats.getForegroundUsageBetween(
-            ReelAppConfig.reelData.keys - reelBlockerConfig.excludedPackages.toSet(),
-            dayStart,
-            System.currentTimeMillis()
-        )
+        AppDatabase.getInstance(service).reelUsageStatsDao()
+            .getForDate(TimeTools.getCurrentDate())
+            .filter { it.packageName !in reelBlockerConfig.excludedPackages }
+            .sumOf { it.totalTime }
     }
 
     /**

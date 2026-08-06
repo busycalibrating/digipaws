@@ -71,5 +71,8 @@ object UsageStatsCleaner {
         stale(db.reelStatsDao().getDistinctDates()).chunked(500).forEach {
             db.reelStatsDao().deleteByDates(it)
         }
+        stale(db.reelUsageStatsDao().getDistinctDates()).chunked(500).forEach {
+            db.reelUsageStatsDao().deleteByDates(it)
+        }
     }
 }
