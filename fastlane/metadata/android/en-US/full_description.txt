@@ -1,11 +1,12 @@
-Curbox (Digipaws) is a free and open source app blocker and screen time tracker built for digital wellbeing and a real digital detox. As an app blocker it lets you block apps, websites, reels and shorts, then watch your screen time drop and your focus come back.
+Curbox (formerly Digipauwse) is a free and open source app blocker and screen time tracker built for digital wellbeing and a real digital detox. As an app blocker it lets you block apps, websites, reels and shorts, then watch your screen time drop and your focus come back.
 
 <b>Block apps and websites</b>
 
 • <b>App and Website Blocker</b>: block any distracting app or website completely
 • <b>URL Path Blocking</b>: block just one part of a site, like m.youtube.com/shorts, while the rest of YouTube still works
 • <b>Short Form Content Blocker</b>: shut off Instagram Reels and YouTube Shorts so the feed stops pulling you back
-• <b>Tamper Protection</b>: make it difficult to uninstall curbox or change configurations
+• <b>Tamper Protection</b>: make it difficult to uninstall Curbox or turn off its blocking service
+• <b>Settings Change Delay</b>: make weaker rule changes wait before they take effect, giving you time to reconsider
 
 <b>Hide only the distracting parts</b>
 
@@ -19,6 +20,7 @@ Granular UI Hiding lets you remove the trap inside an app without losing the app
 • <b>App Specific Grayscale</b>: drain the color out of Instagram while your Camera stays full color, so dull apps lose their pull
 • <b>Scheduled Usage Limits</b>: set when a group is active and how much use is available during that time
 • <b>Mindful Messages</b>: gentle nudges that run as overlay when you use an app
+• <b>Attention Span Tracking</b>: see how long you stay with short form videos before moving on
 
 
 <b>See your time</b>
@@ -40,6 +42,13 @@ When you use all the time available in a schedule, you decide what it takes to g
 • <b>QR or Barcode Unlock</b>: scan a real barcode, like one on a book, so you have to get up and move
 • <b>Sentence Retyping</b>: type out a full sentence before the app will open
 • <b>Unlock Limits</b>: cap how many unlocks you get every few hours
+• <b>NFC Unlock</b>: use a physical NFC tag to make unlocking a deliberate action
+• <b>Adaptive Math</b>: solve a changing math challenge before you can unlock
+
+
+<b>Built for developers</b>
+
+The <b>Curbox API</b> lets approved apps start Focus Mode, change Curbox settings, and read usage statistics. You stay in control of which apps receive access.
 
 
 Curbox is the app blocker for anyone who wants to block distracting apps and websites, cut screen time, and take back their focus. Free, open source, no ads.
