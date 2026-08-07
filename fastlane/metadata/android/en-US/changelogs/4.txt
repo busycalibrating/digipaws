@@ -1,9 +1,8 @@
-Action Required: Update Your Blocker Configurations
-We have made foundational changes to how all three blockers (app, website, and short-form) operate. As a result, your existing configurations may no longer work as expected.
+Action Required: Update Your Blocker Configurations. We have made foundational changes to how all three blockers (app, website, and short-form) operate. As a result, your existing configurations may no longer work as expected.
 We highly advise reviewing and updating your settings. Additionally, you will need to reconfigure both Tamper Protection and the Settings Change Delay.
 We apologize for any inconvenience this may cause!
 
-Please read the docs at curbox.app/docs to understand the changes!
+Please read the docs for app, wesbite, and shortform blockers at curbox.app/docs to understand the changes :)
 
 NEW:
 • Tack attention span on short form videos and block them on basis of usage
@@ -21,4 +20,6 @@ IMPROVEMENTS:
 • Add multiple active hour schedules for the same apps and link usage limits to a schedule
 • Improve App Pause and Keyword Blocker setup, schedule handling, and warning screens
 • Fix reel blocking and counting on Instagram, Facebook, and Snapchat
+• There are no upper limits in focus mode or warning configurations anymore
+
 
