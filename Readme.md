@@ -88,6 +88,7 @@ Curbox goes beyond simple app timers. It targets the specific triggers that lead
 - **Usage Analytics:** Detailed insights into app and website usage.
 - **Focus Statistics:** Track your progress and focus sessions.
 - **Live Scroll Counter:** See a real-time count of how many short-form videos you've scrolled through.
+- **Attention span tracking:** Know how well your attention span is while watching short form videos
 - **Session Timer:** A live timer showing how much time has elapsed since you opened a given app.
 
 #### Mindful Usage Tools
@@ -105,6 +106,9 @@ Define what happens when you try to open an app after its scheduled usage is fin
 - **QR/Barcode Unlock:** Requires scanning a physical QR code or barcode (e.g., from product boxes like books) to unlock. Spread them across your home to force physical movement!
 - **Sentence Retyping:** Requires physically typing a specific sentence (e.g., "I am giving up on my goals to use this app right now") to unlock.
 - **Unlock Limits:** Set how many subsequent unlocks you can perform every X hours.
+- **NFC** 
+- **Adaptive Math**
+
 
 #### For Developers
 - **[Curbox API](CURBOX_API.md):** Let your apps directly interact with curbox and start focus modes, change settings, get usage stats, etc. Requires user permission
@@ -132,7 +136,6 @@ for a new browser, etc.
 * All my beloved donors and sponsors
 * Digipauws: Inspiration for the entire code structure and working mechanism
 * Usage Direct: For help with app usage statistics.
-* Redd Focus: For the foundation of the view blocker system.
 * ShizuTools: For Shizuku runner implementations.
 * MPAndroidChart: For the beautiful graphs and charts.
 
