@@ -206,8 +206,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:layout_marginBottom="60dp"
             android:text="@string/usage_welcome_star_repo" />
+
+        <Button
+            android:id="@+id/btn_join_discord"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="60dp"
+            android:text="@string/join_the_discord" />
 
     </LinearLayout>
 

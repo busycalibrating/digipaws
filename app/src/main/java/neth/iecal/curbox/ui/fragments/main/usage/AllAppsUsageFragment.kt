@@ -333,6 +333,10 @@ class AllAppsUsageFragment : Fragment() {
             binding.btnStarRepo.setOnClickListener {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/nethical6/curbox")))
             }
+
+            binding.btnJoinDiscord.setOnClickListener {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.com/invite/Vs9mwUtuCN")))
+            }
         }
 
         private fun observeViewModel(adapter: AppUsageAdapter) {
