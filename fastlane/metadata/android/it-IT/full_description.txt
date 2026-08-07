@@ -6,6 +6,7 @@ Curbox (Digipaws) è un blocco app e monitoraggio del tempo di utilizzo gratuito
 • <b>Blocco per percorso URL</b>: blocca solo una parte di un sito, come m.youtube.com/shorts, mentre il resto di YouTube continua a funzionare
 • <b>Blocco dei contenuti brevi</b>: spegni i Reels di Instagram e gli Shorts di YouTube così il feed smette di richiamarti
 • <b>Protezione anti manomissione</b>: rende difficile disinstallare Curbox o cambiare le impostazioni
+• <b>Ritardo delle modifiche alle impostazioni</b>: ritarda le modifiche che indeboliscono le regole, dandoti tempo per ripensarci
 
 <b>Nascondi solo le parti che distraggono</b>
 
@@ -20,6 +21,7 @@ Il nascondimento preciso dell'interfaccia ti fa togliere la trappola dentro un'a
 • <b>Limiti d'uso</b>: blocca un'app o un sito dopo un certo tempo d'uso, come WhatsApp dopo 1 ora
 • <b>Accesso per orario</b>: consenti un'app solo in certe ore, come WhatsApp dalle 7 alle 21
 • <b>Messaggi consapevoli</b>: piccoli richiami che appaiono come strato quando usi un'app
+• <b>Monitoraggio dell'attenzione</b>: scopri quanto a lungo resti attento ai video brevi prima di passare oltre
 
 
 <b>Guarda il tuo tempo</b>
@@ -41,6 +43,13 @@ Quando provi ad aprire qualcosa fuori dal suo orario, decidi tu cosa serve per r
 • <b>Sblocco con QR o codice a barre</b>: scansiona un codice reale, come quello su un libro, così devi alzarti e muoverti
 • <b>Riscrittura di una frase</b>: scrivi una frase intera prima che l'app si apra
 • <b>Limiti di sblocco</b>: limita quanti sblocchi hai ogni poche ore
+• <b>Sblocco NFC</b>: usa un tag NFC fisico per rendere lo sblocco una scelta consapevole
+• <b>Matematica adattiva</b>: risolvi una sfida matematica che cambia prima di sbloccare
+
+
+<b>Per gli sviluppatori</b>
+
+L'<b>API di Curbox</b> permette alle app autorizzate di avviare la Modalità Focus, cambiare le impostazioni di Curbox e leggere le statistiche d'uso. Sei tu a decidere quali app ricevono l'accesso.
 
 
 Curbox è il blocco app per chi vuole bloccare app e siti che distraggono, ridurre il tempo di utilizzo e riprendersi la concentrazione. Gratis, open source, senza pubblicità.

@@ -6,6 +6,7 @@ Curbox (Digipaws) es un bloqueador de apps y control de tiempo de pantalla gratu
 • <b>Bloqueo por ruta de URL</b>: bloquea solo una parte de un sitio, como m.youtube.com/shorts, mientras el resto de YouTube sigue funcionando
 • <b>Bloqueo de contenido corto</b>: apaga los Reels de Instagram y los Shorts de YouTube para que el feed deje de atraerte
 • <b>Protección contra manipulación</b>: hace difícil desinstalar Curbox o cambiar la configuración
+• <b>Retraso de cambios de configuración</b>: retrasa los cambios que debilitan tus reglas para darte tiempo de reconsiderarlos
 
 <b>Oculta solo las partes que distraen</b>
 
@@ -20,6 +21,7 @@ El ocultamiento preciso de la interfaz te deja quitar la trampa dentro de una ap
 • <b>Límites por uso</b>: bloquea una app o web tras cierto tiempo de uso, como WhatsApp después de 1 hora
 • <b>Acceso por horario</b>: permite una app solo en ciertas horas, como WhatsApp de 7 a 21
 • <b>Mensajes conscientes</b>: avisos suaves que aparecen como capa cuando usas una app
+• <b>Seguimiento de la atención</b>: descubre cuánto tiempo mantienes la atención en vídeos cortos antes de pasar al siguiente
 
 
 <b>Mira tu tiempo</b>
@@ -41,6 +43,13 @@ Cuando intentas abrir algo fuera de su horario, tú decides qué hace falta para
 • <b>Desbloqueo con código QR o de barras</b>: escanea un código real, como el de un libro, para que tengas que levantarte y moverte
 • <b>Reescritura de frase</b>: escribe una frase completa antes de que la app se abra
 • <b>Límites de desbloqueo</b>: limita cuántos desbloqueos tienes cada pocas horas
+• <b>Desbloqueo NFC</b>: usa una etiqueta NFC física para convertir el desbloqueo en una decisión consciente
+• <b>Matemáticas adaptativas</b>: resuelve un reto matemático que cambia antes de desbloquear
+
+
+<b>Creado para desarrolladores</b>
+
+La <b>API de Curbox</b> permite a las apps autorizadas iniciar el Modo Enfoque, cambiar la configuración de Curbox y consultar estadísticas de uso. Tú decides qué apps reciben acceso.
 
 
 Curbox es el bloqueador de apps para quien quiere bloquear apps y webs que distraen, reducir el tiempo de pantalla y recuperar su concentración. Gratis, de código abierto, sin anuncios.
