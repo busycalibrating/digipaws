@@ -1,5 +1,7 @@
-IMPORTANT: There has been a foundational change to how all three blockers operate(app, website, short form) therefore your existing configs may have broken.
-It is highly adviced, you read the
+Action Required: Update Your Blocker Configurations
+We have made foundational changes to how all three blockers (app, website, and short-form) operate. As a result, your existing configurations may no longer work as expected.
+We highly advise reviewing and updating your settings. Additionally, you will need to reconfigure both Tamper Protection and the Settings Change Delay.
+We apologize for any inconvenience this may cause!
 
 NEW:
 • Tack attention span on short form videos and block them on basis of usage

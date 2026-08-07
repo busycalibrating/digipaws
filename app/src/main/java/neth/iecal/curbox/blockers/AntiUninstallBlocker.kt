@@ -44,7 +44,7 @@ class AntiUninstallBlocker : BaseBlocker() {
         this.service = service
         settingsJob?.cancel()
         settingsJob = CoroutineScope(Dispatchers.IO).launch {
-            service.dataStoreManager.settings.collectLatest { config = it.antiUninstallConfig }
+            service.dataStoreManager.settings.collectLatest { config = it.antiUninstallConfig2 }
         }
     }
 

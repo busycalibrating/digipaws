@@ -75,7 +75,7 @@ class KeywordBlockerViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch {
             dataStoreManager.settings.collectLatest { settings ->
                 _keywordBlockerConfig.value = settings.keywordBlockerConfig
-                _temporaryDisableAvailable.value = !settings.settingsChangeDelayConfig.isEnabled
+                _temporaryDisableAvailable.value = !settings.settingsChangeDelayConfig2.isEnabled
             }
         }
     }

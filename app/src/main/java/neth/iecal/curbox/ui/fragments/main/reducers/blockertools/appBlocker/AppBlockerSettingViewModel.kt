@@ -71,7 +71,7 @@ class AppBlockerSettingViewModel(application: Application) : AndroidViewModel(ap
             // This escape hatch must not become usable while enabling it is still pending.
             dataStoreManager.settings.collectLatest { settings ->
                 _temporaryDisableAvailable.value =
-                    !settings.settingsChangeDelayConfig.isEnabled
+                    !settings.settingsChangeDelayConfig2.isEnabled
             }
         }
     }

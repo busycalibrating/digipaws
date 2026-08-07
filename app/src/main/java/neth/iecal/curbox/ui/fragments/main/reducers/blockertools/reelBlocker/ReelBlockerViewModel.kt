@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import neth.iecal.curbox.blockers.AppBlocker
 import neth.iecal.curbox.data.models.ReelBlocker
 import neth.iecal.curbox.data.models.ReelCountConfig
 import neth.iecal.curbox.data.models.ReelTimeConfig
@@ -30,7 +29,7 @@ class ReelBlockerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             dataStoreManager.settingsForEditing.collectLatest { settings ->
                 _reelBlockerConfig.value = settings.reelBlockerConfig.upgradeLegacyConfig()
-                _temporaryDisableAvailable.value = !settings.settingsChangeDelayConfig.isEnabled
+                _temporaryDisableAvailable.value = !settings.settingsChangeDelayConfig2.isEnabled
             }
         }
     }

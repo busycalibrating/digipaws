@@ -58,13 +58,13 @@ private class ScheduledUsageConfigMigration(
     override suspend fun shouldMigrate(currentData: Settings): Boolean {
         if (currentData.blockedAppGroups.any { it.config == null }) return true
         if (currentData.keywordBlockerConfig.keywordGroups.any { it.config == null }) return true
-        return currentData.settingsChangeDelayConfig.pendingChanges.any {
+        return currentData.settingsChangeDelayConfig2.pendingChanges.any {
             pendingChangeNeedsMigration(it)
         }
     }
 
     override suspend fun migrate(currentData: Settings): Settings {
-        val upgradedPending = currentData.settingsChangeDelayConfig.pendingChanges.map { change ->
+        val upgradedPending = currentData.settingsChangeDelayConfig2.pendingChanges.map { change ->
             when (change.field) {
                 GatedSettingsField.APP_GROUPS.name -> {
                     val groups = parseAppGroups(change.newValueJson) ?: return@map change
@@ -86,7 +86,7 @@ private class ScheduledUsageConfigMigration(
             blockedAppGroups = currentData.blockedAppGroups.upgradeLegacyAppGroupConfigs(gson),
             keywordBlockerConfig =
                 currentData.keywordBlockerConfig.upgradeLegacyKeywordGroupConfigs(gson),
-            settingsChangeDelayConfig = currentData.settingsChangeDelayConfig.copy(
+            settingsChangeDelayConfig2 = currentData.settingsChangeDelayConfig2.copy(
                 pendingChanges = upgradedPending
             )
         )
@@ -166,10 +166,10 @@ class DataStoreManager(private val context: Context) {
      */
     suspend fun updateFromSync(remote: Settings) {
         settingsDataStore.updateData { current ->
-            val delayConfig = current.settingsChangeDelayConfig
+            val delayConfig = current.settingsChangeDelayConfig2
             val timeGateActive = delayConfig.isEnabled && delayConfig.delayMinutes > 0
             val tamperGated = delayConfig.requireTamperProtectionOff &&
-                current.antiUninstallConfig.isEnabled
+                current.antiUninstallConfig2.isEnabled
 
             val remoteWithLocalRuntime = remote.copy(
                 blockedAppGroups = remote.blockedAppGroups.map { group ->
@@ -193,8 +193,8 @@ class DataStoreManager(private val context: Context) {
                         )
                     }
                 ),
-                antiUninstallConfig = remote.antiUninstallConfig.copy(
-                    unlockRequestedAtMs = current.antiUninstallConfig.unlockRequestedAtMs
+                antiUninstallConfig2 = remote.antiUninstallConfig2.copy(
+                    unlockRequestedAtMs = current.antiUninstallConfig2.unlockRequestedAtMs
                 ),
                 serviceProtectionConfig = remote.serviceProtectionConfig.copy(
                     appBlockerLastAliveMs = current.serviceProtectionConfig.appBlockerLastAliveMs
@@ -217,12 +217,12 @@ class DataStoreManager(private val context: Context) {
                 mindfulMessageConfig = current.mindfulMessageConfig,
                 uiHiderConfig = current.uiHiderConfig,
                 nextWebsiteRecheckTime = current.nextWebsiteRecheckTime,
-                settingsChangeDelayConfig = delayConfig,
+                settingsChangeDelayConfig2 = delayConfig,
             )
 
             for (field in GatedSettingsField.values()) {
                 val newValueJson = syncedFieldValueJson(remoteWithLocalRuntime, field) ?: continue
-                val existingPending = updated.settingsChangeDelayConfig.pendingChanges
+                val existingPending = updated.settingsChangeDelayConfig2.pendingChanges
                     .find { it.field == field.name }
                 if (existingPending?.newValueJson == newValueJson) continue
 
@@ -231,8 +231,8 @@ class DataStoreManager(private val context: Context) {
                     RestrictionComparator.isSameOrStricter(field, current, proposed)
                 ) {
                     updated = proposed.copy(
-                        settingsChangeDelayConfig = proposed.settingsChangeDelayConfig.copy(
-                            pendingChanges = proposed.settingsChangeDelayConfig.pendingChanges
+                        settingsChangeDelayConfig2 = proposed.settingsChangeDelayConfig2.copy(
+                            pendingChanges = proposed.settingsChangeDelayConfig2.pendingChanges
                                 .filterNot { it.field == field.name }
                         )
                     )
@@ -250,8 +250,8 @@ class DataStoreManager(private val context: Context) {
                         appliesAtMs = appliesAt,
                     )
                     updated = updated.copy(
-                        settingsChangeDelayConfig = updated.settingsChangeDelayConfig.copy(
-                            pendingChanges = updated.settingsChangeDelayConfig.pendingChanges
+                        settingsChangeDelayConfig2 = updated.settingsChangeDelayConfig2.copy(
+                            pendingChanges = updated.settingsChangeDelayConfig2.pendingChanges
                                 .filterNot { it.field == field.name } + pending
                         )
                     )
@@ -318,7 +318,7 @@ class DataStoreManager(private val context: Context) {
     }
 
     suspend fun updateAntiUninstallConfig(transform: (neth.iecal.curbox.data.models.AntiUninstallConfig) -> neth.iecal.curbox.data.models.AntiUninstallConfig) {
-        settingsDataStore.updateData { it.copy(antiUninstallConfig = transform(it.antiUninstallConfig)) }
+        settingsDataStore.updateData { it.copy(antiUninstallConfig2 = transform(it.antiUninstallConfig2)) }
         // Turning tamper protection off may release changes whose time delay already elapsed.
         applyDuePendingChanges()
     }
@@ -347,7 +347,7 @@ class DataStoreManager(private val context: Context) {
         var changed = false
         var nextDeadline: Long? = null
         settingsDataStore.updateData { current ->
-            if (current.settingsChangeDelayConfig.isEnabled) return@updateData current
+            if (current.settingsChangeDelayConfig2.isEnabled) return@updateData current
             val groups = current.blockedAppGroups.map { group ->
                 if (group.id == groupId && group.isActive) {
                     changed = true
@@ -371,7 +371,7 @@ class DataStoreManager(private val context: Context) {
         var changed = false
         var nextDeadline: Long? = null
         settingsDataStore.updateData { current ->
-            if (current.settingsChangeDelayConfig.isEnabled) return@updateData current
+            if (current.settingsChangeDelayConfig2.isEnabled) return@updateData current
             val config = current.keywordBlockerConfig
             val groups = config.keywordGroups.map { group ->
                 if (group.id == groupId && group.isActive) {
@@ -392,7 +392,7 @@ class DataStoreManager(private val context: Context) {
         var changed = false
         var nextDeadline: Long? = null
         settingsDataStore.updateData { current ->
-            if (current.settingsChangeDelayConfig.isEnabled ||
+            if (current.settingsChangeDelayConfig2.isEnabled ||
                 !current.reelBlockerConfig.isActive
             ) return@updateData current
             changed = true
@@ -469,8 +469,8 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun cancelPendingSettingsChange(fieldName: String) {
         settingsDataStore.updateData {
-            val config = it.settingsChangeDelayConfig
-            it.copy(settingsChangeDelayConfig = config.copy(
+            val config = it.settingsChangeDelayConfig2
+            it.copy(settingsChangeDelayConfig2 = config.copy(
                 pendingChanges = config.pendingChanges.filterNot { p -> p.field == fieldName }
             ))
         }
@@ -486,10 +486,10 @@ class DataStoreManager(private val context: Context) {
         var appliedAny = false
         settingsDataStore.updateData { current ->
             val now = System.currentTimeMillis()
-            val delayConfig = current.settingsChangeDelayConfig
+            val delayConfig = current.settingsChangeDelayConfig2
             // Tamper protection being on holds every pending change back, no matter how long
             // its own timer has already run out, until the user turns tamper protection off
-            val tamperBlocked = delayConfig.requireTamperProtectionOff && current.antiUninstallConfig.isEnabled
+            val tamperBlocked = delayConfig.requireTamperProtectionOff && current.antiUninstallConfig2.isEnabled
             val (due, waiting) = delayConfig.pendingChanges
                 .partition { it.appliesAtMs <= now && !tamperBlocked }
             appliedAny = due.isNotEmpty()
@@ -500,7 +500,7 @@ class DataStoreManager(private val context: Context) {
                 due.forEach { change ->
                     applyPendingValue(settings, change)?.let { settings = it }
                 }
-                settings.copy(settingsChangeDelayConfig = settings.settingsChangeDelayConfig.copy(
+                settings.copy(settingsChangeDelayConfig2 = settings.settingsChangeDelayConfig2.copy(
                     pendingChanges = waiting
                 ))
             }
@@ -526,7 +526,7 @@ class DataStoreManager(private val context: Context) {
             tamperGated = false
             val newValueJson = gson.toJson(computeNewValue(current))
             val proposed = withFieldValue(current, field, newValueJson) ?: return@updateData current
-            val delayConfig = current.settingsChangeDelayConfig
+            val delayConfig = current.settingsChangeDelayConfig2
             val existingPending = delayConfig.pendingChanges.find { it.field == field.name }
             hadPendingForField = existingPending != null
             if (existingPending?.newValueJson == newValueJson) {
@@ -534,13 +534,13 @@ class DataStoreManager(private val context: Context) {
                 return@updateData current
             }
             val timeGateActive = delayConfig.isEnabled && delayConfig.delayMinutes > 0
-            tamperGated = delayConfig.requireTamperProtectionOff && current.antiUninstallConfig.isEnabled
+            tamperGated = delayConfig.requireTamperProtectionOff && current.antiUninstallConfig2.isEnabled
             if ((!timeGateActive && !tamperGated) ||
                 RestrictionComparator.isSameOrStricter(field, current, proposed)
             ) {
                 tamperGated = false
-                val proposedDelayConfig = proposed.settingsChangeDelayConfig
-                proposed.copy(settingsChangeDelayConfig = proposedDelayConfig.copy(
+                val proposedDelayConfig = proposed.settingsChangeDelayConfig2
+                proposed.copy(settingsChangeDelayConfig2 = proposedDelayConfig.copy(
                     pendingChanges = proposedDelayConfig.pendingChanges.filterNot { it.field == field.name }
                 ))
             } else {
@@ -554,7 +554,7 @@ class DataStoreManager(private val context: Context) {
                     requestedAtMs = now,
                     appliesAtMs = deferredUntilMs
                 )
-                current.copy(settingsChangeDelayConfig = delayConfig.copy(
+                current.copy(settingsChangeDelayConfig2 = delayConfig.copy(
                     pendingChanges = delayConfig.pendingChanges.filterNot { it.field == field.name } + pending
                 ))
             }
@@ -576,14 +576,14 @@ class DataStoreManager(private val context: Context) {
 
     private fun overlayPendingChanges(settings: Settings): Settings {
         var displayed = settings
-        settings.settingsChangeDelayConfig.pendingChanges.forEach { change ->
+        settings.settingsChangeDelayConfig2.pendingChanges.forEach { change ->
             applyPendingValue(displayed, change)?.let { displayed = it }
         }
         return displayed
     }
 
     private suspend fun schedulePendingChanges() {
-        val pending = settingsDataStore.data.first().settingsChangeDelayConfig.pendingChanges
+        val pending = settingsDataStore.data.first().settingsChangeDelayConfig2.pendingChanges
         neth.iecal.curbox.services.PendingSettingsChangeJob.schedule(
             context.applicationContext,
             pending
@@ -632,7 +632,7 @@ class DataStoreManager(private val context: Context) {
                 )
                 GatedSettingsField.CHANGE_DELAY -> {
                     val prefs = gson.fromJson(valueJson, SettingsChangeDelayPrefs::class.java)
-                    settings.copy(settingsChangeDelayConfig = settings.settingsChangeDelayConfig.copy(
+                    settings.copy(settingsChangeDelayConfig2 = settings.settingsChangeDelayConfig2.copy(
                         isEnabled = prefs.isEnabled,
                         delayMinutes = prefs.delayMinutes,
                         requireTamperProtectionOff = prefs.requireTamperProtectionOff
@@ -656,13 +656,13 @@ class DataStoreManager(private val context: Context) {
                 GatedSettingsField.APP_USAGE_TRACKING -> settings.isAppUsageTrackingEnabled
                 GatedSettingsField.WEBSITE_USAGE_TRACKING -> settings.isWebsiteUsageTrackingEnabled
                 GatedSettingsField.CHANGE_DELAY -> SettingsChangeDelayPrefs(
-                    isEnabled = settings.settingsChangeDelayConfig.isEnabled,
-                    delayMinutes = settings.settingsChangeDelayConfig.delayMinutes.coerceIn(
+                    isEnabled = settings.settingsChangeDelayConfig2.isEnabled,
+                    delayMinutes = settings.settingsChangeDelayConfig2.delayMinutes.coerceIn(
                         0,
                         SettingsChangeDelayConfig.MAX_DELAY_MINUTES,
                     ),
                     requireTamperProtectionOff =
-                        settings.settingsChangeDelayConfig.requireTamperProtectionOff,
+                        settings.settingsChangeDelayConfig2.requireTamperProtectionOff,
                 )
             }
             gson.toJson(value)

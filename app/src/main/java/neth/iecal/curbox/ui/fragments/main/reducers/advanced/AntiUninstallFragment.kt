@@ -136,7 +136,7 @@ class AntiUninstallFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 dataStore.settings.collect { settings ->
-                    val config = settings.antiUninstallConfig
+                    val config = settings.antiUninstallConfig2
                     // The user may have pulled the device admin from system settings. Keep our flag honest.
                     if (config.isEnabled && !AntiUninstallManager.isAdminActive(requireContext())) {
                         dataStore.updateAntiUninstallConfig { it.copy(isEnabled = false, unlockRequestedAtMs = 0L) }

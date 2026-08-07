@@ -732,9 +732,9 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             ),
             nextWebsiteRecheckTime = 0L,
             manualFocusGroups = emptyList(),
-            antiUninstallConfig = s.antiUninstallConfig.copy(unlockRequestedAtMs = 0L),
+            antiUninstallConfig2 = s.antiUninstallConfig2.copy(unlockRequestedAtMs = 0L),
             serviceProtectionConfig = s.serviceProtectionConfig.copy(appBlockerLastAliveMs = 0L),
-            settingsChangeDelayConfig = s.settingsChangeDelayConfig.copy(pendingChanges = emptyList()),
+            settingsChangeDelayConfig2 = s.settingsChangeDelayConfig2.copy(pendingChanges = emptyList()),
         )
 
     private suspend fun pushConfig() {

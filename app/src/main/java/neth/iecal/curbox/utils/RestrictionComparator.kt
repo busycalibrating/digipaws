@@ -13,9 +13,6 @@ import neth.iecal.curbox.data.models.KeywordBlocker
 import neth.iecal.curbox.data.models.KeywordGroup
 import neth.iecal.curbox.data.models.MindfulMessageConfig
 import neth.iecal.curbox.data.models.ReelBlocker
-import neth.iecal.curbox.data.models.ReelCountConfig
-import neth.iecal.curbox.data.models.ReelTimeConfig
-import neth.iecal.curbox.data.models.ReelUsageConfig
 import neth.iecal.curbox.data.models.Settings
 import neth.iecal.curbox.data.models.SettingsChangeDelayConfig
 import neth.iecal.curbox.data.models.TimeInterval
@@ -61,7 +58,7 @@ object RestrictionComparator {
                 GatedSettingsField.WEBSITE_USAGE_TRACKING ->
                     !current.isWebsiteUsageTrackingEnabled || proposed.isWebsiteUsageTrackingEnabled
                 GatedSettingsField.CHANGE_DELAY ->
-                    changeDelay(current.settingsChangeDelayConfig, proposed.settingsChangeDelayConfig)
+                    changeDelay(current.settingsChangeDelayConfig2, proposed.settingsChangeDelayConfig2)
             }
         } catch (e: Exception) {
             false

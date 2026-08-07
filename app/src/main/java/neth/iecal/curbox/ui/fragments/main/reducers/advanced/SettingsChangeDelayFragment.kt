@@ -126,11 +126,11 @@ class SettingsChangeDelayFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 dataStore.settingsForEditing.collect { settings ->
-                    val config = settings.settingsChangeDelayConfig
+                    val config = settings.settingsChangeDelayConfig2
                     isEnabled = config.isEnabled
                     delayMinutes = config.delayMinutes
                     requireTamperProtectionOff = config.requireTamperProtectionOff
-                    antiUninstallEnabled = settings.antiUninstallConfig.isEnabled
+                    antiUninstallEnabled = settings.antiUninstallConfig2.isEnabled
                     pendingChanges = config.pendingChanges.sortedBy { it.appliesAtMs }
                     render()
                 }
