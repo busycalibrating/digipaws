@@ -22,21 +22,25 @@ import neth.iecal.curbox.data.models.AppBlockerWarningScreenConfig
 import neth.iecal.curbox.data.models.KeywordGroup
 import neth.iecal.curbox.data.models.ScheduledUsageConfig
 import neth.iecal.curbox.databinding.FragmentCreateKeywordGroupBinding
+import neth.iecal.curbox.utils.KeywordFileCodec
 import java.io.BufferedReader
+import java.io.BufferedWriter
 import java.io.InputStreamReader
+import java.io.OutputStreamWriter
 import java.util.*
 
 class CreateKeywordGroupFragment : Fragment() {
 
     companion object {
         const val FRAGMENT_ID = "create_keyword_group"
+        private const val FILE_BUFFER_SIZE = 64 * 1024
     }
 
     private var _binding: FragmentCreateKeywordGroupBinding? = null
     private val binding get() = _binding!!
 
     private val viewModel: KeywordBlockerViewModel by activityViewModels()
-    private var selectedKeywords = mutableListOf<String>()
+    private var selectedKeywords = linkedSetOf<String>()
     private val keywordAdapter by lazy { KeywordAdapter() }
     private var isEditing = false
     private var existingGroupId: String? = null
@@ -76,7 +80,7 @@ class CreateKeywordGroupFragment : Fragment() {
                     isEditing = true
                     binding.tvTitle.text = getString(R.string.keyword_group_edit_title)
                     binding.etGroupName.setText(group.name)
-                    selectedKeywords = group.selectedKeywords.toMutableList()
+                    selectedKeywords = group.selectedKeywords.toCollection(LinkedHashSet())
                     updateKeywordsList()
 
                     group.config?.let { scheduledConfig ->
@@ -93,8 +97,7 @@ class CreateKeywordGroupFragment : Fragment() {
     private fun setupListeners() {
         binding.btnAddKeyword.setOnClickListener {
             val kw = binding.etKeyword.text.toString().trim()
-            if (kw.isNotEmpty() && !selectedKeywords.contains(kw)) {
-                selectedKeywords.add(kw)
+            if (kw.isNotEmpty() && selectedKeywords.add(kw)) {
                 updateKeywordsList()
                 binding.etKeyword.setText("")
             }
@@ -172,29 +175,19 @@ class CreateKeywordGroupFragment : Fragment() {
     private fun importKeywordsFromFile(uri: Uri) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val keywords = withContext(Dispatchers.IO) {
-                    val list = mutableListOf<String>()
+                val existingKeywords = selectedKeywords.toHashSet()
+                val newKeywords = withContext(Dispatchers.IO) {
                     requireContext().contentResolver.openInputStream(uri)?.use { inputStream ->
-                        BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                            var line: String?
-                            while (reader.readLine().also { line = it } != null) {
-                                line?.trim()?.let {
-                                    if (it.isNotEmpty()) list.add(it)
-                                }
-                            }
+                        BufferedReader(
+                            InputStreamReader(inputStream, Charsets.UTF_8),
+                            FILE_BUFFER_SIZE
+                        ).use { reader ->
+                            KeywordFileCodec.readNewKeywords(reader, existingKeywords)
                         }
-                    }
-                    list
+                    } ?: throw IllegalStateException("Unable to open keyword file")
                 }
-                
-                var addedCount = 0
-                keywords.forEach { kw ->
-                    if (!selectedKeywords.contains(kw)) {
-                        selectedKeywords.add(kw)
-                        addedCount++
-                    }
-                }
-                
+
+                val addedCount = newKeywords.count { selectedKeywords.add(it) }
                 if (addedCount > 0) {
                     updateKeywordsList()
                     Toast.makeText(requireContext(), getString(R.string.keyword_imported_count, addedCount), Toast.LENGTH_SHORT).show()
@@ -210,10 +203,16 @@ class CreateKeywordGroupFragment : Fragment() {
     private fun exportKeywordsToFile(uri: Uri) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                val keywords = selectedKeywords.toList()
                 withContext(Dispatchers.IO) {
                     requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        outputStream.write(selectedKeywords.joinToString("\n").toByteArray())
-                    }
+                        BufferedWriter(
+                            OutputStreamWriter(outputStream, Charsets.UTF_8),
+                            FILE_BUFFER_SIZE
+                        ).use { writer ->
+                            KeywordFileCodec.writeKeywords(writer, keywords)
+                        }
+                    } ?: throw IllegalStateException("Unable to open keyword file")
                 }
                 Toast.makeText(requireContext(), R.string.keyword_export_success, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
@@ -250,7 +249,7 @@ class CreateKeywordGroupFragment : Fragment() {
             holder.btnRemove.setOnClickListener {
                 val currentPos = holder.adapterPosition
                 if (currentPos != RecyclerView.NO_POSITION) {
-                    selectedKeywords.removeAt(currentPos)
+                    selectedKeywords.remove(items[currentPos])
                     updateKeywordsList()
                 }
             }
