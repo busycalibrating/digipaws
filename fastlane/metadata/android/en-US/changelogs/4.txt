@@ -3,6 +3,8 @@ We have made foundational changes to how all three blockers (app, website, and s
 We highly advise reviewing and updating your settings. Additionally, you will need to reconfigure both Tamper Protection and the Settings Change Delay.
 We apologize for any inconvenience this may cause!
 
+Please read the docs at curbox.app/docs to understand the changes!
+
 NEW:
 • Tack attention span on short form videos and block them on basis of usage
 • Add NFC tags as a warning screen unlock method and use programmable NFC tags to control Focus Mode @PhantomOffKanagawa

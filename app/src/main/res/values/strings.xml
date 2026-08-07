@@ -1172,6 +1172,7 @@
     <string name="more_options">More options</string>
     <string name="import_keywords">Import Keywords</string>
     <string name="export_keywords">Export Keywords</string>
+    <string name="download_keyword_list">Download a keyword list</string>
     <string name="delete_group">Delete Group</string>
     <string name="advanced">Advanced</string>
 

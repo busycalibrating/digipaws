@@ -1,5 +1,6 @@
 package neth.iecal.curbox.ui.fragments.main.reducers.blockertools.keywordBlocker
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -34,6 +35,7 @@ class CreateKeywordGroupFragment : Fragment() {
     companion object {
         const val FRAGMENT_ID = "create_keyword_group"
         private const val FILE_BUFFER_SIZE = 64 * 1024
+        private const val KEYWORD_LIST_URL = "https://github.com/curbox-app/website_packs"
     }
 
     private var _binding: FragmentCreateKeywordGroupBinding? = null
@@ -159,6 +161,10 @@ class CreateKeywordGroupFragment : Fragment() {
                 R.id.action_export -> {
                     val fileName = "keywords_${binding.etGroupName.text.toString().ifEmpty { "group" }}.txt"
                     exportLauncher.launch(fileName)
+                    true
+                }
+                R.id.action_download -> {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(KEYWORD_LIST_URL)))
                     true
                 }
                 R.id.action_delete -> {
