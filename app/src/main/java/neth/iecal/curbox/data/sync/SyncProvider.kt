@@ -32,6 +32,7 @@ private val FreeBilling = MutableStateFlow(SyncBillingStatus())
 interface SyncProvider {
     val isAvailable: Boolean
     val status: StateFlow<SyncStatus>
+    val supportsGoogleSignIn: Boolean get() = false
 
     /** Free builds keep the defaults; the Play Store flavor overrides all three. */
     val billing: StateFlow<SyncBillingStatus> get() = FreeBilling
@@ -41,6 +42,9 @@ interface SyncProvider {
     fun start()
     suspend fun signUp(email: String, password: String)
     suspend fun signIn(email: String, password: String)
+    suspend fun signInWithGoogle(activity: Activity): Unit {
+        throw UnsupportedOperationException("Google sign in is not available in this build")
+    }
     suspend fun verifySignupCode(email: String, code: String)
     suspend fun resendSignupCode(email: String)
     suspend fun sendPasswordReset(email: String)

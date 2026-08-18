@@ -47,6 +47,7 @@ class AccountController(
     private val provider get() = SyncGateway.provider
 
     private var mode = Mode.SIGN_IN
+    private var emailAuthExpanded = false
     private var last = SyncStatus()
     private var lastBilling = SyncBillingStatus()
 
@@ -72,7 +73,10 @@ class AccountController(
 
     private val sectionPaywall = root.findViewById<View>(R.id.section_paywall)
     private val paywallPrice = root.findViewById<TextView>(R.id.text_paywall_price)
+    private val paywallAccount = root.findViewById<TextView>(R.id.text_paywall_account)
     private val sectionAuth = root.findViewById<View>(R.id.section_auth)
+    private val sectionGoogleAuth = root.findViewById<View>(R.id.section_google_auth)
+    private val sectionEmailAuth = root.findViewById<View>(R.id.section_email_auth)
     private val sectionVerify = root.findViewById<View>(R.id.section_verify)
     private val sectionForgot = root.findViewById<View>(R.id.section_forgot)
     private val sectionReset = root.findViewById<View>(R.id.section_reset)
@@ -81,12 +85,23 @@ class AccountController(
     private val sectionUnlocked = root.findViewById<View>(R.id.section_unlocked)
 
     private val primaryAuth = root.findViewById<MaterialButton>(R.id.btn_primary_auth)
+    private val googleAuth = root.findViewById<MaterialButton>(R.id.btn_google_auth)
+    private val useEmail = root.findViewById<MaterialButton>(R.id.btn_use_email)
+    private val forgotPassword = root.findViewById<View>(R.id.btn_forgot)
     private val togglePrompt = root.findViewById<TextView>(R.id.text_toggle_prompt)
     private val toggleMode = root.findViewById<TextView>(R.id.btn_toggle_mode)
     private val passphraseBtn = root.findViewById<MaterialButton>(R.id.btn_passphrase)
     private val qr = root.findViewById<ImageView>(R.id.image_qr)
 
     fun bind() {
+        googleAuth.setOnClickListener { btn ->
+            val activity = fragment.activity ?: return@setOnClickListener
+            submit(button = btn) { provider.signInWithGoogle(activity) }
+        }
+        useEmail.setOnClickListener {
+            emailAuthExpanded = true
+            apply()
+        }
         primaryAuth.setOnClickListener { btn ->
             if (mode == Mode.SIGN_UP) {
                 submit(button = btn) { provider.signUp(text(email), text(password)) }
@@ -96,9 +111,10 @@ class AccountController(
         }
         toggleMode.setOnClickListener {
             mode = if (mode == Mode.SIGN_IN) Mode.SIGN_UP else Mode.SIGN_IN
+            emailAuthExpanded = true
             apply()
         }
-        root.findViewById<View>(R.id.btn_forgot).setOnClickListener { mode = Mode.FORGOT; apply() }
+        forgotPassword.setOnClickListener { mode = Mode.FORGOT; apply() }
         root.findViewById<View>(R.id.btn_forgot_back).setOnClickListener { mode = Mode.SIGN_IN; apply() }
 
         root.findViewById<View>(R.id.btn_verify).setOnClickListener { btn ->
@@ -108,6 +124,13 @@ class AccountController(
         root.findViewById<View>(R.id.btn_resend).setOnClickListener { btn ->
             val e = last.pendingEmail ?: return@setOnClickListener
             submit(toast = fragment.getString(R.string.account_msg_new_code_sent, e), button = btn) { provider.resendSignupCode(e) }
+        }
+        root.findViewById<View>(R.id.btn_verify_different_account).setOnClickListener { btn ->
+            submit(button = btn) {
+                mode = Mode.SIGN_IN
+                emailAuthExpanded = false
+                provider.signOut()
+            }
         }
         root.findViewById<View>(R.id.btn_send_reset).setOnClickListener { btn ->
             val e = text(forgotEmail)
@@ -154,7 +177,15 @@ class AccountController(
         syncConfigs.setOnCheckedChangeListener { _, checked ->
             if (!applyingControls) savePreferences(last.preferences.copy(reducerConfigs = checked))
         }
-        root.findViewById<View>(R.id.btn_signout).setOnClickListener { btn -> submit(button = btn) { provider.signOut() } }
+        root.findViewById<View>(R.id.btn_signout).setOnClickListener { btn ->
+            submit(button = btn) { signOutAndResetAuth() }
+        }
+        root.findViewById<View>(R.id.btn_signout_locked).setOnClickListener { btn ->
+            submit(button = btn) { signOutAndResetAuth() }
+        }
+        root.findViewById<View>(R.id.btn_paywall_signout).setOnClickListener { btn ->
+            submit(button = btn) { signOutAndResetAuth() }
+        }
 
         root.findViewById<View>(R.id.btn_subscribe).setOnClickListener {
             fragment.activity?.let { provider.launchBillingFlow(it) }
@@ -183,6 +214,12 @@ class AccountController(
 
     private var resetEmail = ""
 
+    private suspend fun signOutAndResetAuth() {
+        mode = Mode.SIGN_IN
+        emailAuthExpanded = false
+        provider.signOut()
+    }
+
     private fun apply() {
         val signedIn = last.signedIn
         val unlocked = last.unlocked
@@ -199,6 +236,14 @@ class AccountController(
                 R.string.sync_paywall_price,
                 lastBilling.price ?: fragment.getString(R.string.sync_paywall_price_fallback),
             )
+            paywallAccount.text = fragment.getString(
+                R.string.sync_paywall_signed_in_as,
+                last.email ?: fragment.getString(R.string.sync_paywall_your_account),
+            )
+            root.findViewById<MaterialButton>(R.id.btn_subscribe).text = fragment.getString(
+                R.string.sync_paywall_subscribe_price,
+                lastBilling.price ?: fragment.getString(R.string.sync_paywall_price_fallback),
+            )
             sectionAuth.visibility = View.GONE
             sectionForgot.visibility = View.GONE
             sectionReset.visibility = View.GONE
@@ -209,11 +254,20 @@ class AccountController(
             qr.visibility = View.GONE
             val billingError = lastBilling.error
             message.visibility = vis(billingError != null)
-            if (billingError != null) message.text = billingError
+            if (billingError != null) message.text = friendly(billingError)
             return
         }
 
-        sectionAuth.visibility = vis(!signedIn && !verifying && (mode == Mode.SIGN_IN || mode == Mode.SIGN_UP))
+        val showingAuth = !signedIn && !verifying && (mode == Mode.SIGN_IN || mode == Mode.SIGN_UP)
+        sectionAuth.visibility = vis(showingAuth)
+        sectionGoogleAuth.visibility = vis(showingAuth && provider.supportsGoogleSignIn)
+        sectionEmailAuth.visibility = vis(
+            showingAuth && (emailAuthExpanded || mode == Mode.SIGN_UP || !provider.supportsGoogleSignIn),
+        )
+        useEmail.visibility = vis(
+            showingAuth && provider.supportsGoogleSignIn && mode == Mode.SIGN_IN && !emailAuthExpanded,
+        )
+        forgotPassword.visibility = vis(showingAuth && mode == Mode.SIGN_IN)
         sectionForgot.visibility = vis(!signedIn && !verifying && mode == Mode.FORGOT)
         sectionReset.visibility = vis(!signedIn && !verifying && mode == Mode.RESET)
         sectionVerify.visibility = vis(verifying)
@@ -248,7 +302,7 @@ class AccountController(
             mode == Mode.FORGOT -> fragment.getString(R.string.account_title_reset_password)
             mode == Mode.RESET -> fragment.getString(R.string.account_title_choose_new_password)
             mode == Mode.SIGN_UP -> fragment.getString(R.string.account_title_create_account)
-            else -> fragment.getString(R.string.account_title_welcome_back)
+            else -> fragment.getString(R.string.account_title_sign_in)
         }
 
         subtitle.text = when {
@@ -259,7 +313,9 @@ class AccountController(
             mode == Mode.FORGOT -> fragment.getString(R.string.account_sub_forgot)
             mode == Mode.RESET -> fragment.getString(R.string.account_sub_reset)
             mode == Mode.SIGN_UP -> fragment.getString(R.string.account_sub_sign_up)
-            else -> fragment.getString(R.string.account_sub_sign_in)
+            else -> fragment.getString(
+                if (provider.supportsGoogleSignIn) R.string.account_sub_google_first else R.string.account_sub_sign_in,
+            )
         }
 
         val msg = last.error
@@ -390,6 +446,10 @@ class AccountController(
             "unable to resolve host" in m || "failed to connect" in m || "timeout" in m ||
                 "network" in m || "no address associated" in m ->
                 fragment.getString(R.string.account_err_no_network)
+            "missing oauth secret" in m || "unsupported provider" in m || "google sign in is not configured" in m ->
+                fragment.getString(R.string.account_err_google_not_configured)
+            "google" in m && ("account" in m || "credential" in m || "token" in m) ->
+                fragment.getString(R.string.account_err_google)
             else -> raw
         }
     }

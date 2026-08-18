@@ -1,5 +1,13 @@
 import java.util.Locale
 
+// Public OAuth web client ID used to verify Google ID tokens. The Google button
+// stays hidden when it is absent so release builds never expose a dead action.
+val googleWebClientId = providers.gradleProperty("CURBOX_GOOGLE_WEB_CLIENT_ID")
+    .orElse(providers.environmentVariable("CURBOX_GOOGLE_WEB_CLIENT_ID"))
+    .getOrElse("")
+
+fun String.asBuildConfigString(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -86,6 +94,7 @@ android {
             // then dropped and the poll slows right down, which is where the memory
             // and battery win lands.
             buildConfigField("Boolean", "SYNC_USE_FCM", "true")
+            buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", googleWebClientId.asBuildConfigString())
         }
 
         // Play Store policy build: keeps sync but strips the UI hider and anti
@@ -95,6 +104,7 @@ android {
             versionNameSuffix = "-playstore"
             buildConfigField("Boolean", "FDROID_VARIANT", "false")
             buildConfigField("Boolean", "SYNC_USE_FCM", "true")
+            buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", googleWebClientId.asBuildConfigString())
             buildConfigField("Boolean", "SUPPORTS_UI_HIDER", "false")
             buildConfigField("Boolean", "SUPPORTS_ANTI_UNINSTALL", "false")
             buildConfigField("Boolean", "SUPPORTS_WRITE_SECURE_SETTINGS", "false")
@@ -139,7 +149,7 @@ android {
             }
         }
         debug {
-            applicationIdSuffix = ".debug"
+//            applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             resValue("string", "app_name", "Debug Curbox")
         }
@@ -193,6 +203,12 @@ dependencies {
     "playstoreImplementation"(libs.okhttp)
     "playstoreImplementation"(libs.androidx.security.crypto)
     "playstoreImplementation"(libs.androidx.work.runtime.ktx)
+    "fullImplementation"(libs.androidx.credentials)
+    "fullImplementation"(libs.androidx.credentials.play.services.auth)
+    "fullImplementation"(libs.googleid)
+    "playstoreImplementation"(libs.androidx.credentials)
+    "playstoreImplementation"(libs.androidx.credentials.play.services.auth)
+    "playstoreImplementation"(libs.googleid)
     // Play Store flavor sells the yearly Sync Premium subscription through
     // Google Play. The directly distributed full flavor uses Polar instead.
     "playstoreImplementation"("com.android.billingclient:billing:9.1.0")

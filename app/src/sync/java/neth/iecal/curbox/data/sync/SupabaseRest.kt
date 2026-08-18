@@ -116,6 +116,16 @@ class SupabaseRest(
             ?: throw IOException("sign in did not return a session")
     }
 
+    fun signInWithIdToken(idToken: String, nonce: String): Session {
+        val body = JsonObject().apply {
+            addProperty("provider", "google")
+            addProperty("id_token", idToken)
+            addProperty("nonce", nonce)
+        }
+        return parseSession(postAuth("token?grant_type=id_token", body))
+            ?: throw IOException("Google sign in did not return a session")
+    }
+
     fun refresh(refreshToken: String): Session {
         val body = JsonObject().apply { addProperty("refresh_token", refreshToken) }
         return parseSession(postAuth("token?grant_type=refresh_token", body), refreshToken)

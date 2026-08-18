@@ -1,9 +1,19 @@
 package neth.iecal.curbox.data.sync
 
+import android.app.Activity
 import android.content.Context
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -29,6 +39,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import neth.iecal.curbox.BuildConfig
 import neth.iecal.curbox.data.db.AppDatabase
 import neth.iecal.curbox.data.db.AppUsageEntity
 import neth.iecal.curbox.data.db.WebsiteStatsEntity
@@ -105,6 +116,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     private val _status = MutableStateFlow(SyncStatus())
     override val status: StateFlow<SyncStatus> = _status
     override val isAvailable = true
+    override val supportsGoogleSignIn = BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank()
 
     override val billing get() = entitlement.billing
     override fun launchBillingFlow(activity: android.app.Activity) = entitlement.launchPurchase(activity)
@@ -221,12 +233,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             pendingEmail = email
             publishStatus()
         } else {
-            session = s
-            signedInInitialised = false
-            persistSession(s)
-            pendingEmail = null
-            entitlement.refreshNow()
-            if (entitled) onSignedIn() else publishStatus()
+            finishSignIn(s)
         }
     }
 
@@ -241,22 +248,43 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
             }
             throw e
         }
-        session = s
-        signedInInitialised = false
-        persistSession(s)
-        pendingEmail = null
-        entitlement.refreshNow()
-        if (entitled) onSignedIn() else publishStatus()
+        finishSignIn(s)
+    }
+
+    override suspend fun signInWithGoogle(activity: Activity) {
+        check(supportsGoogleSignIn) {
+            context.getString(neth.iecal.curbox.R.string.account_err_google_not_configured)
+        }
+        val rawNonce = randomNonce()
+        val hashedNonce = sha256Hex(rawNonce)
+        val idToken = try {
+            withContext(Dispatchers.Main) {
+                val option = GetSignInWithGoogleOption.Builder(BuildConfig.GOOGLE_WEB_CLIENT_ID)
+                    .setNonce(hashedNonce)
+                    .build()
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(option)
+                    .build()
+                val credential = CredentialManager.create(activity)
+                    .getCredential(activity, request)
+                    .credential as? CustomCredential
+                    ?: throw IllegalStateException("Google did not return an account")
+                if (credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    throw IllegalStateException("Google returned an unsupported account")
+                }
+                GoogleIdTokenCredential.createFrom(credential.data).idToken
+            }
+        } catch (_: GetCredentialCancellationException) {
+            return
+        }
+        withContext(Dispatchers.IO) {
+            finishSignIn(rest.signInWithIdToken(idToken, rawNonce))
+        }
     }
 
     override suspend fun verifySignupCode(email: String, code: String) = withContext(Dispatchers.IO) {
         val s = rest.verifyOtp(email, code.trim(), "signup")
-        session = s
-        signedInInitialised = false
-        persistSession(s)
-        pendingEmail = null
-        entitlement.refreshNow()
-        if (entitled) onSignedIn() else publishStatus()
+        finishSignIn(s)
     }
 
     override suspend fun resendSignupCode(email: String) = withContext(Dispatchers.IO) {
@@ -270,12 +298,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     override suspend fun resetPassword(email: String, code: String, newPassword: String) = withContext(Dispatchers.IO) {
         val s = rest.verifyOtp(email, code.trim(), "recovery")
         rest.updatePassword(s, newPassword)
-        session = s
-        signedInInitialised = false
-        persistSession(s)
-        pendingEmail = null
-        entitlement.refreshNow()
-        if (entitled) onSignedIn() else publishStatus()
+        finishSignIn(s)
     }
 
     override suspend fun signOut() = withContext(Dispatchers.IO) {
@@ -288,6 +311,14 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
                 runCatching { if (oldSession != null) rest.signOut(oldSession) }
                 pullMutex.withLock {
                     pushMutex.withLock { clearLocalAccount() }
+                }
+                try {
+                    CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Supabase is already signed out. Credential Manager cleanup
+                    // only affects which Google accounts are suggested next time.
                 }
                 publishStatus()
             }
@@ -463,6 +494,27 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
     private fun persistSession(s: SupabaseRest.Session) {
         keys.setSession(s.accessToken, s.refreshToken)
     }
+
+    private suspend fun finishSignIn(s: SupabaseRest.Session) {
+        session = s
+        signedInInitialised = false
+        persistSession(s)
+        pendingEmail = null
+        entitlement.refreshNow()
+        if (entitled) onSignedIn() else publishStatus()
+    }
+
+    private fun randomNonce(): String {
+        val bytes = ByteArray(32)
+        SecureRandom().nextBytes(bytes)
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    }
+
+    private fun sha256Hex(value: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8))
+        .joinToString(separator = "") { byte ->
+            (byte.toInt() and 0xff).toString(16).padStart(2, '0')
+        }
 
     private fun adoptDek(bytes: ByteArray) {
         dek = bytes
