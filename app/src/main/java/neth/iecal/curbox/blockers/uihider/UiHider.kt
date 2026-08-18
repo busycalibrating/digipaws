@@ -14,6 +14,9 @@ import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import neth.iecal.curbox.blockers.BaseBlocker
@@ -27,9 +30,9 @@ import neth.iecal.curbox.hardcoded.allScripts
 import neth.iecal.curbox.services.BaseBlockingService
 
 /**
- * Advanced, scriptable view hider. Each user script is bound to a package and runs — inside the
- * AppBlockerService background worker — only while that app is foreground. Scripts read the
- * accessibility tree, compute geometry, and draw overlays / press back / press home.
+ * Advanced, scriptable view hider. Each user script is bound to a package and runs in the
+ * background only while that app is foreground. Scripts read the accessibility tree, compute
+ * geometry, and draw overlays / press back / press home.
  *
  * Robustness: every run is sandboxed with a [Budget] and wrapped in try/catch so a faulty or
  * runaway script can never crash or hang the accessibility service.
@@ -39,6 +42,7 @@ class UiHider : BaseBlocker() {
     companion object {
         const val INTENT_ACTION_REFRESH_UI_HIDER = "neth.iecal.curbox.refresh.uihider"
         private const val MIN_RUN_INTERVAL_MS = 80L
+        private val SETTLE_RETRY_DELAYS_MS = longArrayOf(200L, 500L, 1_000L, 2_000L)
     }
 
     private lateinit var service: BaseBlockingService
@@ -46,7 +50,9 @@ class UiHider : BaseBlocker() {
     private var store: ScriptStore? = null
 
     private var config = UiHiderConfig()
+    private var blockerScope: CoroutineScope? = null
     private var settingsJob: Job? = null
+    private var settleRetryJob: Job? = null
 
     private var screenWidth = 0
     private var screenHeight = 0
@@ -62,6 +68,13 @@ class UiHider : BaseBlocker() {
 
     private class CompiledScript(val id: String, val program: List<Stmt>)
 
+    private data class EventContext(
+        val type: String,
+        val packageName: String,
+        val text: String?,
+        val className: String?
+    )
+
     fun setupBlocker(service: BaseBlockingService) {
         this.service = service
         overlay = UiHiderOverlayManager(service)
@@ -71,8 +84,9 @@ class UiHider : BaseBlocker() {
         screenHeight = metrics.heightPixels
         screenMap = mapOf("width" to screenWidth.toDouble(), "height" to screenHeight.toDouble())
 
-        settingsJob?.cancel()
-        settingsJob = CoroutineScope(Dispatchers.IO).launch {
+        blockerScope?.cancel()
+        blockerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        settingsJob = blockerScope?.launch(Dispatchers.IO) {
             service.dataStoreManager.settings.collectLatest { settings ->
                 config = settings.uiHiderConfig
                 recompile()
@@ -93,6 +107,9 @@ class UiHider : BaseBlocker() {
     fun removeReceivers() {
         try { service.unregisterReceiver(refreshReceiver) } catch (_: Exception) {}
         settingsJob?.cancel()
+        settleRetryJob?.cancel()
+        blockerScope?.cancel()
+        blockerScope = null
         clearOverlays()
         store?.close()
         store = null
@@ -113,7 +130,12 @@ class UiHider : BaseBlocker() {
             }
         }
         scriptsByPackage = newMap
-        if (!config.isActive) clearOverlays()
+        if (!config.isActive) {
+            settleRetryJob?.cancel()
+            clearOverlays()
+        } else {
+            scheduleCurrentWindowRetries()
+        }
     }
 
     fun doUiHiderCheck(event: AccessibilityEvent?) {
@@ -124,11 +146,13 @@ class UiHider : BaseBlocker() {
         val scripts = scriptsByPackage[pkg]
         if (scripts.isNullOrEmpty()) {
             if (lastPackage != pkg) {
+                settleRetryJob?.cancel()
                 clearOverlays()
                 lastPackage = pkg
             }
             return
         }
+        val packageChanged = lastPackage != pkg
         lastPackage = pkg
 
         val now = SystemClock.uptimeMillis()
@@ -136,14 +160,26 @@ class UiHider : BaseBlocker() {
         if (!isWindowChange && now - lastRunAt < MIN_RUN_INTERVAL_MS) return
         lastRunAt = now
 
-        runScripts(pkg, scripts, event)
+        val eventContext = EventContext(
+            type = eventTypeName(event.eventType),
+            packageName = pkg,
+            text = event.text.joinToString(" ").takeIf { it.isNotEmpty() },
+            className = event.className?.toString()
+        )
+        runScripts(pkg, scripts, eventContext)
+        if (packageChanged || isWindowChange) {
+            scheduleSettleRetries(pkg, eventContext)
+        }
     }
 
-    private fun runScripts(pkg: String, scripts: List<CompiledScript>, event: AccessibilityEvent) {
+    @Synchronized
+    private fun runScripts(pkg: String, scripts: List<CompiledScript>, event: EventContext) {
         val root = service.rootInActiveWindow ?: return
         try {
+            if (root.packageName?.toString() != pkg) return
+
             val commands = ArrayList<DrawCommand>()
-            val globals = buildGlobals(pkg, event)
+            val globals = buildGlobals(event)
             for (compiled in scripts) {
                 val budget = Budget()
                 val runtime = UiHiderRuntime(service, root, budget, globals, compiled.id, store!!)
@@ -172,20 +208,52 @@ class UiHider : BaseBlocker() {
         }
     }
 
+    private fun scheduleCurrentWindowRetries() {
+        val pkg = try {
+            val root = service.rootInActiveWindow ?: return
+            try {
+                root.packageName?.toString()
+            } finally {
+                @Suppress("DEPRECATION") root.recycle()
+            }
+        } catch (t: Throwable) {
+            Log.e("UiHider", "Error reading the active window", t)
+            return
+        } ?: return
+
+        if (!scriptsByPackage[pkg].isNullOrEmpty()) {
+            scheduleSettleRetries(
+                pkg,
+                EventContext("content", pkg, text = null, className = null)
+            )
+        }
+    }
+
+    private fun scheduleSettleRetries(pkg: String, event: EventContext) {
+        settleRetryJob?.cancel()
+        settleRetryJob = blockerScope?.launch {
+            for (delayMs in SETTLE_RETRY_DELAYS_MS) {
+                delay(delayMs)
+                val scripts = scriptsByPackage[pkg] ?: return@launch
+                runScripts(pkg, scripts, event)
+            }
+        }
+    }
+
     /** Remove all overlays and invalidate the dedupe cache so the next run re-applies cleanly. */
     private fun clearOverlays() {
         overlay.clearAll()
         lastCommands = emptyList()
     }
 
-    private fun buildGlobals(pkg: String, event: AccessibilityEvent): Map<String, Any?> = mapOf(
-        "app" to pkg,
+    private fun buildGlobals(event: EventContext): Map<String, Any?> = mapOf(
+        "app" to event.packageName,
         "screen" to screenMap,
         "event" to mapOf(
-            "type" to eventTypeName(event.eventType),
-            "package" to pkg,
-            "text" to event.text.joinToString(" ").takeIf { it.isNotEmpty() },
-            "class" to event.className?.toString()
+            "type" to event.type,
+            "package" to event.packageName,
+            "text" to event.text,
+            "class" to event.className
         )
     )
 

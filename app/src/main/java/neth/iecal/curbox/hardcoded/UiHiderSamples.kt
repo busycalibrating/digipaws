@@ -21,21 +21,32 @@ val DEFAULT_UIHIDER_SCRIPTS: List<UiHiderScript> = listOf(
         label = "Instagram: hide home feed except following tab",
         isEnabled = false,
         source = """
-            # The stories view
-            top = find(desc="reels tray container")
-            nav = find(id="com.instagram.android:id/feed_tab")
+            if app != "com.instagram.android" {
+                return
+            }
 
-            if nav != null and nav.visible and nav.selected {
-                y = load("feed_top")
-                if top != null and top.visible {
-                    y = top.bottom
-                    save("feed_top", y)
-                }
-                if y != null {
-                    height = nav.top - y
-                    if height > 0 {
-                        draw(0, y, screen.width, height)
-                    }
+            top = find(id="com.instagram.android:id/reels_tray_container")
+            nav = find(id="com.instagram.android:id/feed_tab")
+            if nav == null or not nav.visible {
+                return
+            }
+
+            # Instagram may select either the Home container or only its icon.
+            homeIcon = nav.find(id="com.instagram.android:id/tab_icon", selected=true)
+            homeSelected = nav.selected or (homeIcon != null and homeIcon.visible)
+            if not homeSelected {
+                return
+            }
+
+            y = load("feed_top")
+            if top != null and top.visible {
+                y = top.bottom
+                save("feed_top", y)
+            }
+            if y != null {
+                height = nav.top - y
+                if height > 0 {
+                    draw(0, y, screen.width, height, key="instagram-home-feed")
                 }
             }
         """.trimIndent()
