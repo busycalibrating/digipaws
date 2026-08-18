@@ -7,11 +7,18 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
+import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.RemoteViews
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import neth.iecal.curbox.R
+import neth.iecal.curbox.data.sync.SYNCED_WEB_PACKAGE
 import neth.iecal.curbox.data.sync.SyncGateway
 import neth.iecal.curbox.ui.activity.FragmentActivity
 import neth.iecal.curbox.ui.fragments.main.usage.AllAppsUsageFragment
@@ -26,6 +33,68 @@ class ScreentimeWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val TAG = "ScreentimeWidgetProvider"
         private const val ACTION_WIDGET_REFRESH = "neth.iecal.curbox.screentime.WIDGET_REFRESH"
+        private const val DEFAULT_WIDGET_HEIGHT_DP = 229
+        private const val HEADER_HEIGHT_DP = 96
+        private const val APP_ROW_HEIGHT_DP = 44
+
+        private val ASCII_ART_IDS = intArrayOf(
+            R.string.ascii_brain,
+            R.string.ascii_aim,
+            R.string.ascii_star1,
+            R.string.ascii_star2,
+            R.string.ascii_kitty,
+            R.string.ascii_star3,
+            R.string.ascii_star4,
+            R.string.ascii_star5,
+            R.string.ascii_coolstars,
+            R.string.ascii_coolflower,
+            R.string.ascii_chillguy,
+            R.string.ascii_god,
+            R.string.ascii_jellyfish,
+            R.string.ascii_lotus,
+            R.string.ascii_sharks,
+        )
+
+        private val APP_ROW_IDS = intArrayOf(
+            R.id.app_row_1,
+            R.id.app_row_2,
+            R.id.app_row_3,
+            R.id.app_row_4,
+            R.id.app_row_5,
+            R.id.app_row_6,
+            R.id.app_row_7,
+            R.id.app_row_8,
+        )
+        private val APP_ICON_IDS = intArrayOf(
+            R.id.app_icon_1,
+            R.id.app_icon_2,
+            R.id.app_icon_3,
+            R.id.app_icon_4,
+            R.id.app_icon_5,
+            R.id.app_icon_6,
+            R.id.app_icon_7,
+            R.id.app_icon_8,
+        )
+        private val APP_NAME_IDS = intArrayOf(
+            R.id.app_name_1,
+            R.id.app_name_2,
+            R.id.app_name_3,
+            R.id.app_name_4,
+            R.id.app_name_5,
+            R.id.app_name_6,
+            R.id.app_name_7,
+            R.id.app_name_8,
+        )
+        private val APP_USAGE_IDS = intArrayOf(
+            R.id.app_usage_1,
+            R.id.app_usage_2,
+            R.id.app_usage_3,
+            R.id.app_usage_4,
+            R.id.app_usage_5,
+            R.id.app_usage_6,
+            R.id.app_usage_7,
+            R.id.app_usage_8,
+        )
     }
 
     override fun onUpdate(
@@ -39,6 +108,20 @@ class ScreentimeWidgetProvider : AppWidgetProvider() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to update widgets", e)
+        }
+    }
+
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle,
+    ) {
+        super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+        try {
+            updateWidget(context, appWidgetManager, appWidgetId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to resize widget $appWidgetId", e)
         }
     }
 
@@ -94,17 +177,24 @@ class ScreentimeWidgetProvider : AppWidgetProvider() {
             runCatching { SyncGateway.provider.remoteWebsiteUsage(today) }.getOrDefault(emptyMap())
         }.values.sum()
 
-        val list = mergeRemoteApps(localList, remoteApps, ignoredPackages).sortedByDescending { it.totalTime }
+        val list = buildList {
+            addAll(mergeRemoteApps(localList, remoteApps, ignoredPackages))
+            if (remoteWebsiteTime >= 1_000) {
+                add(AllAppsUsageFragment.Stat(SYNCED_WEB_PACKAGE, remoteWebsiteTime))
+            }
+        }.sortedByDescending { it.totalTime }
 
-        val totalScreentime = list.sumOf { it.totalTime } + remoteWebsiteTime
+        val totalScreentime = list.sumOf { it.totalTime }
 
         try {
-            val views = RemoteViews(context.packageName, R.layout.widget_app_stats).apply {
+            val views = RemoteViews(context.packageName, R.layout.widget_app_stats_v2).apply {
+                setTextViewText(R.id.widget_ascii_art, context.getString(ASCII_ART_IDS.random()))
                 setTextViewText(R.id.screentime_widget, formatTime(totalScreentime))
 
-                setAppUsageText(this, 0, list, R.id.app_1_sm, context)
-                setAppUsageText(this, 1, list, R.id.app_2_sm, context)
-                setAppUsageText(this, 2, list, R.id.app_3_sm, context)
+                val visibleAppCount = getVisibleAppCount(appWidgetManager, widgetId, list.size)
+                APP_ROW_IDS.indices.forEach { index ->
+                    setAppUsageRow(this, index, list, visibleAppCount, context)
+                }
 
                 val refreshIntent = createRefreshIntent(context, widgetId)
                 val refreshPendingIntent = PendingIntent.getBroadcast(
@@ -163,28 +253,75 @@ class ScreentimeWidgetProvider : AppWidgetProvider() {
         return merged
     }
 
-    private fun setAppUsageText(
+    private fun getVisibleAppCount(
+        appWidgetManager: AppWidgetManager,
+        widgetId: Int,
+        availableApps: Int,
+    ): Int {
+        val options = appWidgetManager.getAppWidgetOptions(widgetId)
+        val widgetHeight = options.getInt(
+            AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT,
+            DEFAULT_WIDGET_HEIGHT_DP,
+        ).takeIf { it > 0 } ?: DEFAULT_WIDGET_HEIGHT_DP
+        val rowsThatFit = ((widgetHeight - HEADER_HEIGHT_DP) / APP_ROW_HEIGHT_DP)
+            .coerceAtLeast(1)
+        return minOf(rowsThatFit, availableApps, APP_ROW_IDS.size)
+    }
+
+    private fun setAppUsageRow(
         remoteViews: RemoteViews,
         index: Int,
         list: List<AllAppsUsageFragment.Stat>,
-        textViewId: Int,
-        context: Context
+        visibleAppCount: Int,
+        context: Context,
     ) {
-        val item = list.getOrNull(index)
-        if (item == null) {
-            remoteViews.setTextViewText(textViewId, "")
+        if (index >= visibleAppCount) {
+            remoteViews.setViewVisibility(APP_ROW_IDS[index], View.GONE)
             return
         }
-        try {
-            val usage = TimeTools.formatTimeForWidget(item.totalTime)
-            val appName = context.packageManager.getApplicationLabel(
-                context.packageManager.getApplicationInfo(item.packageName, 0)
-            )
-            remoteViews.setTextViewText(textViewId, "$usage : $appName")
-        } catch (e: PackageManager.NameNotFoundException) {
-            val usage = TimeTools.formatTimeForWidget(item.totalTime)
-            remoteViews.setTextViewText(textViewId, "$usage : ${item.packageName}")
+
+        val item = list[index]
+        val metadata = getAppMetadata(context, item.packageName)
+        remoteViews.setViewVisibility(APP_ROW_IDS[index], View.VISIBLE)
+        remoteViews.setTextViewText(APP_NAME_IDS[index], metadata.label)
+        remoteViews.setTextViewText(
+            APP_USAGE_IDS[index],
+            TimeTools.formatTimeForWidget(item.totalTime),
+        )
+        metadata.icon?.let { icon ->
+            remoteViews.setImageViewBitmap(APP_ICON_IDS[index], icon.toBitmap(context, 32))
         }
+    }
+
+    private fun getAppMetadata(context: Context, packageName: String): WidgetAppMetadata {
+        if (packageName == SYNCED_WEB_PACKAGE) {
+            return WidgetAppMetadata(
+                label = context.getString(R.string.synced_browsing),
+                icon = ContextCompat.getDrawable(context, R.drawable.ic_synced_web),
+            )
+        }
+
+        return try {
+            val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
+            WidgetAppMetadata(
+                label = appInfo.loadLabel(context.packageManager),
+                icon = appInfo.loadIcon(context.packageManager),
+            )
+        } catch (e: PackageManager.NameNotFoundException) {
+            WidgetAppMetadata(
+                label = packageName,
+                icon = ContextCompat.getDrawable(context, R.drawable.baseline_warning_24),
+            )
+        }
+    }
+
+    private fun Drawable.toBitmap(context: Context, sizeDp: Int): Bitmap {
+        val sizePx = (sizeDp * context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        setBounds(0, 0, canvas.width, canvas.height)
+        draw(canvas)
+        return bitmap
     }
 
     private fun createRefreshIntent(context: Context, widgetId: Int): Intent {
@@ -205,4 +342,9 @@ class ScreentimeWidgetProvider : AppWidgetProvider() {
             if (minutes > 0) append(" ${minutes}m")
         }.trim()
     }
+
+    private data class WidgetAppMetadata(
+        val label: CharSequence,
+        val icon: Drawable?,
+    )
 }
