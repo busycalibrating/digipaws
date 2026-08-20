@@ -263,7 +263,7 @@
     <string name="enable_mindful_messages">Включить осознанные сообщения</string>
     <string name="target_apps">ЦЕЛЕВЫЕ ПРИЛОЖЕНИЯ</string>
     <string name="messages_label">СООБЩЕНИЯ</string>
-    <string name="messages_hint">По одному в строке. Переменные: {app_usage_today}, {screentime_today}, {live_session_duration}, {reel_count}</string>
+    <string name="messages_hint">Переменные: {app_name}, {app_usage_today}, {app_usage_yesterday}, {app_opens_today}, {screentime_today}, {screentime_yesterday}, {mindful_apps_usage_today}, {live_session_duration}, {reel_count}. Для группы блокировки Social используйте {group_usage_today:Social} или {group_usage_yesterday:Social}.</string>
     <string name="overlay_position">ПОЛОЖЕНИЕ ОКНА</string>
     <string name="position_top">Сверху</string>
     <string name="position_center">По центру</string>

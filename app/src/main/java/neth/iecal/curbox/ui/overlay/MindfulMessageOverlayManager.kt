@@ -11,7 +11,12 @@ import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.widget.TextView
 import kotlinx.coroutines.*
+import neth.iecal.curbox.CrashLogger
 import neth.iecal.curbox.R
+import neth.iecal.curbox.anti_stimulants.MindfulMessageVariableValues
+import neth.iecal.curbox.anti_stimulants.MindfulMessageVariables
+import neth.iecal.curbox.data.db.AppDatabase
+import neth.iecal.curbox.data.models.AppGroup
 import neth.iecal.curbox.data.models.MindfulMessageConfig
 import neth.iecal.curbox.utils.TimeTools
 import neth.iecal.curbox.utils.UsageStatsHelper
@@ -30,12 +35,17 @@ class MindfulMessageOverlayManager(private val context: Context) {
     private var textView: TextView? = null
 
     private val usageHelper = UsageStatsHelper(context)
+    private val database = AppDatabase.getInstance(context.applicationContext)
 
     @SuppressLint("InflateParams")
-    fun startDisplaying(pkgName: String, config: MindfulMessageConfig) {
+    fun startDisplaying(
+        pkgName: String,
+        config: MindfulMessageConfig,
+        appGroups: List<AppGroup>
+    ) {
         if (!isOverlayVisible || overlayView == null) {
             setupView(config)
-            startTicker(pkgName, config)
+            startTicker(pkgName, config, appGroups)
         }
     }
 
@@ -96,30 +106,70 @@ class MindfulMessageOverlayManager(private val context: Context) {
         })
     }
 
-    private fun startTicker(pkgName: String, config: MindfulMessageConfig) {
+    private fun startTicker(
+        pkgName: String,
+        config: MindfulMessageConfig,
+        appGroups: List<AppGroup>
+    ) {
         updateJob?.cancel()
+        val appName = runCatching {
+            val appInfo = context.packageManager.getApplicationInfo(pkgName, 0)
+            context.packageManager.getApplicationLabel(appInfo).toString()
+        }.getOrDefault(pkgName)
         updateJob = scope.launch {
-            while (isActive) {
-                val todayStats = withContext(Dispatchers.IO) { usageHelper.getForegroundStatsByRelativeDay(0) }
-                val appStat = todayStats.find { it.packageName == pkgName }
+            try {
+                while (isActive) {
+                    val formatted = withContext(Dispatchers.IO) {
+                        val todayStats =
+                            if (MindfulMessageVariables.needsTodayUsage(config.messages)) {
+                                usageHelper.getForegroundStatsByRelativeDay(0)
+                            } else {
+                                emptyList()
+                            }
+                        val yesterdayStats =
+                            if (MindfulMessageVariables.needsYesterdayUsage(config.messages)) {
+                                usageHelper.getForegroundStatsByRelativeDay(1)
+                            } else {
+                                emptyList()
+                            }
+                        val reelCount = if (MindfulMessageVariables.needsReelCount(config.messages)) {
+                            database.reelStatsDao().getCount(TimeTools.getCurrentDate()) ?: 0
+                        } else {
+                            0
+                        }
+                        val todayByPackage =
+                            todayStats.associate { it.packageName to it.totalTime }
+                        val yesterdayByPackage =
+                            yesterdayStats.associate { it.packageName to it.totalTime }
+                        val appStat = todayStats.find { it.packageName == pkgName }
 
-                val appUsageToday = TimeTools.formatTime(appStat?.totalTime ?: 0, false)
-                val totalScreenTime = TimeTools.formatTime(todayStats.sumOf { it.totalTime }, false)
+                        MindfulMessageVariables.format(
+                            template = config.messages,
+                            values = MindfulMessageVariableValues(
+                                appName = appName,
+                                appUsageTodayMs = appStat?.totalTime ?: 0L,
+                                appUsageYesterdayMs = yesterdayByPackage[pkgName] ?: 0L,
+                                appOpensToday = appStat?.sessions ?: 0,
+                                screenTimeTodayMs = todayStats.sumOf { it.totalTime },
+                                screenTimeYesterdayMs = yesterdayStats.sumOf { it.totalTime },
+                                liveSessionMs = System.currentTimeMillis() - sessionStartTime,
+                                reelCount = reelCount,
+                                todayUsageByPackage = todayByPackage,
+                                yesterdayUsageByPackage = yesterdayByPackage
+                            ),
+                            mindfulApps = config.selectedApps,
+                            appGroups = appGroups
+                        )
+                    }
 
-                val liveSessionMs = System.currentTimeMillis() - sessionStartTime
-                val totalSeconds = liveSessionMs / 1000
-                val mins = totalSeconds / 60
-                val secs = totalSeconds % 60
-                val liveSessionStr = if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
+                    textView?.text = formatted
 
-                val formatted = config.messages
-                    .replace("{app_usage_today}", appUsageToday)
-                    .replace("{screentime_today}", totalScreenTime)
-                    .replace("{live_session_duration}", liveSessionStr)
-
-                textView?.text = formatted
-
-                delay(1000)
+                    delay(1000)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CrashLogger(context).logNonFatalError(e)
             }
         }
     }

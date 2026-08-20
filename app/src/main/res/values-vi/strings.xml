@@ -315,7 +315,7 @@
     <string name="enable_mindful_messages">Kích hoạt tin nhắn chánh niệm</string>
     <string name="target_apps">ỨNG DỤNG MỤC TIÊU</string>
     <string name="messages_label">TIN NHẮN</string>
-    <string name="messages_hint">Một trên mỗi dòng. Các biến: {app_usage_today}, {screentime_today}, {live_session_duration}, {reel_count}</string>
+    <string name="messages_hint">Các biến: {app_name}, {app_usage_today}, {app_usage_yesterday}, {app_opens_today}, {screentime_today}, {screentime_yesterday}, {mindful_apps_usage_today}, {live_session_duration}, {reel_count}. Với nhóm chặn tên Social, dùng {group_usage_today:Social} hoặc {group_usage_yesterday:Social}.</string>
     <string name="overlay_position">VỊ TRÍ LỚP PHỦ</string>
     <string name="position_top">Đứng đầu</string>
     <string name="position_center">Trung tâm</string>

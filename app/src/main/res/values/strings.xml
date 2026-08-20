@@ -323,7 +323,7 @@
     <string name="enable_mindful_messages">Enable Mindful Messages</string>
     <string name="target_apps">TARGET APPS</string>
     <string name="messages_label">MESSAGES</string>
-    <string name="messages_hint">One per line. Variables: {app_usage_today}, {screentime_today}, {live_session_duration}, {reel_count}</string>
+    <string name="messages_hint">Variables: {app_name}, {app_usage_today}, {app_usage_yesterday}, {app_opens_today}, {screentime_today}, {screentime_yesterday}, {mindful_apps_usage_today}, {live_session_duration}, {reel_count}. For a blocker group named Social, use {group_usage_today:Social} or {group_usage_yesterday:Social}.</string>
     <string name="overlay_position">OVERLAY POSITION</string>
     <string name="position_top">Top</string>
     <string name="position_center">Center</string>

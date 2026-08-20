@@ -263,7 +263,7 @@
     <string name="enable_mindful_messages">マインドフルなメッセージを有効にする</string>
     <string name="target_apps">対象アプリ</string>
     <string name="messages_label">メッセージ</string>
-    <string name="messages_hint">1行に1つずつ。変数：{app_usage_today}、{screentime_today}、{live_session_duration}、{reel_count}</string>
+    <string name="messages_hint">変数：{app_name}、{app_usage_today}、{app_usage_yesterday}、{app_opens_today}、{screentime_today}、{screentime_yesterday}、{mindful_apps_usage_today}、{live_session_duration}、{reel_count}。Social というブロッカーグループには {group_usage_today:Social} または {group_usage_yesterday:Social} を使います。</string>
     <string name="overlay_position">オーバーレイの位置</string>
     <string name="position_top">上</string>
     <string name="position_center">中央</string>

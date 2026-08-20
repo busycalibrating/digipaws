@@ -263,7 +263,7 @@
     <string name="enable_mindful_messages">Activar mensajes conscientes</string>
     <string name="target_apps">APPS OBJETIVO</string>
     <string name="messages_label">MENSAJES</string>
-    <string name="messages_hint">Uno por línea. Variables: {app_usage_today}, {screentime_today}, {live_session_duration}, {reel_count}</string>
+    <string name="messages_hint">Variables: {app_name}, {app_usage_today}, {app_usage_yesterday}, {app_opens_today}, {screentime_today}, {screentime_yesterday}, {mindful_apps_usage_today}, {live_session_duration}, {reel_count}. Para un grupo de bloqueo llamado Social, usa {group_usage_today:Social} o {group_usage_yesterday:Social}.</string>
     <string name="overlay_position">POSICIÓN DE LA VENTANA</string>
     <string name="position_top">Arriba</string>
     <string name="position_center">Centro</string>

@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import neth.iecal.curbox.data.models.AppGroup
 import neth.iecal.curbox.data.models.MindfulMessageConfig
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.ui.overlay.MindfulMessageOverlayManager
@@ -30,6 +31,7 @@ class MindfulMessage {
     private lateinit var overlayManager: MindfulMessageOverlayManager
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var config = MindfulMessageConfig()
+    private var appGroups = emptyList<AppGroup>()
     private var currentPkg: String? = null
     private var ignoredpackages = listOf<String>()
 
@@ -69,6 +71,7 @@ class MindfulMessage {
         scope.launch {
             service.dataStoreManager.settings.collectLatest { settings ->
                 config = settings.mindfulMessageConfig
+                appGroups = settings.blockedAppGroups
             }
         }
     }
@@ -97,7 +100,7 @@ class MindfulMessage {
                 currentPkg = pkg
             }
             if (Settings.canDrawOverlays(service) && !overlayManager.isOverlayVisible) {
-                overlayManager.startDisplaying(pkg, displayConfig)
+                overlayManager.startDisplaying(pkg, displayConfig, appGroups)
             }
         } else if (overlayManager.isOverlayVisible) {
             currentPkg = null

@@ -263,7 +263,7 @@
     <string name="enable_mindful_messages">开启正念提醒</string>
     <string name="target_apps">目标应用</string>
     <string name="messages_label">提示语</string>
-    <string name="messages_hint">每行一条。可用变量：{app_usage_today}、{screentime_today}、{live_session_duration}、{reel_count}</string>
+    <string name="messages_hint">可用变量：{app_name}、{app_usage_today}、{app_usage_yesterday}、{app_opens_today}、{screentime_today}、{screentime_yesterday}、{mindful_apps_usage_today}、{live_session_duration}、{reel_count}。对于名为 Social 的拦截组，请使用 {group_usage_today:Social} 或 {group_usage_yesterday:Social}。</string>
     <string name="overlay_position">悬浮窗位置</string>
     <string name="position_top">顶部</string>
     <string name="position_center">居中</string>

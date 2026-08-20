@@ -263,7 +263,7 @@
     <string name="enable_mindful_messages">تفعيل الرسائل الواعية</string>
     <string name="target_apps">التطبيقات المستهدفة</string>
     <string name="messages_label">الرسائل</string>
-    <string name="messages_hint">رسالة واحدة في كل سطر. المتغيرات: {app_usage_today}، {screentime_today}، {live_session_duration}، {reel_count}</string>
+    <string name="messages_hint">المتغيرات: {app_name}، {app_usage_today}، {app_usage_yesterday}، {app_opens_today}، {screentime_today}، {screentime_yesterday}، {mindful_apps_usage_today}، {live_session_duration}، {reel_count}. لمجموعة حظر اسمها Social استخدم {group_usage_today:Social} أو {group_usage_yesterday:Social}.</string>
     <string name="overlay_position">موضع النافذة العائمة</string>
     <string name="position_top">أعلى</string>
     <string name="position_center">المنتصف</string>

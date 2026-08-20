@@ -263,7 +263,7 @@
     <string name="enable_mindful_messages">Ativar mensagens conscientes</string>
     <string name="target_apps">APPS ALVO</string>
     <string name="messages_label">MENSAGENS</string>
-    <string name="messages_hint">Uma por linha. Variáveis: {app_usage_today}, {screentime_today}, {live_session_duration}, {reel_count}</string>
+    <string name="messages_hint">Variáveis: {app_name}, {app_usage_today}, {app_usage_yesterday}, {app_opens_today}, {screentime_today}, {screentime_yesterday}, {mindful_apps_usage_today}, {live_session_duration}, {reel_count}. Para um grupo de bloqueio chamado Social, use {group_usage_today:Social} ou {group_usage_yesterday:Social}.</string>
     <string name="overlay_position">POSIÇÃO DA JANELA</string>
     <string name="position_top">Topo</string>
     <string name="position_center">Centro</string>
