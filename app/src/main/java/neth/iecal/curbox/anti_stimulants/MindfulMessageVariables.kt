@@ -17,8 +17,8 @@ data class MindfulMessageVariableValues(
 )
 
 object MindfulMessageVariables {
-    private val groupUsageTodayPattern = Regex("\\{group_usage_today:([^{}]+)}")
-    private val groupUsageYesterdayPattern = Regex("\\{group_usage_yesterday:([^{}]+)}")
+    private val groupUsageTodayPattern = Regex("\\{group_usage_today:([^{}]+)\\}")
+    private val groupUsageYesterdayPattern = Regex("\\{group_usage_yesterday:([^{}]+)\\}")
 
     fun format(
         template: String,

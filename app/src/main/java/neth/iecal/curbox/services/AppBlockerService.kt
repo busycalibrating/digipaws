@@ -103,8 +103,11 @@ class AppBlockerService : BaseBlockingService() {
         try {
             appUsageTracker.onEvent(event)
             mindfulMessage.onEvent(event)
-        } catch (error: Exception) {
-            Log.e("Usage Tracking error", error.toString())
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+
+            crashLogger.logNonFatalError(Exception(t))
+            Log.e("Usage Tracking", "Usage tracking or mindful message error", t)
         }
 
         val eventCopy = AccessibilityEvent.obtain(event)
