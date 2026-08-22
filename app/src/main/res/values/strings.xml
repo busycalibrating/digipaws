@@ -346,6 +346,11 @@
     <string name="text_size_label">Text Size: 14sp</string>
     <string name="text_size_value">Text Size: %dsp</string>
     <string name="background_color">Background Color</string>
+    <string name="text_color">Text Color</string>
+    <string name="color_wheel">Color wheel</string>
+    <string name="color_brightness">Color brightness</string>
+    <string name="hex_color">Hex color</string>
+    <string name="invalid_hex_color">Enter 6 hex digits</string>
     <string name="opacity_label">Opacity: 37%</string>
     <string name="opacity_value">Opacity: %d%%</string>
     <string name="text_opacity_label">Text Opacity: 100%</string>

@@ -283,6 +283,11 @@
     <string name="text_size_label">Размер текста: 14sp</string>
     <string name="text_size_value">Размер текста: %dsp</string>
     <string name="background_color">Цвет фона</string>
+    <string name="text_color">Цвет текста</string>
+    <string name="color_wheel">Цветовой круг</string>
+    <string name="color_brightness">Яркость цвета</string>
+    <string name="hex_color">Шестнадцатеричный цвет</string>
+    <string name="invalid_hex_color">Введите 6 шестнадцатеричных цифр</string>
     <string name="opacity_label">Непрозрачность: 37%</string>
     <string name="opacity_value">Непрозрачность: %d%%</string>
     <string name="text_opacity_label">Непрозрачность текста: 100%</string>

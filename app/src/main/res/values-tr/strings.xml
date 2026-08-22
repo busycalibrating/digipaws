@@ -332,6 +332,11 @@
   <string name="text_size_label">Metin Boyutu: 14sp</string>
   <string name="text_size_value">Metin Boyutu: %dsp</string>
   <string name="background_color">Arka plan rengi</string>
+  <string name="text_color">Metin rengi</string>
+  <string name="color_wheel">Renk çarkı</string>
+  <string name="color_brightness">Renk parlaklığı</string>
+  <string name="hex_color">Onaltılık renk</string>
+  <string name="invalid_hex_color">6 onaltılık basamak girin</string>
   <string name="opacity_label">Opaklık: 37%</string>
   <string name="opacity_value">Opaklık: %d%%</string>
   <string name="text_opacity_label">Metin Opaklığı: 100%</string>

@@ -338,6 +338,11 @@
     <string name="text_size_label">Kích thước văn bản: 14sp</string>
     <string name="text_size_value">Kích thước văn bản: %dsp</string>
     <string name="background_color">Màu nền</string>
+    <string name="text_color">Màu văn bản</string>
+    <string name="color_wheel">Vòng màu</string>
+    <string name="color_brightness">Độ sáng màu</string>
+    <string name="hex_color">Màu thập lục phân</string>
+    <string name="invalid_hex_color">Nhập 6 chữ số thập lục phân</string>
     <string name="opacity_label">Độ mờ: 37%</string>
     <string name="opacity_value">Độ mờ: %d%%</string>
     <string name="text_opacity_label">Độ mờ văn bản: 100%</string>

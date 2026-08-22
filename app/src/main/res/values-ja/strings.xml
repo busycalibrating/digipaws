@@ -283,6 +283,11 @@
     <string name="text_size_label">文字サイズ：14sp</string>
     <string name="text_size_value">文字サイズ：%dsp</string>
     <string name="background_color">背景色</string>
+    <string name="text_color">文字色</string>
+    <string name="color_wheel">カラーホイール</string>
+    <string name="color_brightness">色の明るさ</string>
+    <string name="hex_color">16進カラー</string>
+    <string name="invalid_hex_color">16進数を6桁入力してください</string>
     <string name="opacity_label">不透明度：37%</string>
     <string name="opacity_value">不透明度：%d%%</string>
     <string name="text_opacity_label">文字の不透明度：100%</string>

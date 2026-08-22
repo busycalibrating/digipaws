@@ -283,6 +283,11 @@
     <string name="text_size_label">文字大小：14sp</string>
     <string name="text_size_value">文字大小：%dsp</string>
     <string name="background_color">背景颜色</string>
+    <string name="text_color">文字颜色</string>
+    <string name="color_wheel">色轮</string>
+    <string name="color_brightness">颜色亮度</string>
+    <string name="hex_color">十六进制颜色</string>
+    <string name="invalid_hex_color">请输入 6 位十六进制数字</string>
     <string name="opacity_label">不透明度：37%</string>
     <string name="opacity_value">不透明度：%d%%</string>
     <string name="text_opacity_label">文字不透明度：100%</string>

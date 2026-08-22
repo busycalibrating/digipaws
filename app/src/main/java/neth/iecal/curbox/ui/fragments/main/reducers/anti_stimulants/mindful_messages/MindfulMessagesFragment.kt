@@ -23,6 +23,8 @@ import neth.iecal.curbox.R
 import neth.iecal.curbox.databinding.FragmentMindfulMessagesBinding
 import neth.iecal.curbox.ui.activity.SelectAppsActivity
 import neth.iecal.curbox.ui.overlay.OverlayDragHelper
+import neth.iecal.curbox.ui.views.ColorPickerDialog
+import java.util.Locale
 
 class MindfulMessagesFragment : Fragment() {
 
@@ -36,8 +38,6 @@ class MindfulMessagesFragment : Fragment() {
     private val viewModel: MindfulMessagesViewModel by viewModels()
     private var selectedApps = arrayListOf<String>()
     private var isUpdatingFromViewModel = false
-    private var selectedColorIndex = 0
-    private var colorChipViews = emptyList<View>()
     private var positionScrim: View? = null
 
     private val selectAppsLauncher = registerForActivityResult(
@@ -81,17 +81,6 @@ class MindfulMessagesFragment : Fragment() {
             }
         }
 
-        colorChipViews = OverlayDragHelper.buildColorChips(
-            container = binding.colorChipsContainer,
-            fragment = this,
-            onColorSelected = { index ->
-                if (!isUpdatingFromViewModel) {
-                    selectedColorIndex = index
-                    OverlayDragHelper.refreshChipSelection(colorChipViews, selectedColorIndex, resources.displayMetrics.density)
-                    viewModel.updateBgColor(OverlayDragHelper.PRESET_COLORS[index])
-                }
-            }
-        )
         setupUI()
         observeViewModel()
     }
@@ -135,6 +124,26 @@ class MindfulMessagesFragment : Fragment() {
             viewModel.updateBgOpacity(value.toInt())
         }
 
+        binding.rowBackgroundColor.setOnClickListener {
+            val config = viewModel.configState.value
+            ColorPickerDialog.show(
+                context = requireContext(),
+                title = getString(R.string.background_color),
+                initialColor = config.bgColor,
+                onColorSelected = viewModel::updateBgColor
+            )
+        }
+
+        binding.rowTextColor.setOnClickListener {
+            val config = viewModel.configState.value
+            ColorPickerDialog.show(
+                context = requireContext(),
+                title = getString(R.string.text_color),
+                initialColor = config.textColor,
+                onColorSelected = viewModel::updateTextColor
+            )
+        }
+
         binding.btnSetPosition.setOnClickListener { showPositionDragOverlay() }
     }
 
@@ -176,11 +185,10 @@ class MindfulMessagesFragment : Fragment() {
                     }
                     binding.tvOpacityLabel.text = getString(R.string.opacity_value, config.bgOpacity)
 
-                    val colorIdx = OverlayDragHelper.PRESET_COLORS.indexOfFirst { it == config.bgColor }.takeIf { it >= 0 } ?: 0
-                    if (selectedColorIndex != colorIdx) {
-                        selectedColorIndex = colorIdx
-                        OverlayDragHelper.refreshChipSelection(colorChipViews, selectedColorIndex, resources.displayMetrics.density)
-                    }
+                    binding.backgroundColorPreview.setCardBackgroundColor(toOpaqueColor(config.bgColor))
+                    binding.tvBackgroundColorHex.text = colorHex(config.bgColor)
+                    binding.textColorPreview.setCardBackgroundColor(toOpaqueColor(config.textColor))
+                    binding.tvTextColorHex.text = colorHex(config.textColor)
 
                     isUpdatingFromViewModel = false
                 }
@@ -203,7 +211,12 @@ class MindfulMessagesFragment : Fragment() {
                 widget.findViewById<TextView>(R.id.mindful_txt).apply {
                     text = config.messages.lines().firstOrNull()?.ifBlank { "Mindful message" } ?: "Mindful message"
                     textSize = config.textSize
-                    setTextColor(Color.argb(config.textOpacity * 255 / 100, 255, 255, 255))
+                    setTextColor(Color.argb(
+                        config.textOpacity * 255 / 100,
+                        (config.textColor shr 16) and 0xFF,
+                        (config.textColor shr 8) and 0xFF,
+                        config.textColor and 0xFF
+                    ))
                     setBackgroundColor(Color.argb(config.bgOpacity * 255 / 100, r, g, b))
                     setPadding(32, 32, 32, 32)
                 }
@@ -216,6 +229,15 @@ class MindfulMessagesFragment : Fragment() {
     private fun updateAppsButtonText() {
         binding.btnSelectApps.text = getString(R.string.select_apps_count, selectedApps.size)
     }
+
+    private fun colorHex(color: Int): String =
+        String.format(Locale.ROOT, "#%06X", color and 0xFFFFFF)
+
+    private fun toOpaqueColor(color: Int): Int = Color.rgb(
+        (color shr 16) and 0xFF,
+        (color shr 8) and 0xFF,
+        color and 0xFF
+    )
 
     override fun onDestroyView() {
         positionScrim?.let {

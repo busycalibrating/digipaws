@@ -283,6 +283,11 @@
     <string name="text_size_label">حجم النص: 14sp</string>
     <string name="text_size_value">حجم النص: %dsp</string>
     <string name="background_color">لون الخلفية</string>
+    <string name="text_color">لون النص</string>
+    <string name="color_wheel">عجلة الألوان</string>
+    <string name="color_brightness">سطوع اللون</string>
+    <string name="hex_color">رمز اللون</string>
+    <string name="invalid_hex_color">أدخل 6 أرقام للون</string>
     <string name="opacity_label">التعتيم: 37%</string>
     <string name="opacity_value">التعتيم: %d%%</string>
     <string name="text_opacity_label">تعتيم النص: 100%</string>

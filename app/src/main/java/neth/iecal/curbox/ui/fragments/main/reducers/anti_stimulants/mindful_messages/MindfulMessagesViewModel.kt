@@ -41,6 +41,11 @@ class MindfulMessagesViewModel(application: Application) : AndroidViewModel(appl
         if (current.textSize != textSize) updateConfig(current.copy(textSize = textSize))
     }
 
+    fun updateTextColor(textColor: Int) {
+        val current = _configState.value
+        if (current.textColor != textColor) updateConfig(current.copy(textColor = textColor))
+    }
+
     fun updateBgColor(bgColor: Int) {
         val current = _configState.value
         if (current.bgColor != bgColor) updateConfig(current.copy(bgColor = bgColor))

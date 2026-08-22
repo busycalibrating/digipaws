@@ -283,6 +283,11 @@
     <string name="text_size_label">Tamanho do texto: 14sp</string>
     <string name="text_size_value">Tamanho do texto: %dsp</string>
     <string name="background_color">Cor de fundo</string>
+    <string name="text_color">Cor do texto</string>
+    <string name="color_wheel">Círculo de cores</string>
+    <string name="color_brightness">Brilho da cor</string>
+    <string name="hex_color">Cor hexadecimal</string>
+    <string name="invalid_hex_color">Digite 6 dígitos hexadecimais</string>
     <string name="opacity_label">Opacidade: 37%</string>
     <string name="opacity_value">Opacidade: %d%%</string>
     <string name="text_opacity_label">Opacidade do texto: 100%</string>
