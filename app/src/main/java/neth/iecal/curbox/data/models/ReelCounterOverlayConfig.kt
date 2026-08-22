@@ -2,6 +2,7 @@ package neth.iecal.curbox.data.models
 
 data class ReelCounterOverlayConfig(
     val textSize: Float = 96f,
+    val textColor: Int = 0xFFFFFF,
     val textOpacity: Int = 80,
     val bgColor: Int = 0x000000,
     val bgOpacity: Int = 0,

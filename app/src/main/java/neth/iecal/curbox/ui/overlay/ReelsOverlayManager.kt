@@ -40,6 +40,11 @@ class ReelsOverlayManager(private val context: Context) {
             visibility = if (isVisible) View.VISIBLE else View.GONE
             text = reelsScrolledThisSession.toString()
             textSize = config.textSize
+            setTextColor(Color.rgb(
+                (config.textColor shr 16) and 0xFF,
+                (config.textColor shr 8) and 0xFF,
+                config.textColor and 0xFF
+            ))
             this.alpha = config.textOpacity / 100f
         }
         binding?.timeElapsedTxt?.visibility = View.GONE

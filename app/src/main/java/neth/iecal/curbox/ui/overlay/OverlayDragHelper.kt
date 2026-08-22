@@ -2,7 +2,6 @@ package neth.iecal.curbox.ui.overlay
 
 import android.annotation.SuppressLint
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -15,47 +14,6 @@ import com.google.android.material.button.MaterialButton
 import neth.iecal.curbox.R
 
 object OverlayDragHelper {
-
-    val PRESET_COLORS = intArrayOf(
-        0x000000,
-        0x1A1A2E,
-        0x0D2818,
-        0x2A0D1A,
-        0x2A2A3A,
-        0xFFFFFF
-    )
-
-    fun buildColorChips(
-        container: ViewGroup,
-        fragment: Fragment,
-        onColorSelected: (index: Int) -> Unit
-    ): List<View> {
-        val density = fragment.resources.displayMetrics.density
-        val sizePx = (40 * density).toInt()
-        val marginPx = (8 * density).toInt()
-        return PRESET_COLORS.mapIndexed { index, color ->
-            FrameLayout(fragment.requireContext()).apply {
-                layoutParams = ViewGroup.MarginLayoutParams(sizePx, sizePx).apply {
-                    marginEnd = marginPx
-                }
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.rgb((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF))
-                    setStroke((2 * density).toInt(), Color.TRANSPARENT)
-                }
-                setOnClickListener { onColorSelected(index) }
-                container.addView(this)
-            }
-        }
-    }
-
-    fun refreshChipSelection(chips: List<View>, selectedIndex: Int, density: Float) {
-        chips.forEachIndexed { i, chip ->
-            val bg = chip.background as? GradientDrawable ?: return@forEachIndexed
-            val strokeColor = if (i == selectedIndex) Color.parseColor("#83D5C5") else Color.TRANSPARENT
-            bg.setStroke((3 * density).toInt(), strokeColor)
-        }
-    }
 
     /**
      * Shows a full-screen scrim on the activity's decorView with the real overlay widget,

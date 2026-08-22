@@ -16,6 +16,8 @@ import neth.iecal.curbox.utils.ViewUtils
 import neth.iecal.curbox.R
 import neth.iecal.curbox.databinding.FragmentReelCounterBinding
 import neth.iecal.curbox.ui.overlay.OverlayDragHelper
+import neth.iecal.curbox.ui.views.ColorPickerDialog
+import java.util.Locale
 
 class ReelCounterFragment : Fragment() {
 
@@ -28,8 +30,6 @@ class ReelCounterFragment : Fragment() {
 
     private lateinit var viewModel: ReelCounterViewModel
     private var isUpdatingUi = false
-    private var selectedColorIndex = 0
-    private var colorChipViews = emptyList<View>()
     private var positionScrim: View? = null
 
     override fun onCreateView(
@@ -43,17 +43,6 @@ class ReelCounterFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         viewModel = ViewModelProvider(this)[ReelCounterViewModel::class.java]
-        colorChipViews = OverlayDragHelper.buildColorChips(
-            container = binding.reelColorChipsContainer,
-            fragment = this,
-            onColorSelected = { index ->
-                if (!isUpdatingUi) {
-                    selectedColorIndex = index
-                    OverlayDragHelper.refreshChipSelection(colorChipViews, selectedColorIndex, resources.displayMetrics.density)
-                    viewModel.updateOverlayConfig(viewModel.overlayConfig.value.copy(bgColor = OverlayDragHelper.PRESET_COLORS[index]))
-                }
-            }
-        )
         setupListeners()
         observeViewModel()
         viewModel.initialize()
@@ -94,6 +83,30 @@ class ReelCounterFragment : Fragment() {
             viewModel.updateOverlayConfig(viewModel.overlayConfig.value.copy(bgOpacity = value.toInt()))
         }
 
+        binding.rowReelBackgroundColor.setOnClickListener {
+            val config = viewModel.overlayConfig.value
+            ColorPickerDialog.show(
+                context = requireContext(),
+                title = getString(R.string.background_color),
+                initialColor = config.bgColor,
+                onColorSelected = { color ->
+                    viewModel.updateOverlayConfig(config.copy(bgColor = color))
+                }
+            )
+        }
+
+        binding.rowReelTextColor.setOnClickListener {
+            val config = viewModel.overlayConfig.value
+            ColorPickerDialog.show(
+                context = requireContext(),
+                title = getString(R.string.text_color),
+                initialColor = config.textColor,
+                onColorSelected = { color ->
+                    viewModel.updateOverlayConfig(config.copy(textColor = color))
+                }
+            )
+        }
+
         binding.btnSetPosition.setOnClickListener { showPositionDragOverlay() }
     }
 
@@ -127,11 +140,10 @@ class ReelCounterFragment : Fragment() {
                 }
                 binding.tvReelOpacityLabel.text = getString(R.string.opacity_value, config.bgOpacity)
 
-                val colorIdx = OverlayDragHelper.PRESET_COLORS.indexOfFirst { it == config.bgColor }.takeIf { it >= 0 } ?: 0
-                if (selectedColorIndex != colorIdx) {
-                    selectedColorIndex = colorIdx
-                    OverlayDragHelper.refreshChipSelection(colorChipViews, selectedColorIndex, resources.displayMetrics.density)
-                }
+                binding.reelBackgroundColorPreview.setCardBackgroundColor(toOpaqueColor(config.bgColor))
+                binding.tvReelBackgroundColorHex.text = colorHex(config.bgColor)
+                binding.reelTextColorPreview.setCardBackgroundColor(toOpaqueColor(config.textColor))
+                binding.tvReelTextColorHex.text = colorHex(config.textColor)
 
                 isUpdatingUi = false
             }
@@ -180,6 +192,7 @@ class ReelCounterFragment : Fragment() {
                     visibility = View.VISIBLE
                     text = "42"
                     textSize = config.textSize
+                    setTextColor(toOpaqueColor(config.textColor))
                     alpha = config.textOpacity / 100f
                 }
                 widget.findViewById<TextView>(R.id.time_elapsed_txt).apply {
@@ -192,6 +205,15 @@ class ReelCounterFragment : Fragment() {
             onDismiss = { positionScrim = null }
         )
     }
+
+    private fun colorHex(color: Int): String =
+        String.format(Locale.ROOT, "#%06X", color and 0xFFFFFF)
+
+    private fun toOpaqueColor(color: Int): Int = Color.rgb(
+        (color shr 16) and 0xFF,
+        (color shr 8) and 0xFF,
+        color and 0xFF
+    )
 
     override fun onDestroyView() {
         positionScrim?.let {
