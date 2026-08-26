@@ -67,7 +67,10 @@ class ReelCounterFragment : Fragment() {
 
         binding.sliderReelTextSize.addOnChangeListener { _, value, fromUser ->
             if (!fromUser) return@addOnChangeListener
-            binding.tvReelTextSizeLabel.text = getString(R.string.text_size_value, value.toInt())
+            binding.tvReelTextSizeLabel.text = getString(
+                R.string.reel_counter_text_size_value,
+                value.toInt()
+            )
             viewModel.updateOverlayConfig(viewModel.overlayConfig.value.copy(textSize = value))
         }
 
@@ -93,13 +96,19 @@ class ReelCounterFragment : Fragment() {
 
         binding.sliderReelTextOpacity.addOnChangeListener { _, value, fromUser ->
             if (!fromUser) return@addOnChangeListener
-            binding.tvReelTextOpacityLabel.text = getString(R.string.text_opacity_value, value.toInt())
+            binding.tvReelTextOpacityLabel.text = getString(
+                R.string.reel_counter_text_opacity_value,
+                value.toInt()
+            )
             viewModel.updateOverlayConfig(viewModel.overlayConfig.value.copy(textOpacity = value.toInt()))
         }
 
         binding.sliderReelOpacity.addOnChangeListener { _, value, fromUser ->
             if (!fromUser) return@addOnChangeListener
-            binding.tvReelOpacityLabel.text = getString(R.string.opacity_value, value.toInt())
+            binding.tvReelOpacityLabel.text = getString(
+                R.string.reel_counter_background_opacity_value,
+                value.toInt()
+            )
             viewModel.updateOverlayConfig(viewModel.overlayConfig.value.copy(bgOpacity = value.toInt()))
         }
 
@@ -107,7 +116,7 @@ class ReelCounterFragment : Fragment() {
             val config = viewModel.overlayConfig.value
             ColorPickerDialog.show(
                 context = requireContext(),
-                title = getString(R.string.background_color),
+                title = getString(R.string.reel_counter_background_color),
                 initialColor = config.bgColor,
                 onColorSelected = { color ->
                     viewModel.updateOverlayConfig(config.copy(bgColor = color))
@@ -119,7 +128,7 @@ class ReelCounterFragment : Fragment() {
             val config = viewModel.overlayConfig.value
             ColorPickerDialog.show(
                 context = requireContext(),
-                title = getString(R.string.text_color),
+                title = getString(R.string.reel_counter_text_color),
                 initialColor = config.textColor,
                 onColorSelected = { color ->
                     viewModel.updateOverlayConfig(config.copy(textColor = color))
@@ -148,7 +157,10 @@ class ReelCounterFragment : Fragment() {
                 if (binding.sliderReelTextSize.value != config.textSize) {
                     binding.sliderReelTextSize.value = config.textSize.coerceIn(24f, 120f)
                 }
-                binding.tvReelTextSizeLabel.text = getString(R.string.text_size_value, config.textSize.toInt())
+                binding.tvReelTextSizeLabel.text = getString(
+                    R.string.reel_counter_text_size_value,
+                    config.textSize.toInt()
+                )
 
                 if (binding.switchReelCheckpoints.isChecked != config.checkpointsEnabled) {
                     binding.switchReelCheckpoints.isChecked = config.checkpointsEnabled
@@ -167,12 +179,18 @@ class ReelCounterFragment : Fragment() {
                 if (binding.sliderReelTextOpacity.value != config.textOpacity.toFloat()) {
                     binding.sliderReelTextOpacity.value = config.textOpacity.toFloat().coerceIn(0f, 100f)
                 }
-                binding.tvReelTextOpacityLabel.text = getString(R.string.text_opacity_value, config.textOpacity)
+                binding.tvReelTextOpacityLabel.text = getString(
+                    R.string.reel_counter_text_opacity_value,
+                    config.textOpacity
+                )
 
                 if (binding.sliderReelOpacity.value != config.bgOpacity.toFloat()) {
                     binding.sliderReelOpacity.value = config.bgOpacity.toFloat().coerceIn(0f, 100f)
                 }
-                binding.tvReelOpacityLabel.text = getString(R.string.opacity_value, config.bgOpacity)
+                binding.tvReelOpacityLabel.text = getString(
+                    R.string.reel_counter_background_opacity_value,
+                    config.bgOpacity
+                )
 
                 binding.reelBackgroundColorPreview.setCardBackgroundColor(toOpaqueColor(config.bgColor))
                 binding.tvReelBackgroundColorHex.text = colorHex(config.bgColor)
