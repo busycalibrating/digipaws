@@ -71,6 +71,26 @@ class ReelCounterFragment : Fragment() {
             viewModel.updateOverlayConfig(viewModel.overlayConfig.value.copy(textSize = value))
         }
 
+        binding.switchReelCheckpoints.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
+            updateCheckpointControlsVisibility(isChecked, animate = true)
+            viewModel.updateOverlayConfig(
+                viewModel.overlayConfig.value.copy(checkpointsEnabled = isChecked)
+            )
+        }
+
+        binding.sliderReelCheckpointInterval.addOnChangeListener { _, value, fromUser ->
+            if (!fromUser) return@addOnChangeListener
+            val interval = value.toInt()
+            binding.tvReelCheckpointIntervalLabel.text = getString(
+                R.string.reel_checkpoint_interval_value,
+                interval
+            )
+            viewModel.updateOverlayConfig(
+                viewModel.overlayConfig.value.copy(checkpointInterval = interval)
+            )
+        }
+
         binding.sliderReelTextOpacity.addOnChangeListener { _, value, fromUser ->
             if (!fromUser) return@addOnChangeListener
             binding.tvReelTextOpacityLabel.text = getString(R.string.text_opacity_value, value.toInt())
@@ -129,6 +149,20 @@ class ReelCounterFragment : Fragment() {
                     binding.sliderReelTextSize.value = config.textSize.coerceIn(24f, 120f)
                 }
                 binding.tvReelTextSizeLabel.text = getString(R.string.text_size_value, config.textSize.toInt())
+
+                if (binding.switchReelCheckpoints.isChecked != config.checkpointsEnabled) {
+                    binding.switchReelCheckpoints.isChecked = config.checkpointsEnabled
+                }
+                updateCheckpointControlsVisibility(config.checkpointsEnabled, animate = false)
+
+                val checkpointInterval = config.checkpointInterval.coerceIn(2, 100)
+                if (binding.sliderReelCheckpointInterval.value != checkpointInterval.toFloat()) {
+                    binding.sliderReelCheckpointInterval.value = checkpointInterval.toFloat()
+                }
+                binding.tvReelCheckpointIntervalLabel.text = getString(
+                    R.string.reel_checkpoint_interval_value,
+                    checkpointInterval
+                )
 
                 if (binding.sliderReelTextOpacity.value != config.textOpacity.toFloat()) {
                     binding.sliderReelTextOpacity.value = config.textOpacity.toFloat().coerceIn(0f, 100f)
@@ -208,6 +242,31 @@ class ReelCounterFragment : Fragment() {
 
     private fun colorHex(color: Int): String =
         String.format(Locale.ROOT, "#%06X", color and 0xFFFFFF)
+
+    private fun updateCheckpointControlsVisibility(isVisible: Boolean, animate: Boolean) {
+        val container = binding.reelCheckpointIntervalContainer
+        container.animate().cancel()
+        if (isVisible) {
+            if (container.visibility != View.VISIBLE) {
+                container.alpha = if (animate) 0f else 1f
+                container.visibility = View.VISIBLE
+            }
+            if (animate) {
+                container.animate().alpha(1f).setDuration(200).start()
+            } else {
+                container.alpha = 1f
+            }
+        } else if (animate && container.visibility == View.VISIBLE) {
+            container.animate().alpha(0f).setDuration(160).withEndAction {
+                if (!binding.switchReelCheckpoints.isChecked) {
+                    container.visibility = View.GONE
+                }
+            }.start()
+        } else {
+            container.alpha = 0f
+            container.visibility = View.GONE
+        }
+    }
 
     private fun toOpaqueColor(color: Int): Int = Color.rgb(
         (color shr 16) and 0xFF,

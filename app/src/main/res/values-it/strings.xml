@@ -77,6 +77,10 @@
         Piccoli segnali a schermo per aiutarti a rimanere presente e concentrato.
     </string>
     <string name="reel_counter">Contatore video brevi</string>
+    <string name="reel_checkpoints">Mostra solo ai traguardi</string>
+    <string name="reel_checkpoints_hint">Il contatore appare dopo ogni numero impostato di video brevi.</string>
+    <string name="reel_checkpoint_interval_default">Mostra ogni 10 video</string>
+    <string name="reel_checkpoint_interval_value">Mostra ogni %d video</string>
     <string name="track_the_number_of_reels_consumed">
         Monitora e analizza il numero di contenuti brevi visualizzati
     </string>

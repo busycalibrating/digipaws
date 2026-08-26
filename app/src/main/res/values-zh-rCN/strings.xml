@@ -279,6 +279,10 @@
     <string name="picker_active_title">元素选取器正在运行</string>
     <string name="picker_active_text">点击屏幕上的元素来选中它们</string>
     <string name="appearance">外观</string>
+    <string name="reel_checkpoints">仅在检查点显示</string>
+    <string name="reel_checkpoints_hint">每观看设定数量的短视频后显示计数器。</string>
+    <string name="reel_checkpoint_interval_default">每 10 个视频显示</string>
+    <string name="reel_checkpoint_interval_value">每 %d 个视频显示</string>
     <string name="btn_set_position">设置位置</string>
     <string name="text_size_label">文字大小：14sp</string>
     <string name="text_size_value">文字大小：%dsp</string>

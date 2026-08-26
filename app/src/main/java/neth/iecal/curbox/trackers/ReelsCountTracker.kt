@@ -12,7 +12,6 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.LruCache
-import android.view.View
 import android.view.accessibility.AccessibilityEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,6 +75,10 @@ class ReelsCountTracker {
             service.dataStoreManager.settings.collectLatest { settings ->
                 isOnDisplayCounter = settings.isReelCounterOn
                 overlayConfig = settings.reelCounterOverlayConfig
+                postOverlayUpdate {
+                    overlayManager.binding?.reelCounter?.text = todayCount.toString()
+                    overlayManager.setCounterVisible(shouldShowCounter())
+                }
             }
         }
 
@@ -108,7 +111,7 @@ class ReelsCountTracker {
                     postOverlayUpdate {
                         if (!overlayManager.isOverlayVisible) {
                             overlayManager.reelsScrolledThisSession = todayCount
-                            overlayManager.startDisplaying(overlayConfig, isOnDisplayCounter)
+                            overlayManager.startDisplaying(overlayConfig, shouldShowCounter())
                         }
                     }
                 }
@@ -178,14 +181,13 @@ class ReelsCountTracker {
         overlayManager.reelsScrolledThisSession = todayCount
 
         postOverlayUpdate {
-            if (isOnDisplayCounter) {
+            val shouldShow = shouldShowCounter()
+            if (shouldShow) {
                 overlayManager.binding?.reelCounter?.apply {
-                    visibility = View.VISIBLE
                     text = todayCount.toString()
                 }
-            } else {
-                overlayManager.binding?.reelCounter?.visibility = View.GONE
             }
+            overlayManager.setCounterVisible(shouldShow)
         }
 
         scope.launch {
@@ -230,8 +232,11 @@ class ReelsCountTracker {
     }
 
     private fun hideReelCounter() {
-        postOverlayUpdate { overlayManager.binding?.reelCounter?.visibility = View.GONE }
+        postOverlayUpdate { overlayManager.setCounterVisible(false) }
     }
+
+    private fun shouldShowCounter(): Boolean =
+        isOnDisplayCounter && overlayConfig.shouldShowAtCount(todayCount)
 
     private fun postOverlayUpdate(block: () -> Unit) {
         mainHandler.post {

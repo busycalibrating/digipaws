@@ -37,7 +37,7 @@ class ReelsOverlayManager(private val context: Context) {
 
         binding?.root?.setBackgroundColor(Color.argb(alpha, r, g, b))
         binding?.reelCounter?.apply {
-            visibility = if (isVisible) View.VISIBLE else View.GONE
+            visibility = View.VISIBLE
             text = reelsScrolledThisSession.toString()
             textSize = config.textSize
             setTextColor(Color.rgb(
@@ -48,6 +48,7 @@ class ReelsOverlayManager(private val context: Context) {
             this.alpha = config.textOpacity / 100f
         }
         binding?.timeElapsedTxt?.visibility = View.GONE
+        setCounterVisible(isVisible)
 
         val dm = context.resources.displayMetrics
         val screenWidth = dm.widthPixels
@@ -87,6 +88,10 @@ class ReelsOverlayManager(private val context: Context) {
                 } catch (_: Exception) {}
             }
         })
+    }
+
+    fun setCounterVisible(isVisible: Boolean) {
+        binding?.root?.alpha = if (isVisible) 1f else 0f
     }
 
     fun removeOverlay() {

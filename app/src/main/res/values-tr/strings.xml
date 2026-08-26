@@ -328,6 +328,10 @@
   <string name="picker_active_title">Öğe Seçici Etkin</string>
   <string name="picker_active_text">Seçmek için ekrandaki öğelere dokun</string>
   <string name="appearance">Görünüm</string>
+  <string name="reel_checkpoints">Yalnızca kontrol noktalarında göster</string>
+  <string name="reel_checkpoints_hint">Sayaç, belirlediğin sayıda kısa videodan sonra görünür.</string>
+  <string name="reel_checkpoint_interval_default">Her 10 videoda göster</string>
+  <string name="reel_checkpoint_interval_value">Her %d videoda göster</string>
   <string name="btn_set_position">Konumu Ayarla</string>
   <string name="text_size_label">Metin Boyutu: 14sp</string>
   <string name="text_size_value">Metin Boyutu: %dsp</string>
