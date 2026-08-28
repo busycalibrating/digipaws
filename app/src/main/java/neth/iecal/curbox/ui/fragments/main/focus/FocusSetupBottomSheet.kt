@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.models.FocusBlockMode
 import neth.iecal.curbox.data.models.ManualFocusGroup
+import neth.iecal.curbox.data.models.PomodoroState
 import neth.iecal.curbox.databinding.DialogFocusSessionConfigBinding
 import neth.iecal.curbox.hardcoded.URL_BAR_ID_LIST
 import neth.iecal.curbox.ui.activity.SelectAppsActivity
@@ -54,6 +55,7 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         setupGroupSelectionDropdown()
+        setupPomodoroOptions()
         observeViewModel()
 
         if (viewModel.groups.value.isEmpty()) {
@@ -83,6 +85,19 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
         }
 
         binding.btnConfirmStart.setOnClickListener {
+            val breakMinutes = binding.pomodoroBreakMinutes.text
+                ?.toString()
+                ?.toIntOrNull()
+                ?: PomodoroState.DEFAULT_BREAK_MINUTES
+            val focusIntervals = binding.pomodoroFocusIntervals.text
+                ?.toString()
+                ?.toIntOrNull()
+                ?: PomodoroState.DEFAULT_FOCUS_INTERVALS
+            viewModel.configurePomodoro(
+                enabled = binding.switchPomodoro.isChecked,
+                breakMinutes = breakMinutes,
+                focusIntervals = focusIntervals
+            )
             viewModel.startFocusing()
             dismiss()
         }
@@ -288,6 +303,25 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
         )
 
         binding.groupDropdown.setAdapter(autoCompleteAdapter)
+    }
+
+    private fun setupPomodoroOptions() {
+        binding.switchPomodoro.isChecked = viewModel.isPomodoroEnabled
+        binding.pomodoroBreakMinutes.setText(viewModel.pomodoroBreakMins.toString())
+        binding.pomodoroFocusIntervals.setText(viewModel.pomodoroFocusIntervals.toString())
+
+        fun updateVisibility() {
+            binding.pomodoroOptions.visibility = if (binding.switchPomodoro.isChecked) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        }
+
+        binding.switchPomodoro.setOnCheckedChangeListener { _, _ ->
+            updateVisibility()
+        }
+        updateVisibility()
     }
 
     private fun observeViewModel() {

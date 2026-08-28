@@ -22,6 +22,7 @@ import neth.iecal.curbox.nfc.NfcFocusHandler
 import neth.iecal.curbox.nfc.NfcUnlockUtils
 import neth.iecal.curbox.utils.ViewUtils
 import neth.iecal.curbox.R
+import neth.iecal.curbox.data.models.PomodoroPhase
 import neth.iecal.curbox.databinding.FragmentFocusBinding
 import androidx.core.view.isNotEmpty
 import kotlin.math.abs
@@ -52,18 +53,28 @@ class FocusFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
-                    viewModel.currentRunningFocus.combine(viewModel.groups) { focus, groups ->
-                        focus to groups
-                    }.collect { (focus, groups) ->
+                    combine(
+                        viewModel.currentRunningFocus,
+                        viewModel.groups,
+                        viewModel.currentPomodoroState
+                    ) { focus, groups, pomodoro ->
+                        Triple(focus, groups, pomodoro)
+                    }.collect { (focus, groups, pomodoro) ->
                         val b = _binding ?: return@collect
                         val (groupId, endTime) = focus
                         val isRunning = groupId != null
                         b.tvActiveGroup.visibility = if (isRunning) View.VISIBLE else View.GONE
                         b.btnGoToStats.visibility = if (isRunning) View.GONE else View.VISIBLE
-                        b.tvSeconds.text = if (isRunning) "" else "mins"
+                        b.tvSeconds.text = if (isRunning) "" else getString(R.string.common_mins)
 
                         if (isRunning) {
-                            b.btnStartConfig.text = getString(R.string.focus_end_session)
+                            b.btnStartConfig.text = getString(
+                                if (pomodoro.isActive) {
+                                    R.string.focus_end_pomodoro
+                                } else {
+                                    R.string.focus_end_session
+                                }
+                            )
                         } else {
                             b.btnStartConfig.text = if (groups.isEmpty()) getString(R.string.focus_create_group) else getString(R.string.focus_start)
                         }
@@ -72,12 +83,32 @@ class FocusFragment : Fragment() {
                             b.rvRuler.stopScroll()
                             snapHelper.attachToRecyclerView(null)
                             val group = groups.find { it.groupId == groupId }
-                            b.tvActiveGroup.text = group?.groupName
+                            val groupName = group?.groupName ?: getString(R.string.focus_mode)
+                            b.tvActiveGroup.text = if (pomodoro.isActive) {
+                                when (pomodoro.phase) {
+                                    PomodoroPhase.FOCUS -> getString(
+                                        R.string.focus_pomodoro_focus_progress,
+                                        groupName,
+                                        pomodoro.currentFocusInterval,
+                                        pomodoro.totalFocusIntervals
+                                    )
+
+                                    PomodoroPhase.BREAK -> getString(
+                                        R.string.focus_pomodoro_break_progress,
+                                        groupName,
+                                        pomodoro.completedFocusIntervals,
+                                        pomodoro.totalFocusIntervals
+                                    )
+                                }
+                            } else {
+                                groupName
+                            }
                             b.btnStartConfig.isEnabled = group?.exitable == true
                             viewModel.startTimer(endTime)
                         } else {
                             snapHelper.attachToRecyclerView(b.rvRuler)
                             b.btnStartConfig.isEnabled = true
+                            viewModel.stopTimer()
                             b.tvMinutes.text = viewModel.selectedMins.toString()
                             scrollToMinute(viewModel.selectedMins, smooth = false)
                         }

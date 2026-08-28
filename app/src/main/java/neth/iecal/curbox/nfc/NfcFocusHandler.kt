@@ -145,18 +145,23 @@ object NfcFocusHandler {
         val mins = (minutes ?: prefs.getInt(KEY_LAST_DURATION, 25)).coerceAtLeast(1)
         val durationMs = mins * 60_000L
         val now = System.currentTimeMillis()
+        val endTimeInMillis = now + durationMs
 
         val statsDao = AppDatabase.getInstance(context).focusStatsDao()
         statsDao.insert(
             FocusStatsEntity(
                 groupId = group.groupId,
                 startTimeInMillis = now,
-                estimatedEndTimeInMillis = now + durationMs,
+                estimatedEndTimeInMillis = endTimeInMillis,
                 actualEndTimeInMillis = 0L,
                 status = 0
             )
         )
-        dataStore.setManualFocusStateToActive(group.groupId, durationMs)
+        dataStore.setManualFocusStateToActive(
+            group.groupId,
+            durationMs,
+            endTimeInMillis = endTimeInMillis
+        )
         broadcast(context)
 
         prefs.edit()

@@ -44,6 +44,8 @@ import neth.iecal.curbox.data.db.AppDatabase
 import neth.iecal.curbox.data.db.AppUsageEntity
 import neth.iecal.curbox.data.db.WebsiteStatsEntity
 import neth.iecal.curbox.data.models.FocusBlockMode
+import neth.iecal.curbox.data.models.PomodoroPhase
+import neth.iecal.curbox.data.models.PomodoroState
 import neth.iecal.curbox.data.models.Settings
 import neth.iecal.curbox.utils.DataStoreManager
 import org.json.JSONObject
@@ -707,7 +709,9 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         }
         scope.launch {
             dataStore.data
-                .distinctUntilChangedBy { it.activeManualFocusGroupId }
+                .distinctUntilChangedBy {
+                    Pair(it.activeManualFocusGroupId, it.activePomodoroState.phase)
+                }
                 .collect { settings ->
                     if (dek != null && entitled && keys.syncReducerConfigs) {
                         try {
@@ -776,6 +780,7 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         s.copy(
             blockedAppGroups = s.blockedAppGroups.map { it.copy(temporarilyDisabledUntilMs = 0L) },
             activeManualFocusGroupId = Pair(null, 0L),
+            activePomodoroState = PomodoroState(),
             reelBlockerConfig = s.reelBlockerConfig.copy(temporarilyDisabledUntilMs = 0L),
             keywordBlockerConfig = s.keywordBlockerConfig.copy(
                 keywordGroups = s.keywordBlockerConfig.keywordGroups.map {
@@ -944,7 +949,9 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
         val s = session ?: return
         val d = dek ?: return
         val (groupId, endsAt) = settings.activeManualFocusGroupId
-        val active = groupId != null && endsAt > System.currentTimeMillis()
+        val isPomodoroBreak = settings.activePomodoroState.isActive &&
+            settings.activePomodoroState.phase == PomodoroPhase.BREAK
+        val active = groupId != null && endsAt > System.currentTimeMillis() && !isPomodoroBreak
         val g = if (active) settings.manualFocusGroups.find { it.groupId == groupId } else null
         val domains = g?.keywords?.toList() ?: emptyList()
         val packages = g?.packages?.toList() ?: emptyList()
@@ -1003,10 +1010,19 @@ class PlaystoreSyncProvider(private val context: Context) : SyncProvider {
                         exitable = exitable,
                     )
                 }
-                local.copy(manualFocusGroups = groups, activeManualFocusGroupId = Pair(groupId, endsAt))
+                local.copy(
+                    manualFocusGroups = groups,
+                    activeManualFocusGroupId = Pair(groupId, endsAt),
+                    activePomodoroState = PomodoroState()
+                )
             }
         } else {
-            dataStore.updateData { it.copy(activeManualFocusGroupId = Pair(null, 0L)) }
+            dataStore.updateData {
+                it.copy(
+                    activeManualFocusGroupId = Pair(null, 0L),
+                    activePomodoroState = PomodoroState()
+                )
+            }
         }
         context.sendBroadcast(android.content.Intent(neth.iecal.curbox.blockers.FocusModeBlocker.INTENT_ACTION_REFRESH_FOCUS_MODE))
     }

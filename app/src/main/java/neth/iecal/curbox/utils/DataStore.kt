@@ -18,6 +18,7 @@ import neth.iecal.curbox.data.models.GatedSettingsField
 import neth.iecal.curbox.data.models.KeywordBlocker
 import neth.iecal.curbox.data.models.ManualFocusGroup
 import neth.iecal.curbox.data.models.PendingSettingsChange
+import neth.iecal.curbox.data.models.PomodoroState
 import neth.iecal.curbox.data.models.Settings
 import neth.iecal.curbox.data.models.SettingsChangeDelayConfig
 import neth.iecal.curbox.data.models.SettingsChangeDelayPrefs
@@ -208,6 +209,7 @@ class DataStoreManager(private val context: Context) {
                 manualFocusGroups = current.manualFocusGroups,
                 autoDndGroups = current.autoDndGroups,
                 activeManualFocusGroupId = current.activeManualFocusGroupId,
+                activePomodoroState = current.activePomodoroState,
                 reelBlockerConfig = current.reelBlockerConfig,
                 keywordBlockerConfig = current.keywordBlockerConfig,
                 isReelCounterOn = current.isReelCounterOn,
@@ -266,11 +268,59 @@ class DataStoreManager(private val context: Context) {
         updateGated(GatedSettingsField.AUTO_DND_GROUPS) { newGroups }
     }
     
-    suspend fun setManualFocusStateToActive(focusGroupId:String, durationInMs: Long){
-        settingsDataStore.updateData { it.copy(activeManualFocusGroupId = Pair(focusGroupId, System.currentTimeMillis() + durationInMs)) }
+    suspend fun setManualFocusStateToActive(
+        focusGroupId: String,
+        durationInMs: Long,
+        pomodoroState: PomodoroState = PomodoroState(),
+        endTimeInMillis: Long = System.currentTimeMillis() + durationInMs
+    ) {
+        settingsDataStore.updateData {
+            it.copy(
+                activeManualFocusGroupId = Pair(focusGroupId, endTimeInMillis),
+                activePomodoroState = pomodoroState.normalized()
+            )
+        }
     }
-    suspend fun setManualFocusStateToInactive(){
-        settingsDataStore.updateData { it.copy(activeManualFocusGroupId = Pair(null, 0)) }
+
+    suspend fun advancePomodoroState(expectedEndTimeInMillis: Long): Settings? {
+        var advanced = false
+        val updated = settingsDataStore.updateData { current ->
+            val groupId = current.activeManualFocusGroupId.first
+            val pomodoro = current.activePomodoroState
+            if (!pomodoro.isActive ||
+                groupId == null ||
+                current.activeManualFocusGroupId.second != expectedEndTimeInMillis
+            ) {
+                return@updateData current
+            }
+
+            advanced = true
+            val next = pomodoro.nextPhase()
+            if (!next.isActive) {
+                current.copy(
+                    activeManualFocusGroupId = Pair(null, 0L),
+                    activePomodoroState = PomodoroState()
+                )
+            } else {
+                current.copy(
+                    activeManualFocusGroupId = Pair(
+                        groupId,
+                        System.currentTimeMillis() + next.currentPhaseDurationMs()
+                    ),
+                    activePomodoroState = next
+                )
+            }
+        }
+        return updated.takeIf { advanced }
+    }
+
+    suspend fun setManualFocusStateToInactive() {
+        settingsDataStore.updateData {
+            it.copy(
+                activeManualFocusGroupId = Pair(null, 0L),
+                activePomodoroState = PomodoroState()
+            )
+        }
     }
 
     suspend fun updateReelBlockerConfig(config: neth.iecal.curbox.data.models.ReelBlocker) {

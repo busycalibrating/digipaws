@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import neth.iecal.curbox.blockers.FocusModeBlocker
 import neth.iecal.curbox.data.models.ManualFocusGroup
+import neth.iecal.curbox.data.models.PomodoroPhase
+import neth.iecal.curbox.data.models.PomodoroState
 import neth.iecal.curbox.utils.DataStoreManager
 
 class FocusViewModel(application: Application) : AndroidViewModel(application) {
@@ -33,12 +35,24 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
     
     private val prefs = application.getSharedPreferences("AppPreferences", android.content.Context.MODE_PRIVATE)
     var selectedMins = prefs.getInt("lastFocusDuration", 25)
+    var isPomodoroEnabled = prefs.getBoolean("lastPomodoroEnabled", false)
+    var pomodoroBreakMins = prefs.getInt(
+        "lastPomodoroBreakDuration",
+        PomodoroState.DEFAULT_BREAK_MINUTES
+    )
+    var pomodoroFocusIntervals = prefs.getInt(
+        "lastPomodoroFocusIntervals",
+        PomodoroState.DEFAULT_FOCUS_INTERVALS
+    )
 
     var selectedGroup : ManualFocusGroup? = null
 
 
     private val _currentRunningFocus = MutableStateFlow<Pair<String?, Long>>(Pair(null,0L))
     val currentRunningFocus: StateFlow<Pair<String?, Long>> = _currentRunningFocus
+
+    private val _currentPomodoroState = MutableStateFlow(PomodoroState())
+    val currentPomodoroState: StateFlow<PomodoroState> = _currentPomodoroState
 
     private var timerJob: Job? = null
     private var _currentRunningTimer = MutableStateFlow<Long>(0L)
@@ -50,6 +64,7 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
             dataStoreManager.settings.collectLatest { settings ->
                 _groups.value = settings.manualFocusGroups
                 _autoDndGroups.value = settings.autoDndGroups
+                _currentPomodoroState.value = settings.activePomodoroState
                 _currentRunningFocus.value = settings.activeManualFocusGroupId
 
                 if (selectedGroup == null && settings.manualFocusGroups.isNotEmpty()) {
@@ -63,9 +78,13 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                if(settings.activeManualFocusGroupId.first != null) {
+                if (settings.activeManualFocusGroupId.first != null) {
                     if (settings.activeManualFocusGroupId.second < System.currentTimeMillis()) {
-                        forceStopFocus(wasMidwayExit = false)
+                        if (settings.activePomodoroState.isActive) {
+                            requestFocusBlockerRefresh()
+                        } else {
+                            forceStopFocus(wasMidwayExit = false)
+                        }
                     } else {
                         requestFocusBlockerRefresh()
                     }
@@ -104,12 +123,30 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun startFocusing() {
         if(selectedGroup == null) return
+        val pomodoroState = if (isPomodoroEnabled) {
+            PomodoroState(
+                isActive = true,
+                phase = PomodoroPhase.FOCUS,
+                focusMinutes = selectedMins,
+                breakMinutes = pomodoroBreakMins,
+                totalFocusIntervals = pomodoroFocusIntervals
+            ).normalized()
+        } else {
+            PomodoroState()
+        }
         prefs.edit()
             .putInt("lastFocusDuration", selectedMins)
             .putString("lastFocusGroupId", selectedGroup?.groupId)
+            .putBoolean("lastPomodoroEnabled", isPomodoroEnabled)
+            .putInt("lastPomodoroBreakDuration", pomodoroState.breakMinutes)
+            .putInt("lastPomodoroFocusIntervals", pomodoroState.totalFocusIntervals)
             .apply()
         
-        val durationMs = selectedMins * 60_000L
+        val durationMs = if (pomodoroState.isActive) {
+            pomodoroState.currentPhaseDurationMs()
+        } else {
+            selectedMins.coerceAtLeast(1) * 60_000L
+        }
         val startTime = System.currentTimeMillis()
         val endTime = startTime + durationMs
         viewModelScope.launch {
@@ -122,9 +159,26 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
             )
             statsDao.insert(session)
             
-            dataStoreManager.setManualFocusStateToActive(selectedGroup!!.groupId, durationMs)
+            dataStoreManager.setManualFocusStateToActive(
+                selectedGroup!!.groupId,
+                durationMs,
+                pomodoroState,
+                endTime
+            )
             requestFocusBlockerRefresh()
         }
+    }
+
+    fun configurePomodoro(enabled: Boolean, breakMinutes: Int, focusIntervals: Int) {
+        isPomodoroEnabled = enabled
+        pomodoroBreakMins = breakMinutes.coerceIn(
+            PomodoroState.MIN_MINUTES,
+            PomodoroState.MAX_BREAK_MINUTES
+        )
+        pomodoroFocusIntervals = focusIntervals.coerceIn(
+            PomodoroState.MIN_FOCUS_INTERVALS,
+            PomodoroState.MAX_FOCUS_INTERVALS
+        )
     }
     fun addGroup(group: ManualFocusGroup) {
         val updatedGroups = _groups.value.toMutableList().apply { add(group) }

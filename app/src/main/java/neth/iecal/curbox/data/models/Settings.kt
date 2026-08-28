@@ -10,6 +10,7 @@ data class Settings(
      * Set group id as null when no active focus mode is running
      */
     val activeManualFocusGroupId: Pair<String?, Long> = Pair(null, 0),
+    val activePomodoroState: PomodoroState = PomodoroState(),
 
     val reelBlockerConfig: ReelBlocker = ReelBlocker(),
     val keywordBlockerConfig: KeywordBlocker = KeywordBlocker(),

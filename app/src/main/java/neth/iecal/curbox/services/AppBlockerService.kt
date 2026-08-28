@@ -223,6 +223,7 @@ class AppBlockerService : BaseBlockingService() {
         try {
 
             focusModeBlocker.removeReceivers()
+            focusModeBlocker.onDestroy()
             autoDnd.stop()
             reelBlocker.removeReceivers()
             appBlocker.onDestroy()

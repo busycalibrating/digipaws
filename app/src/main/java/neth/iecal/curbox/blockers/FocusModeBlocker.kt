@@ -9,19 +9,31 @@ import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import neth.iecal.curbox.CrashLogger
 import neth.iecal.curbox.R
+import neth.iecal.curbox.data.db.AppDatabase
+import neth.iecal.curbox.data.db.FocusStatsEntity
 import neth.iecal.curbox.data.models.FocusBlockMode
 import neth.iecal.curbox.data.models.ManualFocusGroup
+import neth.iecal.curbox.data.models.PomodoroPhase
+import neth.iecal.curbox.data.models.Settings
 import neth.iecal.curbox.hardcoded.URL_BAR_ID_LIST
 import neth.iecal.curbox.services.AppBlockerService
 import neth.iecal.curbox.services.BaseBlockingService
 import neth.iecal.curbox.utils.AppSuspendHelper
+import neth.iecal.curbox.utils.FocusModeSoundPlayer
 import neth.iecal.curbox.utils.TimerNotification
 import neth.iecal.curbox.utils.getCurrentKeyboardPackageName
 import neth.iecal.curbox.utils.getDefaultLauncherPackageName
@@ -44,8 +56,12 @@ class FocusModeBlocker : BaseBlocker() {
     private var lastWebsiteCheckTime = 0L
     private lateinit var service: AppBlockerService
     private lateinit var notificationManager: TimerNotification
+    private lateinit var soundPlayer: FocusModeSoundPlayer
+    private lateinit var crashLogger: CrashLogger
     private val keywordBlocker = KeywordBlocker()
     private var focusKeywordsPatterns = Pair(emptyList<Regex>(), emptyList<String>())
+    private val blockerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val statsMutex = Mutex()
 
     @Volatile private var essentialPackages: Set<String> = emptySet()
 
@@ -53,8 +69,8 @@ class FocusModeBlocker : BaseBlocker() {
 
     @Volatile private var isDndRequested = false
 
-    // Tracks the active settings-watching coroutine so it can be cancelled on re-setup
-    private var settingsJob: kotlinx.coroutines.Job? = null
+    private var settingsJob: Job? = null
+    private var phaseTransitionJob: Job? = null
 
     @Synchronized
     private fun updateSuspendedPackages(serviceContext: Context) {
@@ -87,22 +103,119 @@ class FocusModeBlocker : BaseBlocker() {
 
     fun isDndRequested(): Boolean = isDndRequested
 
-    private fun turnOffFocusMode() {
-        val groupId = focusModeData?.focusGroupData?.groupId
+    private fun turnOffFocusMode(groupId: String, expectedEndTimeInMillis: Long) {
         focusModeData = null
-        CoroutineScope(Dispatchers.IO).launch {
-            if (groupId != null) {
-                val db = neth.iecal.curbox.data.db.AppDatabase.getInstance(service)
-                val statsDao = db.focusStatsDao()
-                val runningSessions = statsDao.getRunningSessions().filter { it.groupId == groupId }
-                for (session in runningSessions) {
-                    statsDao.update(session.copy(status = 1, actualEndTimeInMillis = session.estimatedEndTimeInMillis))
-                }
+        blockerScope.launchSafely {
+            val settings = service.dataStoreManager.settings.first()
+            if (settings.activeManualFocusGroupId != Pair(groupId, expectedEndTimeInMillis)) {
+                return@launchSafely
             }
+            completeRunningSessions(groupId)
             service.dataStoreManager.setManualFocusStateToInactive()
+            soundPlayer.play(FocusModeSoundPlayer.Effect.FOCUS_COMPLETE)
         }
         notificationManager.stopTimer()
         updateSuspendedPackages(service)
+    }
+
+    private fun requestPhaseTransition(expectedEndTimeInMillis: Long) {
+        if (phaseTransitionJob?.isActive == true) return
+        phaseTransitionJob = blockerScope.launchSafely {
+            val settings = service.dataStoreManager.settings.first()
+            val (groupId, endTimeInMillis) = settings.activeManualFocusGroupId
+            if (groupId == null || endTimeInMillis != expectedEndTimeInMillis) {
+                return@launchSafely
+            }
+
+            if (settings.activePomodoroState.isActive) {
+                val finishedPhase = settings.activePomodoroState.phase
+                val updated = service.dataStoreManager
+                    .advancePomodoroState(expectedEndTimeInMillis)
+                    ?: return@launchSafely
+                if (finishedPhase == PomodoroPhase.FOCUS) {
+                    focusModeData = null
+                    updateSuspendedPackages(service)
+                    soundPlayer.play(
+                        if (updated.activePomodoroState.isActive) {
+                            FocusModeSoundPlayer.Effect.BREAK_STARTED
+                        } else {
+                            FocusModeSoundPlayer.Effect.POMODORO_COMPLETE
+                        }
+                    )
+                    completeRunningSessions(groupId)
+                } else {
+                    soundPlayer.play(FocusModeSoundPlayer.Effect.FOCUS_RESUMED)
+                }
+            } else {
+                turnOffFocusMode(groupId, expectedEndTimeInMillis)
+            }
+        }
+    }
+
+    private suspend fun completeRunningSessions(groupId: String) = statsMutex.withLock {
+        val statsDao = AppDatabase.getInstance(service).focusStatsDao()
+        val runningSessions = statsDao.getRunningSessions().filter { it.groupId == groupId }
+        for (session in runningSessions) {
+            statsDao.update(
+                session.copy(
+                    status = 1,
+                    actualEndTimeInMillis = session.estimatedEndTimeInMillis
+                )
+            )
+        }
+    }
+
+    private suspend fun reconcilePomodoroStats(settings: Settings) = statsMutex.withLock {
+        val pomodoro = settings.activePomodoroState
+        if (!pomodoro.isActive) return@withLock
+        val groupId = settings.activeManualFocusGroupId.first ?: return@withLock
+        val endTimeInMillis = settings.activeManualFocusGroupId.second
+        val statsDao = AppDatabase.getInstance(service).focusStatsDao()
+        val runningForGroup = statsDao.getRunningSessions().filter { it.groupId == groupId }
+
+        if (pomodoro.phase == PomodoroPhase.BREAK) {
+            for (session in runningForGroup) {
+                statsDao.update(
+                    session.copy(
+                        status = 1,
+                        actualEndTimeInMillis = session.estimatedEndTimeInMillis
+                    )
+                )
+            }
+            return@withLock
+        }
+
+        if (runningForGroup.any { it.estimatedEndTimeInMillis == endTimeInMillis }) {
+            return@withLock
+        }
+        for (session in runningForGroup) {
+            statsDao.update(
+                session.copy(
+                    status = 1,
+                    actualEndTimeInMillis = session.estimatedEndTimeInMillis
+                )
+            )
+        }
+        statsDao.insert(
+            FocusStatsEntity(
+                groupId = groupId,
+                startTimeInMillis = endTimeInMillis - pomodoro.currentPhaseDurationMs(),
+                estimatedEndTimeInMillis = endTimeInMillis,
+                actualEndTimeInMillis = 0L,
+                status = 0
+            )
+        )
+    }
+
+    private fun CoroutineScope.launchSafely(block: suspend () -> Unit): Job = launch {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            Log.e("FocusMode", "Focus mode worker failed", t)
+            crashLogger.logNonFatalError(Exception(t))
+        }
     }
 
     fun doFocusModeCheck(event: AccessibilityEvent?) {
@@ -110,48 +223,48 @@ class FocusModeBlocker : BaseBlocker() {
         if (packageName == service.packageName) return
         if (!service.isDelayOver(1000)) return
 
-        if (focusModeData != null) {
-            if (lastPackage != packageName) {
-                lastPackage = packageName
-                when (focusModeData!!.focusGroupData.blockMode) {
-                    FocusBlockMode.BLOCK_SELECTED -> {
-                        if (focusModeData!!.focusGroupData.packages.contains(packageName)) {
-                            service.pressHome()
+        val currentFocusModeData = focusModeData ?: return
+        if (currentFocusModeData.endTimeInMillis <= System.currentTimeMillis()) {
+            requestPhaseTransition(currentFocusModeData.endTimeInMillis)
+            return
+        }
 
-                            Log.d("focus mode","home pressed $packageName")
-                            return
-                        }
+        if (lastPackage != packageName) {
+            lastPackage = packageName
+            when (currentFocusModeData.focusGroupData.blockMode) {
+                FocusBlockMode.BLOCK_SELECTED -> {
+                    if (currentFocusModeData.focusGroupData.packages.contains(packageName)) {
+                        service.pressHome()
+
+                        Log.d("focus mode","home pressed $packageName")
+                        return
                     }
-                    FocusBlockMode.BLOCK_ALL_EXCEPT_SELECTED -> {
-                        if (!focusModeData!!.focusGroupData.packages.contains(packageName)) {
-                            service.pressHome()
-                            Log.d("focus mode","home pressed $packageName")
+                }
+                FocusBlockMode.BLOCK_ALL_EXCEPT_SELECTED -> {
+                    if (!currentFocusModeData.focusGroupData.packages.contains(packageName)) {
+                        service.pressHome()
+                        Log.d("focus mode","home pressed $packageName")
 
-                            return
-                        }
+                        return
                     }
                 }
             }
+        }
 
-            if (focusModeData!!.focusGroupData.keywords.isNotEmpty() &&
-                URL_BAR_ID_LIST.containsKey(packageName)) {
+        if (currentFocusModeData.focusGroupData.keywords.isNotEmpty() &&
+            URL_BAR_ID_LIST.containsKey(packageName)) {
 
-                val now = System.currentTimeMillis()
-                // Throttle website checks to every 400ms within the same app to preserve performance
-                if (now - lastWebsiteCheckTime > 400) {
-                    lastWebsiteCheckTime = now
-                    if (keywordBlocker.isFocusWebsiteBlocked(packageName, focusKeywordsPatterns, focusModeData!!.focusGroupData.blockMode)) {
-                        if (now - lastBlockTime > 1500) {
-                            service.pressBack()
-                            Log.d("focus mode","back pressed")
-                            lastBlockTime = now
-                        }
+            val now = System.currentTimeMillis()
+            // Throttle website checks to every 400ms within the same app to preserve performance
+            if (now - lastWebsiteCheckTime > 400) {
+                lastWebsiteCheckTime = now
+                if (keywordBlocker.isFocusWebsiteBlocked(packageName, focusKeywordsPatterns, currentFocusModeData.focusGroupData.blockMode)) {
+                    if (now - lastBlockTime > 1500) {
+                        service.pressBack()
+                        Log.d("focus mode","back pressed")
+                        lastBlockTime = now
                     }
                 }
-            }
-
-            if (focusModeData!!.endTimeInMillis < System.currentTimeMillis()) {
-                turnOffFocusMode()
             }
         }
     }
@@ -176,9 +289,13 @@ class FocusModeBlocker : BaseBlocker() {
     fun setupFocusMode(service: BaseBlockingService) {
         if (service !is AppBlockerService) return
         this.service = service
+        crashLogger = CrashLogger(service)
         keywordBlocker.setupBlocker(service, watchSettings = false)
         if (!this::notificationManager.isInitialized) {
             notificationManager = TimerNotification(service)
+        }
+        if (!this::soundPlayer.isInitialized) {
+            soundPlayer = FocusModeSoundPlayer(service)
         }
 
         // cache essential packages
@@ -188,8 +305,8 @@ class FocusModeBlocker : BaseBlocker() {
         essentialPackages = essential
 
         Log.d("essential package", essentialPackages.toString())
-        CoroutineScope(Dispatchers.IO).launch {
-            val db = neth.iecal.curbox.data.db.AppDatabase.getInstance(service)
+        blockerScope.launchSafely {
+            val db = AppDatabase.getInstance(service)
             val statsDao = db.focusStatsDao()
             val runningSessions = statsDao.getRunningSessions()
             for (session in runningSessions) {
@@ -200,7 +317,7 @@ class FocusModeBlocker : BaseBlocker() {
         }
 
         settingsJob?.cancel()
-        settingsJob = CoroutineScope(Dispatchers.IO).launch {
+        settingsJob = blockerScope.launchSafely {
             service.dataStoreManager.settings.collectLatest { settings ->
                 applySettings(settings)
             }
@@ -211,10 +328,14 @@ class FocusModeBlocker : BaseBlocker() {
      * Applies settings to in-memory state and updates suspended packages.
      * Must be called from a coroutine context.
      */
-    private suspend fun applySettings(settings: neth.iecal.curbox.data.models.Settings) {
-        if (settings.activeManualFocusGroupId.first != null) {
-            val currentFocusingGroup = settings.manualFocusGroups.find { it.groupId == settings.activeManualFocusGroupId.first }
-            if (currentFocusingGroup != null && settings.activeManualFocusGroupId.second > System.currentTimeMillis()) {
+    private suspend fun applySettings(settings: Settings) {
+        val (groupId, endTimeInMillis) = settings.activeManualFocusGroupId
+        val currentFocusingGroup = settings.manualFocusGroups.find { it.groupId == groupId }
+        if (groupId != null && currentFocusingGroup != null) {
+            val remainingTimeInMillis = endTimeInMillis - System.currentTimeMillis()
+            if (remainingTimeInMillis > 0) {
+                val pomodoro = settings.activePomodoroState
+                val isBreak = pomodoro.isActive && pomodoro.phase == PomodoroPhase.BREAK
                 // Fix: copy the packages set instead of mutating the original data object
                 val effectiveGroup = if (currentFocusingGroup.blockMode == FocusBlockMode.BLOCK_ALL_EXCEPT_SELECTED) {
                     val packagesCopy = HashSet(currentFocusingGroup.packages)
@@ -223,13 +344,39 @@ class FocusModeBlocker : BaseBlocker() {
                 } else {
                     currentFocusingGroup
                 }
-                focusModeData = ManualFocusModeData(effectiveGroup, settings.activeManualFocusGroupId.second)
-                focusKeywordsPatterns = keywordBlocker.compileKeywords(effectiveGroup.keywords)
+                focusModeData = if (isBreak) {
+                    null
+                } else {
+                    ManualFocusModeData(effectiveGroup, endTimeInMillis)
+                }
+                if (!isBreak) {
+                    focusKeywordsPatterns = keywordBlocker.compileKeywords(effectiveGroup.keywords)
+                }
+
+                try {
+                    reconcilePomodoroStats(settings)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    Log.e("FocusMode", "Failed to reconcile Pomodoro stats", t)
+                    crashLogger.logNonFatalError(Exception(t))
+                }
+
                 withContext(Dispatchers.Main) {
                     notificationManager.startTimer(
-                        focusModeData!!.endTimeInMillis - System.currentTimeMillis(),
-                        timerId = "focus_mode",
-                        title = service.getString(R.string.notification_title_focus_mode_on)
+                        totalMillis = (endTimeInMillis - System.currentTimeMillis())
+                            .coerceAtLeast(1L),
+                        timerId = "focus_mode_${pomodoro.phase}_$endTimeInMillis",
+                        title = service.getString(
+                            if (isBreak) {
+                                R.string.notification_title_pomodoro_break
+                            } else {
+                                R.string.notification_title_focus_mode_on
+                            }
+                        ),
+                        onFinishCallback = {
+                            requestPhaseTransition(endTimeInMillis)
+                        }
                     )
                 }
             } else {
@@ -237,6 +384,7 @@ class FocusModeBlocker : BaseBlocker() {
                 withContext(Dispatchers.Main) {
                     notificationManager.stopTimer()
                 }
+                requestPhaseTransition(endTimeInMillis)
             }
         } else {
             focusModeData = null
@@ -248,12 +396,24 @@ class FocusModeBlocker : BaseBlocker() {
         updateSuspendedPackages(service)
     }
 
+    fun onDestroy() {
+        settingsJob?.cancel()
+        phaseTransitionJob?.cancel()
+        if (this::notificationManager.isInitialized) {
+            notificationManager.release()
+        }
+        if (this::soundPlayer.isInitialized) {
+            soundPlayer.release()
+        }
+        blockerScope.cancel()
+    }
+
     private val refreshReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent == null) return
             when (intent.action) {
                 INTENT_ACTION_REFRESH_FOCUS_MODE -> {
-                    CoroutineScope(Dispatchers.IO).launch {
+                    blockerScope.launchSafely {
                         val settings = service.dataStoreManager.settings.first()
                         applySettings(settings)
                     }

@@ -25,7 +25,7 @@ This file applies to the whole repository. Preserve more specific instructions i
 4. Check every entry point, refresh path, cleanup path, and optional feature gate.
 5. Run the most focused useful verification, then broader flavor builds when the change can affect them.
 6. Report what changed, which checks ran, and any checks that could not run.
-
+7. Only write for english translations until explicitly asked to write for others
 ## Nonnegotiable invariants
 
 ### Accessibility service safety

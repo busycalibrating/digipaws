@@ -73,18 +73,23 @@ object CurboxApiCommands {
         val group = settings.manualFocusGroups.firstOrNull { it.groupId == groupId } ?: return
         val durationMs = minutes.coerceAtLeast(1) * 60_000L
         val now = System.currentTimeMillis()
+        val endTimeInMillis = now + durationMs
 
         val statsDao = AppDatabase.getInstance(context).focusStatsDao()
         statsDao.insert(
             FocusStatsEntity(
                 groupId = group.groupId,
                 startTimeInMillis = now,
-                estimatedEndTimeInMillis = now + durationMs,
+                estimatedEndTimeInMillis = endTimeInMillis,
                 actualEndTimeInMillis = 0L,
                 status = 0
             )
         )
-        dataStore.setManualFocusStateToActive(group.groupId, durationMs)
+        dataStore.setManualFocusStateToActive(
+            group.groupId,
+            durationMs,
+            endTimeInMillis = endTimeInMillis
+        )
         broadcast(context, FocusModeBlocker.INTENT_ACTION_REFRESH_FOCUS_MODE)
     }
 
