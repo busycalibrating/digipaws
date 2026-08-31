@@ -16,8 +16,11 @@ import androidx.recyclerview.widget.RecyclerView
 import java.util.Locale
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import android.text.InputType
+import android.widget.EditText
 import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import neth.iecal.curbox.data.models.FOCUS_NO_END_TIME
 import neth.iecal.curbox.nfc.NfcFocusHandler
 import neth.iecal.curbox.nfc.NfcUnlockUtils
 import neth.iecal.curbox.utils.ViewUtils
@@ -28,6 +31,11 @@ import androidx.core.view.isNotEmpty
 import kotlin.math.abs
 
 class FocusFragment : Fragment() {
+
+    private companion object {
+        /** A day, past which a focus session is better served by the untimed mode. */
+        const val MAX_DURATION_MINUTES = 1440
+    }
 
     private var _binding: FragmentFocusBinding? = null
     private val binding get() = _binding!!
@@ -50,6 +58,11 @@ class FocusFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.selectedGroupFlow.collect { applyUntimedGroupState(it?.isUntimed == true) }
+            }
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
@@ -130,7 +143,10 @@ class FocusFragment : Fragment() {
                             b.tvMinutes.text = minutes.toString()
                             b.tvSeconds.text = String.format(Locale.getDefault(), ":%02d", seconds)
 
-                            if (b.rvRuler.width > 0 && b.rvRuler.isNotEmpty()) {
+                            // An untimed session reports elapsed time, which has no place
+                            // on a ruler that measures what is left of a chosen duration.
+                            val untimed = currentFocus.second == FOCUS_NO_END_TIME
+                            if (!untimed && b.rvRuler.width > 0 && b.rvRuler.isNotEmpty()) {
                                 // Dynamically fetch the exact physical width of a rendered item
                                 if (itemWidthPx > 0) {
                                     if (lastTotalMinutesLeft < 0 || abs(lastTotalMinutesLeft - totalMinutesLeft) > 1.0) {
@@ -234,12 +250,19 @@ class FocusFragment : Fragment() {
         actionInput.setText(actionNames[0], false)
         durationInput.setText(viewModel.selectedMins.coerceAtLeast(1).toString())
 
+        // Stopping takes no duration, and neither does an untimed group: it runs until the
+        // next tap, so a figure written onto the tag would only be ignored on the way back.
         fun refreshDurationVisibility() {
-            durationLayout.visibility = if (focusNfcActions[actionIdx] == "stop") View.GONE else View.VISIBLE
+            val untimedGroup = groups.getOrNull(groupIdx)?.isUntimed == true
+            durationLayout.visibility =
+                if (focusNfcActions[actionIdx] == "stop" || untimedGroup) View.GONE else View.VISIBLE
         }
         refreshDurationVisibility()
 
-        groupInput.setOnItemClickListener { _, _, position, _ -> groupIdx = position }
+        groupInput.setOnItemClickListener { _, _, position, _ ->
+            groupIdx = position
+            refreshDurationVisibility()
+        }
         actionInput.setOnItemClickListener { _, _, position, _ ->
             actionIdx = position
             refreshDurationVisibility()
@@ -295,7 +318,7 @@ class FocusFragment : Fragment() {
                 val uri = buildString {
                     append("curbox://focus/").append(action)
                     append("?group=").append(android.net.Uri.encode(group.groupId))
-                    if (action != "stop") append("&mins=").append(mins)
+                    if (action != "stop" && !group.isUntimed) append("&mins=").append(mins)
                 }
                 dialog.dismiss()
                 startFocusNfcWrite(uri)
@@ -382,6 +405,47 @@ class FocusFragment : Fragment() {
         b.tvSeconds.text = getString(R.string.common_mins)
     }
 
+    /**
+     * The ruler is quick for a nudge and slow for a large jump, so the figure it sets can
+     * also be typed. Both write through [updateTime], keeping strip and text in step.
+     */
+    private fun showDurationInputDialog() {
+        val input = EditText(requireContext()).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(viewModel.selectedMins.toString())
+            setSelection(text.length)
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.focus_set_duration_title)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val typed = input.text.toString().toIntOrNull() ?: return@setPositiveButton
+                val minutes = typed.coerceIn(1, MAX_DURATION_MINUTES)
+                updateTime(minutes)
+                scrollToMinute(minutes, smooth = false)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * An untimed group has no duration to choose, so the dial stops offering one rather
+     * than showing a figure that starting the session would ignore.
+     */
+    private fun applyUntimedGroupState(untimed: Boolean) {
+        val b = _binding ?: return
+        if (viewModel.currentRunningFocus.value.first != null) return
+        b.rvRuler.alpha = if (untimed) 0.35f else 1f
+        b.rvRuler.isEnabled = !untimed
+        if (untimed) {
+            b.tvMinutes.text = getString(R.string.focus_no_timer_symbol)
+            b.tvSeconds.text = getString(R.string.focus_no_timer_label)
+        } else {
+            b.tvMinutes.text = viewModel.selectedMins.toString()
+            b.tvSeconds.text = getString(R.string.common_mins)
+        }
+    }
+
     private fun setupRuler() {
         val bInitial = _binding ?: return
         val initialSelectedMins = viewModel.selectedMins
@@ -393,6 +457,13 @@ class FocusFragment : Fragment() {
 
         bInitial.rvRuler.setOnTouchListener { _, _ ->
             viewModel.currentRunningFocus.value.first != null
+        }
+
+        // Only while idle: during a session the figure is the time left, not a setting.
+        bInitial.tvMinutes.setOnClickListener {
+            if (viewModel.currentRunningFocus.value.first != null) return@setOnClickListener
+            if (viewModel.selectedGroup?.isUntimed == true) return@setOnClickListener
+            showDurationInputDialog()
         }
 
         snapHelper.attachToRecyclerView(bInitial.rvRuler)

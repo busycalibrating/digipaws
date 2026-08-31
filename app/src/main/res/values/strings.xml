@@ -400,6 +400,7 @@
     <string name="notification_title_pomodoro_break">Pomodoro break</string>
 
     <string name="nfc_focus_started">Focus started: %1$s (%2$d min)</string>
+    <string name="nfc_focus_started_untimed">Focus started: %1$s (until turned off)</string>
     <string name="nfc_focus_stopped">Focus stopped</string>
     <string name="nfc_focus_no_group">No focus group found to start</string>
     <string name="nfc_focus_not_exitable">This focus session can\'t be ended early</string>
@@ -1752,4 +1753,9 @@
     <string name="unit_minutes">Minutes</string>
     <string name="unit_hours">Hours</string>
     <string name="unit_days">Days</string>
+    <string name="focus_run_until_turned_off">Run until turned off (no timer)</string>
+    <string name="focus_set_duration_title">Focus duration (minutes)</string>
+    <string name="focus_no_timer_symbol">∞</string>
+    <string name="focus_no_timer_label">no timer</string>
+    <string name="notification_text_focus_mode_untimed">Focus mode is on</string>
 </resources>
