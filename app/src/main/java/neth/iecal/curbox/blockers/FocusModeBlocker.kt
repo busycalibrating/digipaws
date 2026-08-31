@@ -25,6 +25,7 @@ import neth.iecal.curbox.CrashLogger
 import neth.iecal.curbox.R
 import neth.iecal.curbox.data.db.AppDatabase
 import neth.iecal.curbox.data.db.FocusStatsEntity
+import neth.iecal.curbox.data.models.FOCUS_NO_END_TIME
 import neth.iecal.curbox.data.models.FocusBlockMode
 import neth.iecal.curbox.data.models.ManualFocusGroup
 import neth.iecal.curbox.data.models.PomodoroPhase
@@ -370,21 +371,33 @@ class FocusModeBlocker : BaseBlocker() {
                 }
 
                 withContext(Dispatchers.Main) {
-                    notificationManager.startTimer(
-                        totalMillis = (endTimeInMillis - System.currentTimeMillis())
-                            .coerceAtLeast(1L),
-                        timerId = "focus_mode_${pomodoro.phase}_$endTimeInMillis",
-                        title = service.getString(
-                            if (isBreak) {
-                                R.string.notification_title_pomodoro_break
-                            } else {
-                                R.string.notification_title_focus_mode_on
+                    if (endTimeInMillis == FOCUS_NO_END_TIME) {
+                        // Nothing to count down to, so count up instead and show how long
+                        // the session has run. Elapsed is measured from when the timer
+                        // starts, so it restarts with the service rather than surviving it.
+                        notificationManager.startTimer(
+                            totalMillis = Long.MAX_VALUE,
+                            isCountdown = false,
+                            timerId = "focus_mode_untimed_$groupId",
+                            title = service.getString(R.string.notification_title_focus_mode_on)
+                        )
+                    } else {
+                        notificationManager.startTimer(
+                            totalMillis = (endTimeInMillis - System.currentTimeMillis())
+                                .coerceAtLeast(1L),
+                            timerId = "focus_mode_${pomodoro.phase}_$endTimeInMillis",
+                            title = service.getString(
+                                if (isBreak) {
+                                    R.string.notification_title_pomodoro_break
+                                } else {
+                                    R.string.notification_title_focus_mode_on
+                                }
+                            ),
+                            onFinishCallback = {
+                                requestPhaseTransition(endTimeInMillis)
                             }
-                        ),
-                        onFinishCallback = {
-                            requestPhaseTransition(endTimeInMillis)
-                        }
-                    )
+                        )
+                    }
                 }
             } else {
                 focusModeData = null

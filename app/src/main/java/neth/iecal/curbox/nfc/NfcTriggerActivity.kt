@@ -79,7 +79,8 @@ class NfcTriggerActivity : Activity() {
 
     private fun messageFor(result: NfcFocusHandler.Result): String? = when (result) {
         is NfcFocusHandler.Result.Started ->
-            getString(R.string.nfc_focus_started, result.groupName, result.minutes)
+            result.minutes?.let { getString(R.string.nfc_focus_started, result.groupName, it) }
+                ?: getString(R.string.nfc_focus_started_untimed, result.groupName)
         NfcFocusHandler.Result.Stopped -> getString(R.string.nfc_focus_stopped)
         NfcFocusHandler.Result.NoGroup -> getString(R.string.nfc_focus_no_group)
         NfcFocusHandler.Result.NotExitable -> getString(R.string.nfc_focus_not_exitable)

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import neth.iecal.curbox.blockers.FocusModeBlocker
+import neth.iecal.curbox.data.models.FOCUS_NO_END_TIME
 import neth.iecal.curbox.data.models.ManualFocusGroup
 import neth.iecal.curbox.data.models.PomodoroPhase
 import neth.iecal.curbox.data.models.PomodoroState
@@ -45,7 +46,14 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
         PomodoroState.DEFAULT_FOCUS_INTERVALS
     )
 
-    var selectedGroup : ManualFocusGroup? = null
+    private val _selectedGroup = MutableStateFlow<ManualFocusGroup?>(null)
+
+    /** Observable form of [selectedGroup], so the screen can follow the setup sheet. */
+    val selectedGroupFlow: StateFlow<ManualFocusGroup?> = _selectedGroup
+
+    var selectedGroup: ManualFocusGroup?
+        get() = _selectedGroup.value
+        set(value) { _selectedGroup.value = value }
 
 
     private val _currentRunningFocus = MutableStateFlow<Pair<String?, Long>>(Pair(null,0L))
@@ -123,7 +131,9 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun startFocusing() {
         if(selectedGroup == null) return
-        val pomodoroState = if (isPomodoroEnabled) {
+        // Pomodoro is a sequence of timed phases, so it cannot apply to an untimed group.
+        val untimed = selectedGroup?.isUntimed == true
+        val pomodoroState = if (isPomodoroEnabled && !untimed) {
             PomodoroState(
                 isActive = true,
                 phase = PomodoroPhase.FOCUS,
@@ -148,7 +158,7 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
             selectedMins.coerceAtLeast(1) * 60_000L
         }
         val startTime = System.currentTimeMillis()
-        val endTime = startTime + durationMs
+        val endTime = if (untimed) FOCUS_NO_END_TIME else startTime + durationMs
         viewModelScope.launch {
             val session = neth.iecal.curbox.data.db.FocusStatsEntity(
                 groupId = selectedGroup!!.groupId,
@@ -206,6 +216,16 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
         timerJob?.cancel()
 
         timerJob = viewModelScope.launch {
+            if (endTime == FOCUS_NO_END_TIME) {
+                // Nothing to count towards, so report how long the session has run. The
+                // start comes from the open stats row so it survives leaving the screen.
+                val startedAt = statsDao.getRunningSessions()
+                    .minOfOrNull { it.startTimeInMillis } ?: System.currentTimeMillis()
+                while (true) {
+                    _currentRunningTimer.value = System.currentTimeMillis() - startedAt
+                    delay(100L)
+                }
+            }
 
             while (System.currentTimeMillis() < endTime) {
                 val remaining = endTime - System.currentTimeMillis()
