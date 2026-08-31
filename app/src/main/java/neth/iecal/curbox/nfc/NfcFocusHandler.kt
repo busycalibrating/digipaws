@@ -118,6 +118,7 @@ object NfcFocusHandler {
         return id != null && endTime > System.currentTimeMillis()
     }
 
+    /** Guards starting something new over a locked session, not ending the locked one. */
     private fun isNonExitableActive(settings: neth.iecal.curbox.data.models.Settings): Boolean {
         val (activeId, endTime) = settings.activeManualFocusGroupId
         if (activeId == null || endTime <= System.currentTimeMillis()) return false
@@ -175,13 +176,17 @@ object NfcFocusHandler {
         return Result.Started(group.groupName, if (group.isUntimed) null else mins)
     }
 
+    /**
+     * A tag can always end a session, including one that cannot be quit from inside the
+     * app. That is the point of a session being tag-only: the tag is the key, and holding
+     * it is what ends the session. It also keeps an untimed group from becoming a session
+     * nothing can end, there being no clock to run out.
+     */
     private suspend fun stop(
         context: Context,
         dataStore: DataStoreManager,
         settings: neth.iecal.curbox.data.models.Settings
     ): Result {
-        if (isNonExitableActive(settings)) return Result.NotExitable
-
         val statsDao = AppDatabase.getInstance(context).focusStatsDao()
         val now = System.currentTimeMillis()
         for (session in statsDao.getRunningSessions()) {

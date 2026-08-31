@@ -194,7 +194,7 @@
     <string name="what_action_would_you_like_to">Select what happens when you open an app or a website</string>
     <string name="block_selected">Block Selected</string>
     <string name="block_all_except_selected">Block All Except Selected</string>
-    <string name="let_me_quit_midsessions">Let me quit mid-sessions</string>
+    <string name="let_me_quit_midsessions">Let me quit mid-session from the app</string>
     <string name="save_group">Save Group</string>
     <string name="reel_blocker">Reel Blocker</string>
     <string name="enable_reel_blocker">Enable Reel Blocker</string>
@@ -403,7 +403,7 @@
     <string name="nfc_focus_started_untimed">Focus started: %1$s (until turned off)</string>
     <string name="nfc_focus_stopped">Focus stopped</string>
     <string name="nfc_focus_no_group">No focus group found to start</string>
-    <string name="nfc_focus_not_exitable">This focus session can\'t be ended early</string>
+    <string name="nfc_focus_not_exitable">A session that can\'t be quit early is already running</string>
     <string name="nfc_tag_unrecognized">Unrecognized Curbox NFC tag</string>
 
     <string name="onboarding_non_session_title">Non-session based installation detected</string>
