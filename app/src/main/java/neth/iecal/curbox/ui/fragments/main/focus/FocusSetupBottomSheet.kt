@@ -78,6 +78,7 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
             binding.selectedAppCount.text = getString(R.string.selected_count, 0)
             binding.selectedWebsiteCount.text = getString(R.string.selected_count, viewModel.newGroupSelectedKeywords.size)
             binding.exitable.isChecked = true
+            binding.untimed.isChecked = false
             binding.autoTurnOnDnd.isChecked = false
             
             binding.createGroup.visibility = View.VISIBLE
@@ -127,6 +128,7 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
                 binding.selectedBlockAction.check(R.id.btn_block_all_excpt_selected)
             }
             binding.exitable.isChecked = group.exitable
+            binding.untimed.isChecked = group.isUntimed
             binding.autoTurnOnDnd.isChecked = group.autoTurnOnDnd
         }
 
@@ -210,6 +212,7 @@ class FocusSetupBottomSheet : BottomSheetDialogFragment() {
             keywords = viewModel.newGroupSelectedKeywords,
             blockMode = blockMode,
             exitable = binding.exitable.isChecked,
+            isUntimed = binding.untimed.isChecked,
             autoTurnOnDnd = binding.autoTurnOnDnd.isChecked
         )
 

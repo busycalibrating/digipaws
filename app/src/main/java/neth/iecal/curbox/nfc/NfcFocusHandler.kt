@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import neth.iecal.curbox.blockers.FocusModeBlocker
 import neth.iecal.curbox.data.db.AppDatabase
 import neth.iecal.curbox.data.db.FocusStatsEntity
+import neth.iecal.curbox.data.models.FOCUS_NO_END_TIME
 import neth.iecal.curbox.utils.DataStoreManager
 
 /**
@@ -35,7 +36,8 @@ object NfcFocusHandler {
 
     /** Result of handling a tag, used to build a user-facing message. */
     sealed class Result {
-        data class Started(val groupName: String, val minutes: Int) : Result()
+        /** [minutes] is null for an untimed group, which runs until the next tap. */
+        data class Started(val groupName: String, val minutes: Int?) : Result()
         object Stopped : Result()
         object NoGroup : Result()
         object NotExitable : Result()
@@ -145,7 +147,8 @@ object NfcFocusHandler {
         val mins = (minutes ?: prefs.getInt(KEY_LAST_DURATION, 25)).coerceAtLeast(1)
         val durationMs = mins * 60_000L
         val now = System.currentTimeMillis()
-        val endTimeInMillis = now + durationMs
+        // An untimed group ignores any duration on the tag: the next tap ends the session.
+        val endTimeInMillis = if (group.isUntimed) FOCUS_NO_END_TIME else now + durationMs
 
         val statsDao = AppDatabase.getInstance(context).focusStatsDao()
         statsDao.insert(
@@ -169,7 +172,7 @@ object NfcFocusHandler {
             .putInt(KEY_LAST_DURATION, mins)
             .apply()
 
-        return Result.Started(group.groupName, mins)
+        return Result.Started(group.groupName, if (group.isUntimed) null else mins)
     }
 
     private suspend fun stop(
