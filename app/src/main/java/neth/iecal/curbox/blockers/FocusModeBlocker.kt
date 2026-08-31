@@ -220,7 +220,8 @@ class FocusModeBlocker : BaseBlocker() {
     }
 
     fun doFocusModeCheck(event: AccessibilityEvent?) {
-        val packageName = event?.packageName?.toString() ?: return
+        // A browser drawing an installed web app reports itself, so act on the owner.
+        val packageName = attributedPackage(event) ?: return
         if (packageName == service.packageName) return
         if (!service.isDelayOver(1000)) return
 
@@ -290,6 +291,7 @@ class FocusModeBlocker : BaseBlocker() {
     fun setupFocusMode(service: BaseBlockingService) {
         if (service !is AppBlockerService) return
         this.service = service
+        attachOwnerResolver(service)
         crashLogger = CrashLogger(service)
         keywordBlocker.setupBlocker(service, watchSettings = false)
         if (!this::notificationManager.isInitialized) {

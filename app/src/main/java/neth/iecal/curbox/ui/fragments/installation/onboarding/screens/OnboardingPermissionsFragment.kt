@@ -173,6 +173,19 @@ class OnboardingPermissionsFragment : Fragment() {
             }
         }
 
+        // Optional, and deliberately outside the sequence the others enforce: skipping it
+        // costs only the attribution of browser-drawn web apps, not blocking itself.
+        binding.usagePermRoot.setOnClickListener {
+            if (PermissionUtils.hasUsageAccess(requireContext())) return@setOnClickListener
+            showExplanationDialog(
+                title = getString(R.string.onboarding_perm_usage_title),
+                rationale = getString(R.string.onboarding_perm_usage_rationale),
+                openSourceExplanation = getString(R.string.onboarding_perm_usage_opensource)
+            ) {
+                startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            }
+        }
+
         binding.btnShowRestrictedTutorial.setOnClickListener {
             val manufacturer = Build.MANUFACTURER
             val query = Uri.encode("How to enable restricted setting on $manufacturer android 13")
@@ -345,6 +358,11 @@ class OnboardingPermissionsFragment : Fragment() {
             binding.btnShizukuGrantAll.visibility = View.GONE
         }
 
+        val hasUsage = PermissionUtils.hasUsageAccess(requireContext())
+        setPermissionIcon(hasUsage, binding.usagePermIcon, isOptional = true)
+        binding.usagePermRoot.isEnabled = !hasUsage
+        binding.usagePermRoot.alpha = if (hasUsage) 0.5f else 1.0f
+
         setPermissionIcon(hasOverlay, binding.overlayPermIcon)
         setPermissionIcon(hasNotif, binding.notifPermIcon)
         setPermissionIcon(hasBlocker, binding.blockerAccPermIcon)
@@ -370,13 +388,19 @@ class OnboardingPermissionsFragment : Fragment() {
         }
     }
 
-    private fun setPermissionIcon(isEnabled: Boolean, icon: ImageView) {
+    /**
+     * [isOptional] keeps a permission the app works without from being marked in the
+     * colour reserved for something actually missing.
+     */
+    private fun setPermissionIcon(isEnabled: Boolean, icon: ImageView, isOptional: Boolean = false) {
         if (isEnabled) {
             icon.setImageResource(R.drawable.baseline_done_24)
             icon.setColorFilter(resources.getColor(R.color.md_theme_onSurface, requireContext().theme))
         } else {
             icon.setImageResource(R.drawable.baseline_close_24)
-            icon.setColorFilter(resources.getColor(R.color.error_color, requireContext().theme))
+            val tint = if (isOptional) R.color.md_theme_onSurface else R.color.error_color
+            icon.setColorFilter(resources.getColor(tint, requireContext().theme))
+            if (isOptional) icon.alpha = 0.5f
         }
     }
 }

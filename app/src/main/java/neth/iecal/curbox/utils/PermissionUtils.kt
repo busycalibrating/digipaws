@@ -30,6 +30,16 @@ object PermissionUtils {
         }
     }
 
+    /** Optional: enables attributing a browser-drawn web app to the app that owns it. */
+    fun hasUsageAccess(context: Context): Boolean = runCatching {
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+        appOps.unsafeCheckOpNoThrow(
+            android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(),
+            context.packageName
+        ) == android.app.AppOpsManager.MODE_ALLOWED
+    }.getOrDefault(false)
+
     fun hasOverlayPermission(context: Context): Boolean {
         return Settings.canDrawOverlays(context)
     }

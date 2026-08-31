@@ -2,6 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!--
+      Optional. Lets a browser-drawn web app be attributed to the app that owns it, so
+      that blocking a browser does not also block installed web apps, and such an app can
+      be blocked by its own name. Blocking works without it, and nothing read through it
+      is stored or synced.
+    -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />

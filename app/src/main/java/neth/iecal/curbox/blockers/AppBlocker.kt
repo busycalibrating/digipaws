@@ -91,7 +91,8 @@ class AppBlocker : BaseBlocker() {
     fun doAppBlockerCheck(event: AccessibilityEvent?) {
         if (event == null || (event.eventType and TARGET_EVENTS_MASK) == 0) return
 
-        val packageName = event.packageName?.toString() ?: return
+        // A browser drawing an installed web app reports itself, so act on the owner.
+        val packageName = attributedPackage(event) ?: return
 
         if (lastPackage == packageName || packageName == service.packageName || ignoredApps.contains(packageName)) {
             return
@@ -222,6 +223,7 @@ class AppBlocker : BaseBlocker() {
         this.service = service
         notificationManager = TimerNotification(service)
         prefs = service.getSharedPreferences("app_blocker_prefs", Context.MODE_PRIVATE)
+        attachOwnerResolver(service)
         usageStats = UsageStatsHelper(service)
         loadPersistedData()
 

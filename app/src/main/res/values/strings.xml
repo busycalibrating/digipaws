@@ -1758,4 +1758,9 @@
     <string name="focus_no_timer_symbol">∞</string>
     <string name="focus_no_timer_label">no timer</string>
     <string name="notification_text_focus_mode_untimed">Focus mode is on</string>
+    <string name="usage_access_optional">Usage access (optional)</string>
+    <string name="onboarding_perm_usage_title">Usage access</string>
+    <string name="usage_access_optional_summary">Needed for apps the browser draws, such as web apps installed from a store</string>
+    <string name="onboarding_perm_usage_rationale">Some apps installed from a store are really web apps in a wrapper: the browser draws the entire app, and Android reports the browser\'s name rather than the app\'s.\n\nWithout this permission that causes two problems. Blocking a browser silently blocks every app of this kind as well, so a radio player or a recipe app can stop opening because you blocked your browser. And those apps cannot be blocked on their own, because selecting them has no effect.\n\nUsage access lets Curbox read which app the current screen belongs to, so the right one is blocked or allowed. Ordinary apps are unaffected either way.\n\nThis is optional. Everything else keeps working without it; only apps of that kind behave wrongly.</string>
+    <string name="onboarding_perm_usage_opensource">Curbox reads only which app owns the screen in front of you, and only at the moment a screen is checked. It is never stored, logged or synced, and you can revoke it at any time in Android settings.</string>
 </resources>
