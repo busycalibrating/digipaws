@@ -93,6 +93,13 @@ class AppBlocker : BaseBlocker() {
 
         val packageName = event.packageName?.toString() ?: return
 
+        // The browser is only the renderer here; the app in use is the one that owns the
+        // tab. lastPackage still moves on, so opening the browser next is seen as a change.
+        if (isBrowserRenderingAnotherApp(event)) {
+            lastPackage = CUSTOM_TAB_PACKAGE
+            return
+        }
+
         if (lastPackage == packageName || packageName == service.packageName || ignoredApps.contains(packageName)) {
             return
         }

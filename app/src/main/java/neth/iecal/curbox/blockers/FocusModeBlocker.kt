@@ -220,6 +220,13 @@ class FocusModeBlocker : BaseBlocker() {
 
     fun doFocusModeCheck(event: AccessibilityEvent?) {
         val packageName = event?.packageName?.toString() ?: return
+        // The browser is only the renderer here; the app in use is the one that owns the
+        // tab. Checked before the throttles below so the window state stays current, and
+        // lastPackage still moves on so opening the browser next is seen as a change.
+        if (isBrowserRenderingAnotherApp(event)) {
+            lastPackage = CUSTOM_TAB_PACKAGE
+            return
+        }
         if (packageName == service.packageName) return
         if (!service.isDelayOver(1000)) return
 
